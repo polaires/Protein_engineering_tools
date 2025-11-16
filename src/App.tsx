@@ -3,17 +3,18 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
+import DNA from '@/components/DNA';
 import { ToastContainer } from '@/components/Toast';
 
-type Tab = 'calculator' | 'protparam' | 'about';
+type Tab = 'solution' | 'protein' | 'dna' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
-  const [activeTab, setActiveTab] = useState<Tab>('calculator');
+  const [activeTab, setActiveTab] = useState<Tab>('solution');
 
   // Loading state
   if (loadingChemicals.isLoading || loadingRecipes.isLoading) {
@@ -61,18 +62,25 @@ function AppContent() {
           {/* Navigation Tabs */}
           <nav className="flex gap-2 mt-4 flex-wrap">
             <button
-              onClick={() => setActiveTab('calculator')}
-              className={`calc-mode-tab ${activeTab === 'calculator' ? 'active' : ''}`}
+              onClick={() => setActiveTab('solution')}
+              className={`calc-mode-tab ${activeTab === 'solution' ? 'active' : ''}`}
             >
               <CalcIcon className="w-4 h-4 inline mr-2" />
-              Molarity Calculator
+              Solution
             </button>
             <button
-              onClick={() => setActiveTab('protparam')}
-              className={`calc-mode-tab ${activeTab === 'protparam' ? 'active' : ''}`}
+              onClick={() => setActiveTab('protein')}
+              className={`calc-mode-tab ${activeTab === 'protein' ? 'active' : ''}`}
             >
-              <Dna className="w-4 h-4 inline mr-2" />
-              ProtParam
+              <Droplets className="w-4 h-4 inline mr-2" />
+              Protein
+            </button>
+            <button
+              onClick={() => setActiveTab('dna')}
+              className={`calc-mode-tab ${activeTab === 'dna' ? 'active' : ''}`}
+            >
+              <DnaIcon className="w-4 h-4 inline mr-2" />
+              DNA
             </button>
             <button
               onClick={() => setActiveTab('about')}
@@ -87,15 +95,21 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 pb-8">
-        {activeTab === 'calculator' && (
+        {activeTab === 'solution' && (
           <div className="animate-in">
             <Calculator />
           </div>
         )}
 
-        {activeTab === 'protparam' && (
+        {activeTab === 'protein' && (
           <div className="animate-in">
             <ProtParam />
+          </div>
+        )}
+
+        {activeTab === 'dna' && (
+          <div className="animate-in">
+            <DNA />
           </div>
         )}
 
@@ -112,7 +126,7 @@ function AppContent() {
                   <div className="space-y-4">
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Molarity Calculator & Solutions
+                        Solution - Molarity Calculator & Solutions
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                         <li><strong>Calculator:</strong></li>
@@ -135,7 +149,7 @@ function AppContent() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        ProtParam - Protein Analysis & Concentration
+                        Protein - Sequence Analysis & Concentration
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                         <li><strong>Sequence Analysis:</strong></li>
@@ -155,6 +169,22 @@ function AppContent() {
                         <li className="ml-4">Batch tracking with date-stamped history</li>
                         <li className="ml-4">Export/import measurement data (JSON)</li>
                         <li className="ml-4">Manual input supported (no sequence required)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
+                        DNA - Golden Gate Assembly
+                      </h4>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                        <li><strong>Golden Gate Assembly Calculator:</strong></li>
+                        <li className="ml-4">Based on NEB NEBuilder Ligase Master Mix protocol</li>
+                        <li className="ml-4">Calculate volumes for equimolar assembly (0.05 pmol default)</li>
+                        <li className="ml-4">Multi-fragment input (size in bp, concentration in ng/μL)</li>
+                        <li className="ml-4">Customizable molar ratio and total reaction volume</li>
+                        <li className="ml-4">Automatic master mix calculation (1/3 of total volume)</li>
+                        <li className="ml-4">Dilution suggestions for volumes &lt;1 μL</li>
+                        <li className="ml-4">Water volume auto-calculation</li>
+                        <li className="ml-4">Complete assembly protocol with step-by-step instructions</li>
                       </ul>
                     </div>
                     <div>
