@@ -3,17 +3,16 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles, Dna, Droplet } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles, Dna } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import RecipeList from '@/components/RecipeList';
 import RecipeBuilder from '@/components/RecipeBuilder';
 import ProtParam from '@/components/ProtParam';
-import ProteinConcentration from '@/components/ProteinConcentration';
 import { ToastContainer } from '@/components/Toast';
 import { Recipe } from '@/types';
 
-type Tab = 'calculator' | 'protparam' | 'concentration' | 'recipes' | 'builder' | 'about';
+type Tab = 'calculator' | 'protparam' | 'recipes' | 'builder' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
@@ -82,14 +81,7 @@ function AppContent() {
               className={`calc-mode-tab ${activeTab === 'protparam' ? 'active' : ''}`}
             >
               <Dna className="w-4 h-4 inline mr-2" />
-              ProtParam
-            </button>
-            <button
-              onClick={() => setActiveTab('concentration')}
-              className={`calc-mode-tab ${activeTab === 'concentration' ? 'active' : ''}`}
-            >
-              <Droplet className="w-4 h-4 inline mr-2" />
-              Protein Concentration
+              ProtParam & Concentration
             </button>
             <button
               onClick={() => setActiveTab('recipes')}
@@ -127,12 +119,6 @@ function AppContent() {
         {activeTab === 'protparam' && (
           <div className="animate-in">
             <ProtParam />
-          </div>
-        )}
-
-        {activeTab === 'concentration' && (
-          <div className="animate-in">
-            <ProteinConcentration />
           </div>
         )}
 
@@ -184,7 +170,7 @@ function AppContent() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        ProtParam - Protein Analysis
+                        ProtParam - Protein Analysis & Concentration
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                         <li>Molecular weight calculation</li>
@@ -196,22 +182,14 @@ function AppContent() {
                         <li>Aliphatic index</li>
                         <li>Grand average of hydropathicity (GRAVY)</li>
                         <li>Aromaticity calculation</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Protein Concentration Calculator
-                      </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                        <li>Integrated protein concentration calculator</li>
                         <li>Beer-Lambert Law calculation (A = ε × c × l)</li>
+                        <li>Auto-fill MW and extinction coefficient from sequence</li>
+                        <li>Manual input mode for direct parameter entry</li>
                         <li>A280 absorbance measurements (NanoDrop/Cuvette)</li>
                         <li>Automatic concentration calculation in mg/mL and μM</li>
-                        <li>Batch tracking with custom protein names</li>
-                        <li>Date-stamped measurement history</li>
-                        <li>Save and organize measurements by protein/batch</li>
+                        <li>Batch tracking with measurement history</li>
                         <li>Export/import measurement data (JSON)</li>
-                        <li>Integration with ProtParam extinction coefficients</li>
-                        <li>Notes and sequence storage for reference</li>
                       </ul>
                     </div>
                     <div>
