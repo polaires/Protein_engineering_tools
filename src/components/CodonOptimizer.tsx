@@ -77,11 +77,13 @@ export default function CodonOptimizer() {
     setApiResult(null);
 
     try {
+      // Clean protein sequence - remove any non-amino acid characters
+      const cleanedProtein = inputSequence.trim().toUpperCase().replace(/[^ACDEFGHIKLMNPQRSTVWY*]/g, '');
+
       const response = await CodonTransformerAPI.optimizeCodon({
-        protein: inputSequence.trim().toUpperCase().replace(/[^ACDEFGHIKLMNPQRSTVWY*]/g, ''),
+        protein: cleanedProtein,
         organism: selectedOrganism,
         deterministic: true,
-        match_protein: true,
       });
 
       if (response.success) {

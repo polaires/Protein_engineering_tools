@@ -44,19 +44,31 @@ export class CodonTransformerAPI {
   }
 
   static async optimizeCodon(request: OptimizationRequest): Promise<OptimizationResponse> {
-    const response = await fetch(`${API_BASE_URL}/optimize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/optimize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`API request failed (${response.status}): ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('API Response:', data);
+      return data;
+    } catch (error) {
+      console.error('API Request Error:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Unknown error occurred during API request');
     }
-
-    return response.json();
   }
 
   static async listOrganisms(): Promise<{ organisms: string[]; count: number }> {
