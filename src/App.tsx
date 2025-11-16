@@ -3,15 +3,16 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles, Dna } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import RecipeList from '@/components/RecipeList';
 import RecipeBuilder from '@/components/RecipeBuilder';
+import ProtParam from '@/components/ProtParam';
 import { ToastContainer } from '@/components/Toast';
 import { Recipe } from '@/types';
 
-type Tab = 'calculator' | 'recipes' | 'builder' | 'about';
+type Tab = 'calculator' | 'protparam' | 'recipes' | 'builder' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
@@ -47,10 +48,10 @@ function AppContent() {
               <FlaskConical className="w-8 h-8 text-primary-600 dark:text-primary-400" />
               <div>
                 <h1 className="text-2xl font-bold gradient-text">
-                  Molarity Calculator
+                  Protein Engineering Tools
                 </h1>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Professional solution preparation tool
+                  Professional tools for molecular biology and biochemistry
                 </p>
               </div>
             </div>
@@ -73,7 +74,14 @@ function AppContent() {
               className={`calc-mode-tab ${activeTab === 'calculator' ? 'active' : ''}`}
             >
               <CalcIcon className="w-4 h-4 inline mr-2" />
-              Calculator
+              Molarity Calculator
+            </button>
+            <button
+              onClick={() => setActiveTab('protparam')}
+              className={`calc-mode-tab ${activeTab === 'protparam' ? 'active' : ''}`}
+            >
+              <Dna className="w-4 h-4 inline mr-2" />
+              ProtParam
             </button>
             <button
               onClick={() => setActiveTab('recipes')}
@@ -108,6 +116,12 @@ function AppContent() {
           </div>
         )}
 
+        {activeTab === 'protparam' && (
+          <div className="animate-in">
+            <ProtParam />
+          </div>
+        )}
+
         {activeTab === 'recipes' && (
           <div className="animate-in">
             <div className="mb-6">
@@ -129,24 +143,58 @@ function AppContent() {
         {activeTab === 'about' && (
           <div className="animate-in max-w-4xl mx-auto">
             <div className="card">
-              <h2 className="section-title">About Molarity Calculator</h2>
+              <h2 className="section-title">About Protein Engineering Tools</h2>
 
               <div className="space-y-6">
                 <section>
                   <h3 className="text-xl font-semibold mb-3 text-slate-800 dark:text-slate-200">
                     Features
                   </h3>
-                  <ul className="list-disc list-inside space-y-2 text-slate-700 dark:text-slate-300">
-                    <li>Multiple calculation modes (mass, molarity, volume, dilution)</li>
-                    <li>Curated database of 50+ common laboratory chemicals</li>
-                    <li>PubChem API integration for additional chemicals</li>
-                    <li>Pre-configured buffer recipes (PBS, TBS, HEPES, etc.)</li>
-                    <li>Custom recipe builder for multi-component solutions</li>
-                    <li>Concentration multiplier support (1×, 5×, 10× stock solutions)</li>
-                    <li>Step-by-step calculation breakdowns</li>
-                    <li>Offline functionality with IndexedDB storage</li>
-                    <li>Export/import data for backup</li>
-                  </ul>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
+                        Molarity Calculator
+                      </h4>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                        <li>Multiple calculation modes (mass, molarity, volume, dilution)</li>
+                        <li>Customizable concentration units (M, mM, μM, nM, pM)</li>
+                        <li>Customizable volume units (L, mL, μL)</li>
+                        <li>Curated database of 50+ common laboratory chemicals</li>
+                        <li>PubChem API integration for additional chemicals</li>
+                        <li>Pre-configured buffer recipes (PBS, TBS, HEPES, etc.)</li>
+                        <li>Custom recipe builder for multi-component solutions</li>
+                        <li>Concentration multiplier support (1×, 5×, 10×, custom stock solutions)</li>
+                        <li>Solubility warnings for high concentrations</li>
+                        <li>Step-by-step calculation breakdowns</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
+                        ProtParam - Protein Analysis
+                      </h4>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                        <li>Molecular weight calculation</li>
+                        <li>Theoretical isoelectric point (pI)</li>
+                        <li>Amino acid composition and percentages</li>
+                        <li>Atomic composition (C, H, N, O, S)</li>
+                        <li>Extinction coefficient (reduced and oxidized)</li>
+                        <li>Instability index (protein stability prediction)</li>
+                        <li>Aliphatic index</li>
+                        <li>Grand average of hydropathicity (GRAVY)</li>
+                        <li>Aromaticity calculation</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
+                        General
+                      </h4>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                        <li>Offline functionality with IndexedDB storage</li>
+                        <li>Export/import data for backup</li>
+                        <li>Dark mode support</li>
+                      </ul>
+                    </div>
+                  </div>
                 </section>
 
                 <div className="divider" />
