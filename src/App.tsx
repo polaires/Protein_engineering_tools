@@ -173,7 +173,7 @@ function AppContent() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        DNA - Golden Gate Assembly
+                        DNA - Molecular Cloning Tools
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                         <li><strong>Golden Gate Assembly Calculator:</strong></li>
@@ -185,6 +185,15 @@ function AppContent() {
                         <li className="ml-4">Dilution suggestions for volumes &lt;1 μL</li>
                         <li className="ml-4">Water volume auto-calculation</li>
                         <li className="ml-4">Complete assembly protocol with step-by-step instructions</li>
+                        <li className="mt-2"><strong>Codon Optimization for E. coli:</strong></li>
+                        <li className="ml-4">Optimize DNA sequences for E. coli K-12 expression</li>
+                        <li className="ml-4">Based on E. coli codon usage frequencies</li>
+                        <li className="ml-4">DNA input: optimizes existing sequences</li>
+                        <li className="ml-4">Protein input: reverse translation with optimal codons</li>
+                        <li className="ml-4">CAI (Codon Adaptation Index) calculation</li>
+                        <li className="ml-4">GC content analysis and optimization</li>
+                        <li className="ml-4">Codon change tracking and sequence comparison</li>
+                        <li className="ml-4">Ready-to-order optimized sequences</li>
                       </ul>
                     </div>
                     <div>

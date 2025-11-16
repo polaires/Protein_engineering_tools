@@ -1,11 +1,14 @@
 /**
- * DNA Tools - Golden Gate Assembly Calculator
+ * DNA Tools - Golden Gate Assembly Calculator & Codon Optimization
  * Based on NEB NEBuilder Ligase Master Mix protocol
  */
 
 import { useState } from 'react';
-import { Dna, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Dna, Plus, Trash2, AlertCircle, Zap } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
+import CodonOptimizer from './CodonOptimizer';
+
+type DNATab = 'assembly' | 'codon';
 
 interface DNAFragment {
   id: string;
@@ -29,6 +32,9 @@ interface CalculationResult {
 
 export default function DNA() {
   const { showToast } = useApp();
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<DNATab>('assembly');
 
   // Input state
   const [fragments, setFragments] = useState<DNAFragment[]>([
@@ -156,13 +162,34 @@ export default function DNA() {
       <div className="card">
         <h2 className="section-title flex items-center gap-2">
           <Dna className="w-7 h-7" />
-          Golden Gate Assembly Calculator
+          DNA Tools
         </h2>
-        <p className="text-slate-600 dark:text-slate-400">
-          Calculate DNA fragment volumes for NEBuilder Ligase Master Mix protocol
+        <p className="text-slate-600 dark:text-slate-400 mb-4">
+          Golden Gate Assembly and Codon Optimization for E. coli
         </p>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setActiveTab('assembly')}
+            className={`calc-mode-tab ${activeTab === 'assembly' ? 'active' : ''}`}
+          >
+            <Dna className="w-4 h-4 inline mr-2" />
+            Golden Gate Assembly
+          </button>
+          <button
+            onClick={() => setActiveTab('codon')}
+            className={`calc-mode-tab ${activeTab === 'codon' ? 'active' : ''}`}
+          >
+            <Zap className="w-4 h-4 inline mr-2" />
+            Codon Optimization
+          </button>
+        </div>
       </div>
 
+      {/* Golden Gate Assembly Tab */}
+      {activeTab === 'assembly' && (
+        <>
       {/* Protocol Information */}
       <div className="card bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
         <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
@@ -420,6 +447,13 @@ export default function DNA() {
             </div>
           </div>
         </div>
+      )}
+        </>
+      )}
+
+      {/* Codon Optimization Tab */}
+      {activeTab === 'codon' && (
+        <CodonOptimizer />
       )}
     </div>
   );
