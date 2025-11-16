@@ -4,10 +4,14 @@
  */
 
 import { useState } from 'react';
-import { Dna, Info, AlertCircle } from 'lucide-react';
+import { Dna, Info, AlertCircle, Droplet } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
+import ProteinConcentration from './ProteinConcentration';
+
+type ProtParamTab = 'analysis' | 'concentration';
 
 export default function ProtParam() {
+  const [activeTab, setActiveTab] = useState<ProtParamTab>('analysis');
   const [sequence, setSequence] = useState('');
   const [result, setResult] = useState<ProteinAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,13 +48,34 @@ export default function ProtParam() {
           <Dna className="w-7 h-7" />
           ProtParam - Protein Analysis Tool
         </h2>
-        <p className="text-slate-600 dark:text-slate-400">
+        <p className="text-slate-600 dark:text-slate-400 mb-4">
           Compute various physical and chemical parameters for a protein sequence
         </p>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setActiveTab('analysis')}
+            className={`calc-mode-tab ${activeTab === 'analysis' ? 'active' : ''}`}
+          >
+            <Info className="w-4 h-4 inline mr-2" />
+            Sequence Analysis
+          </button>
+          <button
+            onClick={() => setActiveTab('concentration')}
+            className={`calc-mode-tab ${activeTab === 'concentration' ? 'active' : ''}`}
+          >
+            <Droplet className="w-4 h-4 inline mr-2" />
+            Concentration Calculator
+          </button>
+        </div>
       </div>
 
-      {/* Input Section */}
-      <div className="card">
+      {/* Analysis Tab */}
+      {activeTab === 'analysis' && (
+        <>
+          {/* Input Section */}
+          <div className="card">
         <div className="mb-4">
           <label className="input-label">
             Protein Sequence *
@@ -268,6 +293,18 @@ export default function ProtParam() {
             </div>
           </div>
         </div>
+      )}
+        </>
+      )}
+
+      {/* Concentration Calculator Tab */}
+      {activeTab === 'concentration' && (
+        <ProteinConcentration
+          prefillProteinName={result?.sequence ? `Protein-${result.sequence.substring(0, 10)}` : undefined}
+          prefillMolecularWeight={result?.molecularWeight}
+          prefillExtinctionCoefficient={result?.extinctionCoefficient.reduced}
+          prefillSequence={result?.sequence}
+        />
       )}
     </div>
   );

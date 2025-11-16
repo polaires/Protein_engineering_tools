@@ -2,6 +2,7 @@
  * Protein Concentration Calculator
  * Based on Beer-Lambert Law: A = ε × c × l
  * Stores measurements for tracking different protein batches
+ * Can receive data from ProtParam analysis or accept manual input
  */
 
 import { useState, useEffect } from 'react';
@@ -9,7 +10,20 @@ import { Beaker, Save, Trash2, Download, Upload } from 'lucide-react';
 import { ConcentrationMeasurement } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 
-export default function ProteinConcentration() {
+interface ProteinConcentrationProps {
+  // Optional props from ProtParam analysis
+  prefillProteinName?: string;
+  prefillMolecularWeight?: number;
+  prefillExtinctionCoefficient?: number;
+  prefillSequence?: string;
+}
+
+export default function ProteinConcentration({
+  prefillProteinName,
+  prefillMolecularWeight,
+  prefillExtinctionCoefficient,
+  prefillSequence,
+}: ProteinConcentrationProps = {}) {
   const { showToast } = useApp();
 
   // Input fields
@@ -29,6 +43,23 @@ export default function ProteinConcentration() {
   // Measurements history
   const [measurements, setMeasurements] = useState<ConcentrationMeasurement[]>([]);
   const [selectedMeasurement, setSelectedMeasurement] = useState<string | null>(null);
+
+  // Auto-fill from ProtParam results
+  useEffect(() => {
+    if (prefillProteinName) setProteinName(prefillProteinName);
+  }, [prefillProteinName]);
+
+  useEffect(() => {
+    if (prefillMolecularWeight) setMolecularWeight(prefillMolecularWeight);
+  }, [prefillMolecularWeight]);
+
+  useEffect(() => {
+    if (prefillExtinctionCoefficient) setExtinctionCoefficient(prefillExtinctionCoefficient);
+  }, [prefillExtinctionCoefficient]);
+
+  useEffect(() => {
+    if (prefillSequence) setSequence(prefillSequence);
+  }, [prefillSequence]);
 
   // Load measurements from localStorage on mount
   useEffect(() => {

@@ -3,17 +3,16 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles, Dna, Droplet } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles, Dna } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import RecipeList from '@/components/RecipeList';
 import RecipeBuilder from '@/components/RecipeBuilder';
 import ProtParam from '@/components/ProtParam';
-import ProteinConcentration from '@/components/ProteinConcentration';
 import { ToastContainer } from '@/components/Toast';
 import { Recipe } from '@/types';
 
-type Tab = 'calculator' | 'protparam' | 'concentration' | 'recipes' | 'builder' | 'about';
+type Tab = 'calculator' | 'protparam' | 'recipes' | 'builder' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
@@ -85,13 +84,6 @@ function AppContent() {
               ProtParam
             </button>
             <button
-              onClick={() => setActiveTab('concentration')}
-              className={`calc-mode-tab ${activeTab === 'concentration' ? 'active' : ''}`}
-            >
-              <Droplet className="w-4 h-4 inline mr-2" />
-              Protein Concentration
-            </button>
-            <button
               onClick={() => setActiveTab('recipes')}
               className={`calc-mode-tab ${activeTab === 'recipes' ? 'active' : ''}`}
             >
@@ -127,12 +119,6 @@ function AppContent() {
         {activeTab === 'protparam' && (
           <div className="animate-in">
             <ProtParam />
-          </div>
-        )}
-
-        {activeTab === 'concentration' && (
-          <div className="animate-in">
-            <ProteinConcentration />
           </div>
         )}
 
@@ -184,34 +170,26 @@ function AppContent() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        ProtParam - Protein Analysis
+                        ProtParam - Protein Analysis & Concentration
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li>Molecular weight calculation</li>
-                        <li>Theoretical isoelectric point (pI)</li>
-                        <li>Amino acid composition and percentages</li>
-                        <li>Atomic composition (C, H, N, O, S)</li>
-                        <li>Extinction coefficient (reduced and oxidized)</li>
-                        <li>Instability index (protein stability prediction)</li>
-                        <li>Aliphatic index</li>
-                        <li>Grand average of hydropathicity (GRAVY)</li>
-                        <li>Aromaticity calculation</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Protein Concentration Calculator
-                      </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li>Beer-Lambert Law calculation (A = ε × c × l)</li>
-                        <li>A280 absorbance measurements (NanoDrop/Cuvette)</li>
-                        <li>Automatic concentration calculation in mg/mL and μM</li>
-                        <li>Batch tracking with custom protein names</li>
-                        <li>Date-stamped measurement history</li>
-                        <li>Save and organize measurements by protein/batch</li>
-                        <li>Export/import measurement data (JSON)</li>
-                        <li>Integration with ProtParam extinction coefficients</li>
-                        <li>Notes and sequence storage for reference</li>
+                        <li><strong>Sequence Analysis:</strong></li>
+                        <li className="ml-4">Molecular weight calculation</li>
+                        <li className="ml-4">Theoretical isoelectric point (pI)</li>
+                        <li className="ml-4">Amino acid composition and percentages</li>
+                        <li className="ml-4">Atomic composition (C, H, N, O, S)</li>
+                        <li className="ml-4">Extinction coefficient (reduced and oxidized)</li>
+                        <li className="ml-4">Instability index (protein stability prediction)</li>
+                        <li className="ml-4">Aliphatic index</li>
+                        <li className="ml-4">Grand average of hydropathicity (GRAVY)</li>
+                        <li className="ml-4">Aromaticity calculation</li>
+                        <li className="mt-2"><strong>Concentration Calculator (Beer-Lambert Law):</strong></li>
+                        <li className="ml-4">Auto-fills MW and ε from sequence analysis</li>
+                        <li className="ml-4">A280 absorbance measurements (NanoDrop/Cuvette)</li>
+                        <li className="ml-4">Automatic concentration in mg/mL and μM</li>
+                        <li className="ml-4">Batch tracking with date-stamped history</li>
+                        <li className="ml-4">Export/import measurement data (JSON)</li>
+                        <li className="ml-4">Manual input supported (no sequence required)</li>
                       </ul>
                     </div>
                     <div>
