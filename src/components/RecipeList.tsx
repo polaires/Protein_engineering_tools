@@ -113,7 +113,7 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
       </div>
 
       {/* Recipe Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredRecipes.map((recipe) => {
           const isFavorite = preferences?.favoriteRecipes.includes(recipe.id);
 
@@ -193,8 +193,8 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
 
       {/* Recipe Details Modal */}
       {selectedRecipe && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-card max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="glass-card max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8">
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
@@ -245,12 +245,12 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
             {/* Components */}
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4">Components</h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {calculateRecipeComponents(selectedRecipe).map(
                   (component, idx) => (
                     <div
                       key={idx}
-                      className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
+                      className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-xl"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">

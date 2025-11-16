@@ -51,7 +51,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   const [calculation, setCalculation] = useState<MolarityCalculation>({
     mode: selectedMode,
     molarity: undefined,
-    volume: undefined,
+    volume: 1000,
     mass: undefined,
     molecularWeight: undefined,
   });
@@ -99,7 +99,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     setCalculation({
       mode: selectedMode,
       molarity: undefined,
-      volume: undefined,
+      volume: 1000,
       mass: undefined,
       molecularWeight: undefined,
       initialMolarity: undefined,
@@ -137,7 +137,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
               <input
                 type="number"
                 className="input-field"
-                placeholder="e.g., 100"
+                placeholder="1000"
                 step="any"
                 value={calculation.volume ?? ''}
                 onChange={(e) => handleInputChange('volume', e.target.value)}
@@ -193,7 +193,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
               <input
                 type="number"
                 className="input-field"
-                placeholder="e.g., 100"
+                placeholder="1000"
                 step="any"
                 value={calculation.volume ?? ''}
                 onChange={(e) => handleInputChange('volume', e.target.value)}

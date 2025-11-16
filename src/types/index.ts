@@ -82,10 +82,14 @@ export enum ConcentrationUnit {
   MILLIMOLAR = 'mM',
   MICROMOLAR = 'μM',
   NANOMOLAR = 'nM',
+  PICOMOLAR = 'pM',
   PERCENT_W_V = '% (w/v)',
   PERCENT_V_V = '% (v/v)',
   MG_ML = 'mg/mL',
   UG_ML = 'μg/mL',
+  UG_UL = 'μg/μL',
+  G_L = 'g/L',
+  NG_ML = 'ng/mL',
 }
 
 export interface Recipe {

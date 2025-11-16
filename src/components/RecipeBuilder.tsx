@@ -36,6 +36,7 @@ export default function RecipeBuilder() {
 
   // Concentration multiplier (1×, 2×, 5×, 10×, etc.)
   const [concentrationMultiplier, setConcentrationMultiplier] = useState<number>(1);
+  const [isCustomMultiplier, setIsCustomMultiplier] = useState(false);
 
   // Components list
   const [components, setComponents] = useState<RecipeBuilderComponent[]>([]);
@@ -53,6 +54,24 @@ export default function RecipeBuilder() {
     const mass = calculateMass(molarityInM, volumeInML, component.chemical.molecularWeight);
 
     return mass;
+  };
+
+  // Check solubility warnings
+  const getSolubilityWarning = (component: RecipeBuilderComponent): string | null => {
+    if (!component.chemical) return null;
+
+    const mass = calculateComponentMass(component);
+    const volumeInML = convertToMilliliters(totalVolume, volumeUnit);
+    const concentration = (mass / volumeInML) * 1000; // mg/mL
+
+    // General solubility limits (these are approximate)
+    if (concentration > 500) {
+      return `Very high concentration (${concentration.toFixed(0)} mg/mL). May exceed solubility limit.`;
+    } else if (concentration > 200) {
+      return `High concentration (${concentration.toFixed(0)} mg/mL). Check solubility data.`;
+    }
+
+    return null;
   };
 
   // Add component to list
@@ -298,19 +317,42 @@ export default function RecipeBuilder() {
 
           <div>
             <label className="input-label">Concentration Multiplier</label>
-            <select
-              className="select-field"
-              value={concentrationMultiplier}
-              onChange={(e) => setConcentrationMultiplier(parseFloat(e.target.value))}
-            >
-              <option value={1}>1× (Working solution)</option>
-              <option value={2}>2× (2× concentrated)</option>
-              <option value={5}>5× (5× concentrated)</option>
-              <option value={10}>10× (10× concentrated)</option>
-              <option value={20}>20× (20× concentrated)</option>
-              <option value={50}>50× (50× concentrated)</option>
-              <option value={100}>100× (100× concentrated)</option>
-            </select>
+            <div className="flex gap-2">
+              <select
+                className="select-field flex-1"
+                value={isCustomMultiplier ? 'custom' : concentrationMultiplier}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'custom') {
+                    setIsCustomMultiplier(true);
+                  } else {
+                    setIsCustomMultiplier(false);
+                    setConcentrationMultiplier(parseFloat(value));
+                  }
+                }}
+              >
+                <option value={1}>1× (Working solution)</option>
+                <option value={2}>2× concentrated</option>
+                <option value={5}>5× concentrated</option>
+                <option value={10}>10× concentrated</option>
+                <option value={20}>20× concentrated</option>
+                <option value={50}>50× concentrated</option>
+                <option value={100}>100× concentrated</option>
+                <option value="custom">Custom...</option>
+              </select>
+              {isCustomMultiplier && (
+                <input
+                  type="number"
+                  className="input-field w-24"
+                  placeholder="×"
+                  step="any"
+                  min="0.1"
+                  max="1000"
+                  value={concentrationMultiplier}
+                  onChange={(e) => setConcentrationMultiplier(parseFloat(e.target.value) || 1)}
+                />
+              )}
+            </div>
           </div>
         </div>
 
@@ -366,12 +408,11 @@ export default function RecipeBuilder() {
                   const massDisplay = mass >= 1
                     ? `${mass.toFixed(3)} g`
                     : `${(mass * 1000).toFixed(1)} mg`;
+                  const warning = getSolubilityWarning(component);
 
                   return (
-                    <tr
-                      key={component.tempId}
-                      className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                    >
+                    <>
+                      <tr key={component.tempId} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="p-3">
                         <div className="font-medium text-slate-900 dark:text-slate-100">
                           {component.chemical?.commonName}
@@ -432,6 +473,19 @@ export default function RecipeBuilder() {
                         </button>
                       </td>
                     </tr>
+                    {warning && (
+                      <tr className="border-b border-slate-100 dark:border-slate-800">
+                        <td colSpan={5} className="p-3 bg-amber-50 dark:bg-amber-900/20">
+                          <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+                            <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <span>{warning}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                   );
                 })}
               </tbody>
