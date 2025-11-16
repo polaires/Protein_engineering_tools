@@ -3,26 +3,17 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles, Dna } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
-import RecipeList from '@/components/RecipeList';
-import RecipeBuilder from '@/components/RecipeBuilder';
 import ProtParam from '@/components/ProtParam';
 import { ToastContainer } from '@/components/Toast';
-import { Recipe } from '@/types';
 
-type Tab = 'calculator' | 'protparam' | 'recipes' | 'builder' | 'about';
+type Tab = 'calculator' | 'protparam' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('calculator');
-
-  // Handle recipe selection
-  const handleRecipeSelect = (recipe: Recipe) => {
-    console.log('Selected recipe:', recipe);
-    // Could navigate to calculator with pre-filled values
-  };
 
   // Loading state
   if (loadingChemicals.isLoading || loadingRecipes.isLoading) {
@@ -84,20 +75,6 @@ function AppContent() {
               ProtParam
             </button>
             <button
-              onClick={() => setActiveTab('recipes')}
-              className={`calc-mode-tab ${activeTab === 'recipes' ? 'active' : ''}`}
-            >
-              <BookOpen className="w-4 h-4 inline mr-2" />
-              Recipes
-            </button>
-            <button
-              onClick={() => setActiveTab('builder')}
-              className={`calc-mode-tab ${activeTab === 'builder' ? 'active' : ''}`}
-            >
-              <Sparkles className="w-4 h-4 inline mr-2" />
-              Recipe Builder
-            </button>
-            <button
               onClick={() => setActiveTab('about')}
               className={`calc-mode-tab ${activeTab === 'about' ? 'active' : ''}`}
             >
@@ -122,24 +99,6 @@ function AppContent() {
           </div>
         )}
 
-        {activeTab === 'recipes' && (
-          <div className="animate-in">
-            <div className="mb-6">
-              <h2 className="section-title">Buffer & Solution Recipes</h2>
-              <p className="text-slate-600 dark:text-slate-400">
-                Browse pre-configured recipes for common laboratory solutions
-              </p>
-            </div>
-            <RecipeList onSelectRecipe={handleRecipeSelect} />
-          </div>
-        )}
-
-        {activeTab === 'builder' && (
-          <div className="animate-in">
-            <RecipeBuilder />
-          </div>
-        )}
-
         {activeTab === 'about' && (
           <div className="animate-in max-w-4xl mx-auto">
             <div className="card">
@@ -153,19 +112,25 @@ function AppContent() {
                   <div className="space-y-4">
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Molarity Calculator
+                        Molarity Calculator & Solutions
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li>Multiple calculation modes (mass, molarity, volume, dilution)</li>
-                        <li>Customizable concentration units (M, mM, μM, nM, pM)</li>
-                        <li>Customizable volume units (L, mL, μL)</li>
-                        <li>Curated database of 50+ common laboratory chemicals</li>
-                        <li>PubChem API integration for additional chemicals</li>
-                        <li>Pre-configured buffer recipes (PBS, TBS, HEPES, etc.)</li>
-                        <li>Custom recipe builder for multi-component solutions</li>
-                        <li>Concentration multiplier support (1×, 5×, 10×, custom stock solutions)</li>
-                        <li>Solubility warnings for high concentrations</li>
-                        <li>Step-by-step calculation breakdowns</li>
+                        <li><strong>Calculator:</strong></li>
+                        <li className="ml-4">Multiple calculation modes (mass, molarity, volume, dilution)</li>
+                        <li className="ml-4">Customizable concentration units (M, mM, μM, nM, pM)</li>
+                        <li className="ml-4">Customizable volume units (L, mL, μL)</li>
+                        <li className="ml-4">Curated database of 50+ common laboratory chemicals</li>
+                        <li className="ml-4">PubChem API integration for additional chemicals</li>
+                        <li className="ml-4">Step-by-step calculation breakdowns</li>
+                        <li className="mt-2"><strong>Recipes:</strong></li>
+                        <li className="ml-4">Pre-configured buffer recipes (PBS, TBS, HEPES, etc.)</li>
+                        <li className="ml-4">15+ common laboratory solutions</li>
+                        <li className="ml-4">Detailed component lists with concentrations</li>
+                        <li className="mt-2"><strong>Recipe Builder:</strong></li>
+                        <li className="ml-4">Custom multi-component solution builder</li>
+                        <li className="ml-4">Concentration multiplier support (1×, 5×, 10×, custom stock solutions)</li>
+                        <li className="ml-4">Solubility warnings for high concentrations</li>
+                        <li className="ml-4">Save and organize custom recipes</li>
                       </ul>
                     </div>
                     <div>

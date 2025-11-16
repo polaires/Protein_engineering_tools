@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet } from 'lucide-react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -11,10 +11,15 @@ import {
   CalculatorProps,
   ConcentrationUnit,
   VolumeUnit,
+  Recipe,
 } from '@/types';
 import { performCalculation, formatResult, convertToMolarity, convertToMilliliters } from '@/utils/calculations';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
+import RecipeList from './RecipeList';
+import RecipeBuilder from './RecipeBuilder';
+
+type CalculatorTab = 'calculator' | 'recipes' | 'builder';
 
 const CALCULATION_MODES = [
   {
@@ -46,6 +51,7 @@ const CALCULATION_MODES = [
 export default function Calculator({ initialMode, onCalculate }: CalculatorProps) {
   const { preferences, addToRecentChemicals, showToast } = useApp();
 
+  const [activeTab, setActiveTab] = useState<CalculatorTab>('calculator');
   const [selectedMode, setSelectedMode] = useState<CalculationMode>(
     initialMode || CalculationMode.MASS_FROM_MOLARITY
   );
@@ -506,33 +512,73 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     }
   };
 
+  // Handle recipe selection
+  const handleRecipeSelect = (recipe: Recipe) => {
+    console.log('Selected recipe:', recipe);
+  };
+
   return (
-    <div className="card max-w-4xl mx-auto">
-      {/* Mode Selection */}
-      <div className="mb-6">
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header with Tab Navigation */}
+      <div className="card">
         <h2 className="section-title flex items-center gap-2">
           <CalcIcon className="w-7 h-7" />
-          Molarity Calculator
+          Molarity Calculator & Solutions
         </h2>
         <p className="text-slate-600 dark:text-slate-400 mb-4">
-          Select calculation mode and enter parameters
+          Calculate solution preparation and browse recipes
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-          {CALCULATION_MODES.map(({ mode, label, icon: Icon }) => (
-            <button
-              key={mode}
-              onClick={() => setSelectedMode(mode)}
-              className={`calc-mode-tab ${selectedMode === mode ? 'active' : ''}`}
-            >
-              <Icon className="w-4 h-4 inline mr-2" />
-              {label}
-            </button>
-          ))}
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => setActiveTab('calculator')}
+            className={`calc-mode-tab ${activeTab === 'calculator' ? 'active' : ''}`}
+          >
+            <CalcIcon className="w-4 h-4 inline mr-2" />
+            Calculator
+          </button>
+          <button
+            onClick={() => setActiveTab('recipes')}
+            className={`calc-mode-tab ${activeTab === 'recipes' ? 'active' : ''}`}
+          >
+            <BookOpen className="w-4 h-4 inline mr-2" />
+            Recipes
+          </button>
+          <button
+            onClick={() => setActiveTab('builder')}
+            className={`calc-mode-tab ${activeTab === 'builder' ? 'active' : ''}`}
+          >
+            <Sparkles className="w-4 h-4 inline mr-2" />
+            Recipe Builder
+          </button>
         </div>
       </div>
 
-      <div className="divider" />
+      {/* Calculator Tab */}
+      {activeTab === 'calculator' && (
+        <div className="card max-w-4xl mx-auto">
+          {/* Mode Selection */}
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
+              Calculation Mode
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+              {CALCULATION_MODES.map(({ mode, label, icon: Icon }) => (
+                <button
+                  key={mode}
+                  onClick={() => setSelectedMode(mode)}
+                  className={`calc-mode-tab ${selectedMode === mode ? 'active' : ''}`}
+                >
+                  <Icon className="w-4 h-4 inline mr-2" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="divider" />
 
       {/* Input Fields */}
       <div className="mb-6">
@@ -599,6 +645,26 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
             Error: {result.error}
           </p>
         </div>
+      )}
+        </div>
+      )}
+
+      {/* Recipes Tab */}
+      {activeTab === 'recipes' && (
+        <div>
+          <div className="mb-6">
+            <h2 className="section-title">Buffer & Solution Recipes</h2>
+            <p className="text-slate-600 dark:text-slate-400">
+              Browse pre-configured recipes for common laboratory solutions
+            </p>
+          </div>
+          <RecipeList onSelectRecipe={handleRecipeSelect} />
+        </div>
+      )}
+
+      {/* Recipe Builder Tab */}
+      {activeTab === 'builder' && (
+        <RecipeBuilder />
       )}
     </div>
   );
