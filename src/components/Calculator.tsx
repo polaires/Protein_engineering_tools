@@ -9,8 +9,10 @@ import {
   MolarityCalculation,
   CalculationResult,
   CalculatorProps,
+  ConcentrationUnit,
+  VolumeUnit,
 } from '@/types';
-import { performCalculation, formatResult } from '@/utils/calculations';
+import { performCalculation, formatResult, convertToMolarity, convertToMilliliters } from '@/utils/calculations';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
 
@@ -56,6 +58,14 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     molecularWeight: undefined,
   });
 
+  // Unit state
+  const [molarityUnit, setMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MOLAR);
+  const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>(VolumeUnit.MILLILITER);
+  const [initialMolarityUnit, setInitialMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MOLAR);
+  const [finalMolarityUnit, setFinalMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MOLAR);
+  const [initialVolumeUnit, setInitialVolumeUnit] = useState<VolumeUnit>(VolumeUnit.MILLILITER);
+  const [finalVolumeUnit, setFinalVolumeUnit] = useState<VolumeUnit>(VolumeUnit.MILLILITER);
+
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [showSteps, setShowSteps] = useState(false);
 
@@ -78,9 +88,32 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     addToRecentChemicals(chemicalId);
   };
 
-  // Perform calculation
+  // Perform calculation with unit conversion
   const handleCalculate = () => {
-    const calcResult = performCalculation(calculation);
+    // Convert to base units (M and mL) before calculation
+    const convertedCalculation: MolarityCalculation = {
+      ...calculation,
+      molarity: calculation.molarity !== undefined
+        ? convertToMolarity(calculation.molarity, molarityUnit)
+        : undefined,
+      volume: calculation.volume !== undefined
+        ? convertToMilliliters(calculation.volume, volumeUnit)
+        : undefined,
+      initialMolarity: calculation.initialMolarity !== undefined
+        ? convertToMolarity(calculation.initialMolarity, initialMolarityUnit)
+        : undefined,
+      finalMolarity: calculation.finalMolarity !== undefined
+        ? convertToMolarity(calculation.finalMolarity, finalMolarityUnit)
+        : undefined,
+      initialVolume: calculation.initialVolume !== undefined
+        ? convertToMilliliters(calculation.initialVolume, initialVolumeUnit)
+        : undefined,
+      finalVolume: calculation.finalVolume !== undefined
+        ? convertToMilliliters(calculation.finalVolume, finalVolumeUnit)
+        : undefined,
+    };
+
+    const calcResult = performCalculation(convertedCalculation);
     setResult(calcResult);
 
     if (calcResult.success) {
@@ -107,6 +140,12 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
       finalMolarity: undefined,
       finalVolume: undefined,
     });
+    setMolarityUnit(ConcentrationUnit.MOLAR);
+    setVolumeUnit(VolumeUnit.MILLILITER);
+    setInitialMolarityUnit(ConcentrationUnit.MOLAR);
+    setFinalMolarityUnit(ConcentrationUnit.MOLAR);
+    setInitialVolumeUnit(VolumeUnit.MILLILITER);
+    setFinalVolumeUnit(VolumeUnit.MILLILITER);
     setResult(null);
   };
 
@@ -118,30 +157,58 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
           <div className="space-y-4">
             <div>
               <label className="input-label">
-                Desired Molarity (M) *
+                Desired Molarity *
               </label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 0.5"
-                step="any"
-                value={calculation.molarity ?? ''}
-                onChange={(e) => handleInputChange('molarity', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  className="input-field flex-1"
+                  placeholder="e.g., 0.5"
+                  step="any"
+                  value={calculation.molarity ?? ''}
+                  onChange={(e) => handleInputChange('molarity', e.target.value)}
+                />
+                <select
+                  className="select-field w-24"
+                  value={molarityUnit}
+                  onChange={(e) => setMolarityUnit(e.target.value as ConcentrationUnit)}
+                >
+                  <option value={ConcentrationUnit.MOLAR}>M</option>
+                  <option value={ConcentrationUnit.MILLIMOLAR}>mM</option>
+                  <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
+                  <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
+                  <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                </select>
+              </div>
             </div>
 
             <div>
               <label className="input-label">
-                Final Volume (mL) *
+                Final Volume *
               </label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="1000"
-                step="any"
-                value={calculation.volume ?? ''}
-                onChange={(e) => handleInputChange('volume', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  className={`input-field flex-1 ${
+                    calculation.volume === 1000 && volumeUnit === VolumeUnit.MILLILITER
+                      ? 'text-slate-400 dark:text-slate-500'
+                      : ''
+                  }`}
+                  placeholder="1000"
+                  step="any"
+                  value={calculation.volume ?? ''}
+                  onChange={(e) => handleInputChange('volume', e.target.value)}
+                />
+                <select
+                  className="select-field w-24"
+                  value={volumeUnit}
+                  onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
+                >
+                  <option value={VolumeUnit.LITER}>L</option>
+                  <option value={VolumeUnit.MILLILITER}>mL</option>
+                  <option value={VolumeUnit.MICROLITER}>μL</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -188,16 +255,31 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
 
             <div>
               <label className="input-label">
-                Volume (mL) *
+                Volume *
               </label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="1000"
-                step="any"
-                value={calculation.volume ?? ''}
-                onChange={(e) => handleInputChange('volume', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  className={`input-field flex-1 ${
+                    calculation.volume === 1000 && volumeUnit === VolumeUnit.MILLILITER
+                      ? 'text-slate-400 dark:text-slate-500'
+                      : ''
+                  }`}
+                  placeholder="1000"
+                  step="any"
+                  value={calculation.volume ?? ''}
+                  onChange={(e) => handleInputChange('volume', e.target.value)}
+                />
+                <select
+                  className="select-field w-24"
+                  value={volumeUnit}
+                  onChange={(e) => setVolumeUnit(e.target.value as VolumeUnit)}
+                >
+                  <option value={VolumeUnit.LITER}>L</option>
+                  <option value={VolumeUnit.MILLILITER}>mL</option>
+                  <option value={VolumeUnit.MICROLITER}>μL</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -244,16 +326,29 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
 
             <div>
               <label className="input-label">
-                Desired Molarity (M) *
+                Desired Molarity *
               </label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 0.5"
-                step="any"
-                value={calculation.molarity ?? ''}
-                onChange={(e) => handleInputChange('molarity', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  className="input-field flex-1"
+                  placeholder="e.g., 0.5"
+                  step="any"
+                  value={calculation.molarity ?? ''}
+                  onChange={(e) => handleInputChange('molarity', e.target.value)}
+                />
+                <select
+                  className="select-field w-24"
+                  value={molarityUnit}
+                  onChange={(e) => setMolarityUnit(e.target.value as ConcentrationUnit)}
+                >
+                  <option value={ConcentrationUnit.MOLAR}>M</option>
+                  <option value={ConcentrationUnit.MILLIMOLAR}>mM</option>
+                  <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
+                  <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
+                  <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -288,69 +383,119 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
               Enter 3 out of 4 values. The calculator will find the missing value.
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="input-label">
-                  Initial Concentration (C₁) M
+                  Initial Concentration (C₁)
                 </label>
-                <input
-                  type="number"
-                  className="input-field"
-                  placeholder="C₁"
-                  step="any"
-                  value={calculation.initialMolarity ?? ''}
-                  onChange={(e) =>
-                    handleInputChange('initialMolarity', e.target.value)
-                  }
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    className="input-field flex-1"
+                    placeholder="C₁"
+                    step="any"
+                    value={calculation.initialMolarity ?? ''}
+                    onChange={(e) =>
+                      handleInputChange('initialMolarity', e.target.value)
+                    }
+                  />
+                  <select
+                    className="select-field w-20"
+                    value={initialMolarityUnit}
+                    onChange={(e) => setInitialMolarityUnit(e.target.value as ConcentrationUnit)}
+                  >
+                    <option value={ConcentrationUnit.MOLAR}>M</option>
+                    <option value={ConcentrationUnit.MILLIMOLAR}>mM</option>
+                    <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
+                    <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="input-label">
-                  Initial Volume (V₁) mL
+                  Initial Volume (V₁)
                 </label>
-                <input
-                  type="number"
-                  className="input-field"
-                  placeholder="V₁"
-                  step="any"
-                  value={calculation.initialVolume ?? ''}
-                  onChange={(e) =>
-                    handleInputChange('initialVolume', e.target.value)
-                  }
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    className="input-field flex-1"
+                    placeholder="V₁"
+                    step="any"
+                    value={calculation.initialVolume ?? ''}
+                    onChange={(e) =>
+                      handleInputChange('initialVolume', e.target.value)
+                    }
+                  />
+                  <select
+                    className="select-field w-20"
+                    value={initialVolumeUnit}
+                    onChange={(e) => setInitialVolumeUnit(e.target.value as VolumeUnit)}
+                  >
+                    <option value={VolumeUnit.LITER}>L</option>
+                    <option value={VolumeUnit.MILLILITER}>mL</option>
+                    <option value={VolumeUnit.MICROLITER}>μL</option>
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="input-label">
-                  Final Concentration (C₂) M
+                  Final Concentration (C₂)
                 </label>
-                <input
-                  type="number"
-                  className="input-field"
-                  placeholder="C₂"
-                  step="any"
-                  value={calculation.finalMolarity ?? ''}
-                  onChange={(e) =>
-                    handleInputChange('finalMolarity', e.target.value)
-                  }
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    className="input-field flex-1"
+                    placeholder="C₂"
+                    step="any"
+                    value={calculation.finalMolarity ?? ''}
+                    onChange={(e) =>
+                      handleInputChange('finalMolarity', e.target.value)
+                    }
+                  />
+                  <select
+                    className="select-field w-20"
+                    value={finalMolarityUnit}
+                    onChange={(e) => setFinalMolarityUnit(e.target.value as ConcentrationUnit)}
+                  >
+                    <option value={ConcentrationUnit.MOLAR}>M</option>
+                    <option value={ConcentrationUnit.MILLIMOLAR}>mM</option>
+                    <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
+                    <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="input-label">
-                  Final Volume (V₂) mL
+                  Final Volume (V₂)
                 </label>
-                <input
-                  type="number"
-                  className="input-field"
-                  placeholder="V₂"
-                  step="any"
-                  value={calculation.finalVolume ?? ''}
-                  onChange={(e) =>
-                    handleInputChange('finalVolume', e.target.value)
-                  }
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    className={`input-field flex-1 ${
+                      calculation.finalVolume === 1000 && finalVolumeUnit === VolumeUnit.MILLILITER
+                        ? 'text-slate-400 dark:text-slate-500'
+                        : ''
+                    }`}
+                    placeholder="V₂"
+                    step="any"
+                    value={calculation.finalVolume ?? ''}
+                    onChange={(e) =>
+                      handleInputChange('finalVolume', e.target.value)
+                    }
+                  />
+                  <select
+                    className="select-field w-20"
+                    value={finalVolumeUnit}
+                    onChange={(e) => setFinalVolumeUnit(e.target.value as VolumeUnit)}
+                  >
+                    <option value={VolumeUnit.LITER}>L</option>
+                    <option value={VolumeUnit.MILLILITER}>mL</option>
+                    <option value={VolumeUnit.MICROLITER}>μL</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
