@@ -3,14 +3,15 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github, Sparkles } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import RecipeList from '@/components/RecipeList';
+import RecipeBuilder from '@/components/RecipeBuilder';
 import { ToastContainer } from '@/components/Toast';
 import { Recipe } from '@/types';
 
-type Tab = 'calculator' | 'recipes' | 'about';
+type Tab = 'calculator' | 'recipes' | 'builder' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
@@ -66,7 +67,7 @@ function AppContent() {
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex gap-2 mt-4">
+          <nav className="flex gap-2 mt-4 flex-wrap">
             <button
               onClick={() => setActiveTab('calculator')}
               className={`calc-mode-tab ${activeTab === 'calculator' ? 'active' : ''}`}
@@ -80,6 +81,13 @@ function AppContent() {
             >
               <BookOpen className="w-4 h-4 inline mr-2" />
               Recipes
+            </button>
+            <button
+              onClick={() => setActiveTab('builder')}
+              className={`calc-mode-tab ${activeTab === 'builder' ? 'active' : ''}`}
+            >
+              <Sparkles className="w-4 h-4 inline mr-2" />
+              Recipe Builder
             </button>
             <button
               onClick={() => setActiveTab('about')}
@@ -112,6 +120,12 @@ function AppContent() {
           </div>
         )}
 
+        {activeTab === 'builder' && (
+          <div className="animate-in">
+            <RecipeBuilder />
+          </div>
+        )}
+
         {activeTab === 'about' && (
           <div className="animate-in max-w-4xl mx-auto">
             <div className="card">
@@ -127,6 +141,8 @@ function AppContent() {
                     <li>Curated database of 50+ common laboratory chemicals</li>
                     <li>PubChem API integration for additional chemicals</li>
                     <li>Pre-configured buffer recipes (PBS, TBS, HEPES, etc.)</li>
+                    <li>Custom recipe builder for multi-component solutions</li>
+                    <li>Concentration multiplier support (1×, 5×, 10× stock solutions)</li>
                     <li>Step-by-step calculation breakdowns</li>
                     <li>Offline functionality with IndexedDB storage</li>
                     <li>Export/import data for backup</li>
