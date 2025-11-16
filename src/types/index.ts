@@ -127,9 +127,29 @@ export enum VolumeUnit {
 // Database Types
 // ============================================================================
 
+// ============================================================================
+// Protein Concentration Types (Beer-Lambert Law)
+// ============================================================================
+
+export interface ConcentrationMeasurement {
+  id: string;
+  proteinName: string;
+  date: string; // ISO date string
+  absorbance280: number; // A280
+  extinctionCoefficient: number; // M⁻¹cm⁻¹
+  molecularWeight: number; // g/mol (Da)
+  pathLength: number; // cm (typically 0.1 for NanoDrop, 1 for cuvette)
+  concentration: number; // mg/mL
+  concentrationMolar: number; // M (mol/L)
+  notes?: string;
+  sequence?: string; // Optional protein sequence
+  batchNumber?: string; // For tracking different expression batches
+}
+
 export interface DatabaseSchema {
   chemicals: Chemical[];
   recipes: Recipe[];
+  concentrationMeasurements: ConcentrationMeasurement[];
   userPreferences: UserPreferences;
 }
 
