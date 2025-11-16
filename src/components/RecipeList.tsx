@@ -2,8 +2,8 @@
  * Recipe list component with filtering and search
  */
 
-import React, { useState, useMemo } from 'react';
-import { Beaker, Star, Search, Plus, Eye } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Beaker, Star, Search } from 'lucide-react';
 import { Recipe, RecipeCategory, RecipeListProps } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 import { calculateMass } from '@/utils/calculations';

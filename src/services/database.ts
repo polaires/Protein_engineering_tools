@@ -51,7 +51,7 @@ export async function initDatabase(): Promise<IDBPDatabase<MolarityCalcDB>> {
   }
 
   dbInstance = await openDB<MolarityCalcDB>(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion, transaction) {
+    upgrade(db) {
       // Create object stores and indexes
 
       // Chemicals store
@@ -383,8 +383,6 @@ export async function importData(data: {
   recipes?: Recipe[];
   preferences?: UserPreferences;
 }): Promise<void> {
-  const db = await getDB();
-
   if (data.chemicals) {
     await saveChemicals(data.chemicals);
   }

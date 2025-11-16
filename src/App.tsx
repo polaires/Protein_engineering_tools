@@ -2,7 +2,7 @@
  * Main App component
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Calculator as CalcIcon, FlaskConical, BookOpen, Settings, Github } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';

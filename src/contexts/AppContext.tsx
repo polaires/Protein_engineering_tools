@@ -3,7 +3,7 @@
  * Manages chemicals, recipes, preferences, and notifications
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   Chemical,
   Recipe,

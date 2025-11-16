@@ -3,7 +3,7 @@
  * Searches local database and optionally PubChem API
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader, Database, Cloud, ChevronDown } from 'lucide-react';
 import { Chemical, ChemicalSearchProps } from '@/types';
 import { useApp } from '@/contexts/AppContext';
@@ -14,7 +14,7 @@ export default function ChemicalSearch({
   placeholder = 'Search for a chemical...',
   allowCustom = false,
 }: ChemicalSearchProps) {
-  const { chemicals, searchChemicals, addChemical, showToast } = useApp();
+  const { searchChemicals, addChemical, showToast } = useApp();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Chemical[]>([]);

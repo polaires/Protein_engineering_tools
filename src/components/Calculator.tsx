@@ -2,8 +2,8 @@
  * Main calculator component with multiple calculation modes
  */
 
-import React, { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, Flask, Droplet } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -24,7 +24,7 @@ const CALCULATION_MODES = [
   {
     mode: CalculationMode.MOLARITY_FROM_MASS,
     label: 'Calculate Molarity',
-    icon: Flask,
+    icon: FlaskConical,
     description: 'Calculate concentration from mass',
   },
   {
@@ -112,8 +112,6 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
 
   // Render input fields based on calculation mode
   const renderInputFields = () => {
-    const decimalPlaces = preferences?.decimalPlaces || 4;
-
     switch (selectedMode) {
       case CalculationMode.MASS_FROM_MOLARITY:
         return (

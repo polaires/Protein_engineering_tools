@@ -11,10 +11,6 @@
  * ========================================================================== */
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
   body {
     @apply bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800;
     @apply text-slate-900 dark:text-slate-100;
