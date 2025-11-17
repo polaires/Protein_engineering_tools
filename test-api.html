@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Connection Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px 10px 0;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+    }
+    .error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+    }
+    .info {
+      background: #d1ecf1;
+      border: 1px solid #bee5eb;
+      color: #0c5460;
+    }
+    h1 {
+      color: #333;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 API Connection Test</h1>
+    <p>Test your Railway backend connection before using the main app.</p>
+
+    <label for="apiUrl">Railway API URL:</label>
+    <input
+      type="text"
+      id="apiUrl"
+      placeholder="https://your-app.railway.app"
+      value="http://localhost:3000"
+    />
+
+    <button onclick="testHealth()">1. Test Health</button>
+    <button onclick="testCORS()">2. Test CORS</button>
+    <button onclick="testRegister()">3. Test Registration</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    function getApiUrl() {
+      return document.getElementById('apiUrl').value.trim();
+    }
+
+    function showResult(message, type = 'info') {
+      const resultDiv = document.getElementById('result');
+      resultDiv.className = `result ${type}`;
+      resultDiv.textContent = message;
+    }
+
+    async function testHealth() {
+      const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        showResult('Please enter your Railway API URL', 'error');
+        return;
+      }
+
+      showResult('Testing health endpoint...', 'info');
+
+      try {
+        const response = await fetch(`${apiUrl}/health`);
+        const data = await response.json();
+
+        if (response.ok) {
+          showResult(
+            `✅ Health Check Passed!\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}`,
+            'success'
+          );
+        } else {
+          showResult(
+            `❌ Health Check Failed\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}`,
+            'error'
+          );
+        }
+      } catch (error) {
+        showResult(
+          `❌ Connection Failed\n\nError: ${error.message}\n\nPossible causes:\n- Wrong URL\n- Server not running\n- CORS not configured\n- Network issue`,
+          'error'
+        );
+      }
+    }
+
+    async function testCORS() {
+      const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        showResult('Please enter your Railway API URL', 'error');
+        return;
+      }
+
+      showResult('Testing CORS configuration...', 'info');
+
+      try {
+        const response = await fetch(`${apiUrl}/api/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: '',
+            email: '',
+            password: ''
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showResult(
+            `✅ CORS Works!\n\nThe server responded. This means CORS is properly configured.\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}`,
+            'success'
+          );
+        } else {
+          showResult(
+            `⚠️ CORS Works, but validation failed (expected)\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}`,
+            'success'
+          );
+        }
+      } catch (error) {
+        if (error.message.includes('CORS')) {
+          showResult(
+            `❌ CORS Error\n\nThe server is blocking requests from this origin.\n\nError: ${error.message}\n\nFix: Make sure CORS is configured on your Railway backend.`,
+            'error'
+          );
+        } else {
+          showResult(
+            `❌ Connection Error\n\nError: ${error.message}`,
+            'error'
+          );
+        }
+      }
+    }
+
+    async function testRegister() {
+      const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        showResult('Please enter your Railway API URL', 'error');
+        return;
+      }
+
+      showResult('Testing registration endpoint with test user...', 'info');
+
+      const testUser = {
+        username: `test_${Date.now()}`,
+        email: `test_${Date.now()}@example.com`,
+        password: 'password123'
+      };
+
+      try {
+        const response = await fetch(`${apiUrl}/api/auth/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(testUser)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          showResult(
+            `✅ Registration Works!\n\nTest user created successfully.\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}\n\n🎉 Your backend is working correctly!`,
+            'success'
+          );
+        } else {
+          showResult(
+            `⚠️ Registration Failed\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}`,
+            'error'
+          );
+        }
+      } catch (error) {
+        showResult(
+          `❌ Connection Error\n\nError: ${error.message}`,
+          'error'
+        );
+      }
+    }
+  </script>
+</body>
+</html>

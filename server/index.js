@@ -18,7 +18,21 @@ const pool = new pg.Pool({
 });
 
 // Middleware
-app.use(cors());
+// CORS configuration - allow requests from your frontend
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // In production, you might want to restrict this to specific domains
+    // For now, allow all origins for easier development
+    callback(null, true);
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
 // ============================================================================
