@@ -411,116 +411,125 @@ export function getSolubilityData(chemicalId: string): SolubilityData | undefine
 /**
  * Fetch solubility data from PubChem API
  * @param cid PubChem Compound ID
+ * @param name Optional compound name to try as fallback
  * @returns Solubility data if available
  */
-export async function fetchPubChemSolubility(cid: string): Promise<{
+export async function fetchPubChemSolubility(cid: string, name?: string): Promise<{
   waterSolubility: number | null;
   unit: string | null;
   notes: string | null;
 } | null> {
-  try {
-    const response = await fetch(
-      `https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/${cid}/JSON`
-    );
+  // Try to fetch by CID first, then by name if CID fails
+  const attempts = [cid];
+  if (name) {
+    attempts.push(name);
+  }
 
-    if (!response.ok) return null;
+  for (const identifier of attempts) {
+    try {
+      const response = await fetch(
+        `https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/${encodeURIComponent(identifier)}/JSON`
+      );
 
-    const data = await response.json();
-    const sections = data.Record?.Section || [];
+      if (!response.ok) continue; // Try next identifier
 
-    // Collect all potential solubility texts
-    const solubilityTexts: string[] = [];
+      const data = await response.json();
+      const sections = data.Record?.Section || [];
 
-    // Helper function to recursively search for solubility data
-    const findSolubility = (sections: any[], depth = 0): void => {
-      for (const section of sections) {
-        // Check if this section has solubility information
-        if (section.TOCHeading && /solubility/i.test(section.TOCHeading)) {
-          // Extract all Information entries from this section
-          if (section.Information && Array.isArray(section.Information)) {
-            for (const info of section.Information) {
-              // Try different possible structures
-              if (info?.Value?.StringWithMarkup?.[0]?.String) {
-                solubilityTexts.push(info.Value.StringWithMarkup[0].String);
-              } else if (info?.Value?.String) {
-                solubilityTexts.push(info.Value.String);
-              } else if (typeof info?.Value === 'string') {
-                solubilityTexts.push(info.Value);
-              }
+      // Collect all potential solubility texts
+      const solubilityTexts: string[] = [];
 
-              // Also check for Number values
-              if (info?.Value?.Number && info?.Value?.Unit) {
-                solubilityTexts.push(`${info.Value.Number} ${info.Value.Unit}`);
+      // Helper function to recursively search for solubility data
+      const findSolubility = (sections: any[], depth = 0): void => {
+        for (const section of sections) {
+          // Check if this section has solubility information
+          if (section.TOCHeading && /solubility/i.test(section.TOCHeading)) {
+            // Extract all Information entries from this section
+            if (section.Information && Array.isArray(section.Information)) {
+              for (const info of section.Information) {
+                // Try different possible structures
+                if (info?.Value?.StringWithMarkup?.[0]?.String) {
+                  solubilityTexts.push(info.Value.StringWithMarkup[0].String);
+                } else if (info?.Value?.String) {
+                  solubilityTexts.push(info.Value.String);
+                } else if (typeof info?.Value === 'string') {
+                  solubilityTexts.push(info.Value);
+                }
+
+                // Also check for Number values
+                if (info?.Value?.Number && info?.Value?.Unit) {
+                  solubilityTexts.push(`${info.Value.Number} ${info.Value.Unit}`);
+                }
               }
             }
           }
+
+          // Recursively search in subsections
+          if (section.Section && Array.isArray(section.Section) && depth < 10) {
+            findSolubility(section.Section, depth + 1);
+          }
+        }
+      };
+
+      findSolubility(sections);
+
+      console.log(`[PubChem ${identifier}] Found ${solubilityTexts.length} solubility entries:`, solubilityTexts);
+
+      if (solubilityTexts.length === 0) {
+        console.log(`[PubChem ${identifier}] No solubility data found, trying next identifier...`);
+        continue; // Try next identifier
+      }
+
+      // Try to find water solubility data
+      let bestMatch: { text: string; parsed: { value: number; unit: string } | null } | null = null;
+
+      for (const text of solubilityTexts) {
+        const parsed = parseSolubilityString(text);
+        console.log(`[PubChem ${identifier}] Parsing "${text}":`, parsed);
+
+        // Prefer entries that mention water and can be parsed
+        if (parsed && (/water/i.test(text) || /h2o/i.test(text) || /aqueous/i.test(text))) {
+          console.log(`[PubChem ${identifier}] Selected water-specific entry:`, text, parsed);
+          return {
+            waterSolubility: parsed.value,
+            unit: parsed.unit,
+            notes: text
+          };
         }
 
-        // Recursively search in subsections
-        if (section.Section && Array.isArray(section.Section) && depth < 10) {
-          findSolubility(section.Section, depth + 1);
+        // Keep track of the first parseable entry as a fallback
+        if (parsed && !bestMatch) {
+          bestMatch = { text, parsed };
         }
       }
-    };
 
-    findSolubility(sections);
-
-    console.log(`[PubChem CID ${cid}] Found ${solubilityTexts.length} solubility entries:`, solubilityTexts);
-
-    if (solubilityTexts.length === 0) {
-      console.log(`[PubChem CID ${cid}] No solubility data found`);
-      return null;
-    }
-
-    // Try to find water solubility data
-    let bestMatch: { text: string; parsed: { value: number; unit: string } | null } | null = null;
-
-    for (const text of solubilityTexts) {
-      const parsed = parseSolubilityString(text);
-      console.log(`[PubChem CID ${cid}] Parsing "${text}":`, parsed);
-
-      // Prefer entries that mention water and can be parsed
-      if (parsed && (/water/i.test(text) || /h2o/i.test(text) || /aqueous/i.test(text))) {
-        console.log(`[PubChem CID ${cid}] Selected water-specific entry:`, text, parsed);
+      // If we found a parseable entry (even without water mention), use it
+      if (bestMatch) {
+        console.log(`[PubChem ${identifier}] Using fallback entry:`, bestMatch.text, bestMatch.parsed);
         return {
-          waterSolubility: parsed.value,
-          unit: parsed.unit,
-          notes: text
+          waterSolubility: bestMatch.parsed!.value,
+          unit: bestMatch.parsed!.unit,
+          notes: bestMatch.text
         };
       }
 
-      // Keep track of the first parseable entry as a fallback
-      if (parsed && !bestMatch) {
-        bestMatch = { text, parsed };
+      // If we have text but couldn't parse, return as notes
+      if (solubilityTexts.length > 0) {
+        console.log(`[PubChem ${identifier}] Could not parse any entries, returning first as notes:`, solubilityTexts[0]);
+        return {
+          waterSolubility: null,
+          unit: null,
+          notes: solubilityTexts[0]
+        };
       }
+    } catch (error) {
+      console.error(`Error fetching PubChem solubility for ${identifier}:`, error);
+      continue; // Try next identifier
     }
-
-    // If we found a parseable entry (even without water mention), use it
-    if (bestMatch) {
-      console.log(`[PubChem CID ${cid}] Using fallback entry:`, bestMatch.text, bestMatch.parsed);
-      return {
-        waterSolubility: bestMatch.parsed!.value,
-        unit: bestMatch.parsed!.unit,
-        notes: bestMatch.text
-      };
-    }
-
-    // If we have text but couldn't parse, return as notes
-    if (solubilityTexts.length > 0) {
-      console.log(`[PubChem CID ${cid}] Could not parse any entries, returning first as notes:`, solubilityTexts[0]);
-      return {
-        waterSolubility: null,
-        unit: null,
-        notes: solubilityTexts[0]
-      };
-    }
-
-    console.log(`[PubChem CID ${cid}] No solubility data available`);
-    return null;
-  } catch (error) {
-    console.error('Error fetching PubChem solubility:', error);
-    return null;
   }
+
+  console.log(`[PubChem] No solubility data available for any identifier`);
+  return null;
 }
 
 /**
@@ -595,12 +604,14 @@ function parseSolubilityString(text: string): { value: number; unit: string } | 
  * @param chemicalId Chemical ID
  * @param concentrationMgML Concentration in mg/mL
  * @param pubchemCid Optional PubChem CID for fetching data
+ * @param chemicalName Optional chemical name for fallback PubChem lookup
  * @returns Object with warning status and message
  */
 export async function checkSolubilityAsync(
   chemicalId: string,
   concentrationMgML: number,
-  pubchemCid?: string
+  pubchemCid?: string,
+  chemicalName?: string
 ): Promise<{
   isExceeded: boolean;
   percentOfLimit: number;
@@ -622,7 +633,7 @@ export async function checkSolubilityAsync(
 
   // If not in database and we have PubChem CID, try fetching from PubChem
   if (pubchemCid) {
-    const pubchemData = await fetchPubChemSolubility(pubchemCid);
+    const pubchemData = await fetchPubChemSolubility(pubchemCid, chemicalName);
 
     if (pubchemData && pubchemData.waterSolubility !== null) {
       const solubilityMgML = pubchemData.waterSolubility; // Already in g/L = mg/mL

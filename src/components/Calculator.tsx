@@ -148,7 +148,8 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         const solubilityResult = await checkSolubilityAsync(
           selectedChemical.id,
           concentrationMgML,
-          pubchemCid
+          pubchemCid,
+          selectedChemical.commonName // Pass the chemical name for fallback lookup
         );
         setSolubilityCheck(solubilityResult);
       } catch (error) {
