@@ -8,6 +8,12 @@ import { User, RegisterRequest, LoginRequest, AuthResponse, Recipe, Concentratio
 // API Base URL - change this to your Railway deployment URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+// Debug logging
+console.log('🔍 [CloudAPI Debug]');
+console.log('  VITE_API_URL from env:', import.meta.env.VITE_API_URL);
+console.log('  API_BASE_URL being used:', API_BASE_URL);
+console.log('  Expected:', 'https://laudable-appreciation-production.up.railway.app');
+
 // ============================================================================
 // Token Management
 // ============================================================================
@@ -39,14 +45,23 @@ function getAuthHeaders(): HeadersInit {
 // ============================================================================
 
 export async function registerUser(request: RegisterRequest): Promise<AuthResponse & { token?: string }> {
+  const url = `${API_BASE_URL}/api/auth/register`;
+
+  console.log('🚀 [CloudAPI] Registering user...');
+  console.log('  URL:', url);
+  console.log('  Request:', { ...request, password: '***' });
+
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     });
 
+    console.log('✅ [CloudAPI] Response received:', response.status);
+
     const data = await response.json();
+    console.log('📦 [CloudAPI] Data:', data);
 
     if (data.success && data.token) {
       setToken(data.token);
@@ -54,7 +69,12 @@ export async function registerUser(request: RegisterRequest): Promise<AuthRespon
 
     return data;
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('❌ [CloudAPI] Registration error:', error);
+    if (error && typeof error === 'object') {
+      console.error('  Error type:', (error as any).constructor.name);
+    }
+    console.error('  Error message:', error instanceof Error ? error.message : String(error));
+
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Registration failed',

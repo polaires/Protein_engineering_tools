@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Debug Frontend API</title>
+  <script type="module">
+    // Simulate exactly what your app does
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+    console.log("=== DEBUG INFO ===");
+    console.log("VITE_API_URL from env:", import.meta.env.VITE_API_URL);
+    console.log("API_BASE_URL being used:", API_BASE_URL);
+    console.log("==================");
+
+    document.getElementById('apiUrl').textContent = API_BASE_URL;
+
+    async function testRegister() {
+      const testUser = {
+        username: "test" + Date.now(),
+        email: "test" + Date.now() + "@example.com",
+        password: "password123"
+      };
+
+      const url = `${API_BASE_URL}/api/auth/register`;
+
+      document.getElementById('status').textContent = 'Sending request to: ' + url;
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(testUser),
+        });
+
+        const data = await response.json();
+
+        document.getElementById('result').innerHTML =
+          `<h3 style="color: green;">✅ Success!</h3>
+          <p><strong>URL Used:</strong> ${url}</p>
+          <p><strong>Status:</strong> ${response.status}</p>
+          <pre>${JSON.stringify(data, null, 2)}</pre>`;
+      } catch (error) {
+        document.getElementById('result').innerHTML =
+          `<h3 style="color: red;">❌ Failed</h3>
+          <p><strong>URL Tried:</strong> ${url}</p>
+          <p><strong>Error:</strong> ${error.message}</p>
+          <p><strong>This is the same error your app is getting!</strong></p>`;
+        console.error('Full error:', error);
+      }
+    }
+
+    window.testRegister = testRegister;
+  </script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #007bff;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    .info {
+      background: #d1ecf1;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Debug Frontend API Connection</h1>
+
+    <div class="info">
+      <p><strong>API URL being used:</strong></p>
+      <p id="apiUrl" style="font-size: 18px; color: #0056b3; font-weight: bold;">Loading...</p>
+    </div>
+
+    <button onclick="testRegister()">Test Registration (Same as Your App)</button>
+
+    <div id="status" style="margin-top: 20px; color: #666;"></div>
+    <div id="result" style="margin-top: 20px;"></div>
+
+    <hr style="margin: 30px 0;">
+
+    <h3>Instructions:</h3>
+    <ol>
+      <li>Run this with Vite dev server: <code>npm run dev</code></li>
+      <li>Open in browser (it will be served by Vite)</li>
+      <li>Click the button and see what URL it tries to use</li>
+    </ol>
+  </div>
+</body>
+</html>
