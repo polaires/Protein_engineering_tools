@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Registration</title>
+  <script>
+    const API_URL = "https://laudable-appreciation-production.up.railway.app";
+    
+    async function testRegistration() {
+      const testUser = {
+        username: "testuser" + Date.now(),
+        email: "test" + Date.now() + "@example.com",
+        password: "password123"
+      };
+      
+      try {
+        console.log("Sending request to:", API_URL + "/api/auth/register");
+        console.log("Data:", testUser);
+        
+        const response = await fetch(API_URL + "/api/auth/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(testUser)
+        });
+        
+        const data = await response.json();
+        
+        console.log("Response status:", response.status);
+        console.log("Response data:", data);
+        
+        document.getElementById("result").innerHTML = 
+          "<h3>✅ Success!</h3>" +
+          "<pre>" + JSON.stringify(data, null, 2) + "</pre>" +
+          "<p>Your backend is working! Now test in your actual app.</p>";
+      } catch (error) {
+        console.error("Error:", error);
+        document.getElementById("result").innerHTML = 
+          "<h3>❌ Error</h3>" +
+          "<pre>" + error.message + "</pre>";
+      }
+    }
+    
+    window.onload = testRegistration;
+  </script>
+  <style>
+    body { font-family: Arial; max-width: 600px; margin: 50px auto; padding: 20px; }
+    pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; }
+    h3 { color: #333; }
+  </style>
+</head>
+<body>
+  <h1>Testing Registration</h1>
+  <div id="result">Testing...</div>
+</body>
+</html>
