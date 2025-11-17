@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Dna, Plus, Trash2, Calculator, Download, HelpCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Dna, Plus, Trash2, Calculator, Download, HelpCircle, AlertTriangle, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 
 // Genetic code table
 const GENETIC_CODE: Record<string, string> = {
@@ -26,12 +26,44 @@ const GENETIC_CODE: Record<string, string> = {
   'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G'
 };
 
+// Reverse genetic code: AA -> codons
+const AA_TO_CODONS: Record<string, string[]> = {
+  'F': ['TTT', 'TTC'],
+  'L': ['TTA', 'TTG', 'CTT', 'CTC', 'CTA', 'CTG'],
+  'I': ['ATT', 'ATC', 'ATA'],
+  'M': ['ATG'],
+  'V': ['GTT', 'GTC', 'GTA', 'GTG'],
+  'S': ['TCT', 'TCC', 'TCA', 'TCG', 'AGT', 'AGC'],
+  'P': ['CCT', 'CCC', 'CCA', 'CCG'],
+  'T': ['ACT', 'ACC', 'ACA', 'ACG'],
+  'A': ['GCT', 'GCC', 'GCA', 'GCG'],
+  'Y': ['TAT', 'TAC'],
+  'H': ['CAT', 'CAC'],
+  'Q': ['CAA', 'CAG'],
+  'N': ['AAT', 'AAC'],
+  'K': ['AAA', 'AAG'],
+  'D': ['GAT', 'GAC'],
+  'E': ['GAA', 'GAG'],
+  'C': ['TGT', 'TGC'],
+  'W': ['TGG'],
+  'R': ['CGT', 'CGC', 'CGA', 'CGG', 'AGA', 'AGG'],
+  'G': ['GGT', 'GGC', 'GGA', 'GGG']
+};
+
 // IUPAC degenerate base codes
 const IUPAC_CODES: Record<string, string[]> = {
   'A': ['A'], 'C': ['C'], 'G': ['G'], 'T': ['T'],
   'R': ['A', 'G'], 'Y': ['C', 'T'], 'W': ['A', 'T'], 'S': ['G', 'C'],
   'M': ['A', 'C'], 'K': ['G', 'T'], 'H': ['A', 'C', 'T'], 'B': ['C', 'G', 'T'],
   'V': ['A', 'C', 'G'], 'D': ['A', 'G', 'T'], 'N': ['A', 'C', 'G', 'T']
+};
+
+// Reverse IUPAC: sorted bases -> IUPAC code
+const BASES_TO_IUPAC: Record<string, string> = {
+  'A': 'A', 'C': 'C', 'G': 'G', 'T': 'T',
+  'AG': 'R', 'CT': 'Y', 'AT': 'W', 'CG': 'S',
+  'AC': 'M', 'GT': 'K', 'ACT': 'H', 'CGT': 'B',
+  'ACG': 'V', 'AGT': 'D', 'ACGT': 'N'
 };
 
 // Amino acid names
@@ -106,7 +138,22 @@ interface PropertyGroup {
   icon: string;
 }
 
+interface GeneratorResult {
+  inputAminoAcids: string[];
+  optimalCodons: string[];
+  analysis: {
+    totalCodons: number;
+    aminoAcidCounts: Record<string, number>;
+    extraAminoAcids: string[];
+  };
+}
+
+type LibraryMode = 'analyzer' | 'generator';
+
 export default function LibraryDesign() {
+  const [mode, setMode] = useState<LibraryMode>('analyzer');
+
+  // Analyzer mode state
   const [positions, setPositions] = useState<Position[]>([
     { id: '1', name: 'Position 1', codon: 'NNK' },
     { id: '2', name: 'Position 2', codon: 'NNK' },
@@ -116,6 +163,10 @@ export default function LibraryDesign() {
   const [totalLibrarySize, setTotalLibrarySize] = useState<number>(0);
   const [showIUPAC, setShowIUPAC] = useState(false);
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
+
+  // Generator mode state
+  const [aminoAcidInput, setAminoAcidInput] = useState<string>('');
+  const [generatorResult, setGeneratorResult] = useState<GeneratorResult | null>(null);
 
   // Expand degenerate codon to all possible combinations
   const expandDegenerateCodon = (degenerateCodon: string): string[] => {
@@ -294,6 +345,240 @@ export default function LibraryDesign() {
     return size.toLocaleString();
   };
 
+  // ============ DEGENERATE CODON GENERATOR FUNCTIONS ============
+
+  // Get all bases required at each position for the input amino acids
+  const getRequiredBases = (aminoAcids: string[]): { first: string[]; second: string[]; third: string[] } => {
+    const firstBases = new Set<string>();
+    const secondBases = new Set<string>();
+    const thirdBases = new Set<string>();
+
+    for (const aa of aminoAcids) {
+      const codons = AA_TO_CODONS[aa];
+      if (!codons) continue;
+
+      for (const codon of codons) {
+        firstBases.add(codon[0]);
+        secondBases.add(codon[1]);
+        thirdBases.add(codon[2]);
+      }
+    }
+
+    return {
+      first: Array.from(firstBases).sort(),
+      second: Array.from(secondBases).sort(),
+      third: Array.from(thirdBases).sort()
+    };
+  };
+
+  // Check if a single base can cover all amino acids at a position
+  const canBaseCoverAllAminoAcids = (base: string, aminoAcids: string[], position: number): boolean => {
+    for (const aa of aminoAcids) {
+      const codons = AA_TO_CODONS[aa];
+      if (!codons) continue;
+
+      const hasCodonWithBase = codons.some(codon => codon[position] === base);
+      if (!hasCodonWithBase) return false;
+    }
+    return true;
+  };
+
+  // Check if a set of bases can cover all amino acids at a position
+  const canBasesCoverAllAminoAcids = (
+    bases: string[],
+    aminoAcids: string[],
+    position: number,
+    firstBase?: string[],
+    secondBase?: string[]
+  ): boolean => {
+    for (const aa of aminoAcids) {
+      const codons = AA_TO_CODONS[aa];
+      if (!codons) continue;
+
+      let validCodons = codons;
+
+      // For third position, filter codons by first and second bases
+      if (position === 2 && firstBase && secondBase) {
+        validCodons = codons.filter(codon =>
+          firstBase.includes(codon[0]) && secondBase.includes(codon[1])
+        );
+      }
+
+      const hasCodonWithBases = validCodons.some(codon => bases.includes(codon[position]));
+      if (!hasCodonWithBases) return false;
+    }
+    return true;
+  };
+
+  // Find minimum set of bases that covers all amino acids
+  const findMinimumBasesSet = (
+    bases: string[],
+    aminoAcids: string[],
+    position: number,
+    firstBase?: string[],
+    secondBase?: string[]
+  ): string[][] => {
+    // Try increasing set sizes
+    for (let size = 1; size <= bases.length; size++) {
+      const combinations = getCombinations(bases, size);
+      const validCombos: string[][] = [];
+
+      for (const combo of combinations) {
+        if (canBasesCoverAllAminoAcids(combo, aminoAcids, position, firstBase, secondBase)) {
+          validCombos.push(combo);
+        }
+      }
+
+      if (validCombos.length > 0) {
+        return validCombos;
+      }
+    }
+
+    return [bases]; // If no smaller set found, return all bases
+  };
+
+  // Get all combinations of size k from array
+  const getCombinations = <T,>(array: T[], k: number): T[][] => {
+    if (k === 1) return array.map(x => [x]);
+    if (k === array.length) return [array];
+
+    const result: T[][] = [];
+
+    const combine = (start: number, combo: T[]) => {
+      if (combo.length === k) {
+        result.push([...combo]);
+        return;
+      }
+
+      for (let i = start; i < array.length; i++) {
+        combo.push(array[i]);
+        combine(i + 1, combo);
+        combo.pop();
+      }
+    };
+
+    combine(0, []);
+    return result;
+  };
+
+  // Optimize bases for a position
+  const optimizeBases = (
+    bases: string[],
+    aminoAcids: string[],
+    position: number,
+    firstBase?: string[],
+    secondBase?: string[]
+  ): string[][] => {
+    // Check if single base can cover all
+    for (const base of bases) {
+      if (canBaseCoverAllAminoAcids(base, aminoAcids, position)) {
+        return [[base]];
+      }
+    }
+
+    // Find minimum set of bases
+    return findMinimumBasesSet(bases, aminoAcids, position, firstBase, secondBase);
+  };
+
+  // Convert bases to optimal IUPAC code
+  const findOptimalDegenerateBase = (bases: string[]): string => {
+    const sortedBases = bases.sort().join('');
+    return BASES_TO_IUPAC[sortedBases] || sortedBases;
+  };
+
+  // Generate optimal degenerate codons
+  const generateOptimalDegenerateCodons = (
+    firstBaseSets: string[][],
+    secondBaseSets: string[][],
+    thirdBaseSets: string[][]
+  ): string[] => {
+    const codons: string[] = [];
+
+    for (const firstBases of firstBaseSets) {
+      for (const secondBases of secondBaseSets) {
+        for (const thirdBases of thirdBaseSets) {
+          const first = findOptimalDegenerateBase(firstBases);
+          const second = findOptimalDegenerateBase(secondBases);
+          const third = findOptimalDegenerateBase(thirdBases);
+          codons.push(`${first}${second}${third}`);
+        }
+      }
+    }
+
+    return Array.from(new Set(codons)); // Remove duplicates
+  };
+
+  // Analyze the generated solution
+  const analyzeSolution = (optimalCodons: string[], inputAminoAcids: string[]): GeneratorResult['analysis'] => {
+    const aminoAcidCounts: Record<string, number> = {};
+    let totalCodons = 0;
+
+    for (const degenerateCodon of optimalCodons) {
+      const expandedCodons = expandDegenerateCodon(degenerateCodon);
+
+      for (const codon of expandedCodons) {
+        totalCodons++;
+        const aa = GENETIC_CODE[codon];
+        aminoAcidCounts[aa] = (aminoAcidCounts[aa] || 0) + 1;
+      }
+    }
+
+    const foundAAs = Object.keys(aminoAcidCounts).filter(aa => aa !== '*');
+    const extraAminoAcids = foundAAs.filter(aa => !inputAminoAcids.includes(aa));
+
+    return {
+      totalCodons,
+      aminoAcidCounts,
+      extraAminoAcids
+    };
+  };
+
+  // Main generator function
+  const generateDegenerateCodons = () => {
+    try {
+      // Parse and validate input
+      const aminoAcids = Array.from(new Set(aminoAcidInput.toUpperCase().split('')))
+        .filter(aa => AA_TO_CODONS[aa]);
+
+      if (aminoAcids.length === 0) {
+        alert('Please enter valid amino acids (e.g., ACDEFGHIKLMNPQRSTVWY)');
+        return;
+      }
+
+      // Get required bases
+      const requiredBases = getRequiredBases(aminoAcids);
+
+      // Optimize bases for each position
+      const optimizedFirst = optimizeBases(requiredBases.first, aminoAcids, 0);
+      const optimizedSecond = optimizeBases(requiredBases.second, aminoAcids, 1);
+      const optimizedThird = optimizeBases(
+        requiredBases.third,
+        aminoAcids,
+        2,
+        optimizedFirst[0],
+        optimizedSecond[0]
+      );
+
+      // Generate optimal degenerate codons
+      const optimalCodons = generateOptimalDegenerateCodons(
+        optimizedFirst,
+        optimizedSecond,
+        optimizedThird
+      );
+
+      // Analyze solution
+      const analysis = analyzeSolution(optimalCodons, aminoAcids);
+
+      setGeneratorResult({
+        inputAminoAcids: aminoAcids,
+        optimalCodons,
+        analysis
+      });
+    } catch (error) {
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -304,37 +589,66 @@ export default function LibraryDesign() {
         </h2>
         <p className="text-slate-600 dark:text-slate-400">
           Design and analyze degenerate codon libraries for protein engineering.
-          Use IUPAC notation to specify amino acid diversity at each position.
+          {mode === 'analyzer'
+            ? ' Use IUPAC notation to specify amino acid diversity at each position.'
+            : ' Enter amino acids to generate optimal degenerate codons.'}
         </p>
-      </div>
 
-      {/* Controls */}
-      <div className="card">
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex gap-2">
-            <button onClick={addPosition} className="btn-secondary">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Position
-            </button>
-            <button onClick={calculateLibrary} className="btn-primary">
-              <Calculator className="w-4 h-4 mr-2" />
-              Calculate Library
-            </button>
-            {results.length > 0 && (
-              <button onClick={exportResults} className="btn-secondary">
-                <Download className="w-4 h-4 mr-2" />
-                Export CSV
-              </button>
-            )}
-          </div>
+        {/* Mode Tabs */}
+        <div className="flex gap-2 mt-4">
           <button
-            onClick={() => setShowIUPAC(!showIUPAC)}
-            className="btn-icon"
-            title="IUPAC Reference"
+            onClick={() => setMode('analyzer')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              mode === 'analyzer'
+                ? 'bg-primary-600 text-white'
+                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+            }`}
           >
-            <HelpCircle className="w-5 h-5" />
+            Codon → Amino Acids
+          </button>
+          <button
+            onClick={() => setMode('generator')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              mode === 'generator'
+                ? 'bg-primary-600 text-white'
+                : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+            }`}
+          >
+            Amino Acids → Codon
           </button>
         </div>
+      </div>
+
+      {/* ANALYZER MODE */}
+      {mode === 'analyzer' && (
+        <>
+          {/* Controls */}
+          <div className="card">
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex gap-2">
+                <button onClick={addPosition} className="btn-secondary">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Position
+                </button>
+                <button onClick={calculateLibrary} className="btn-primary">
+                  <Calculator className="w-4 h-4 mr-2" />
+                  Calculate Library
+                </button>
+                {results.length > 0 && (
+                  <button onClick={exportResults} className="btn-secondary">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export CSV
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setShowIUPAC(!showIUPAC)}
+                className="btn-icon"
+                title="IUPAC Reference"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </button>
+            </div>
 
         {/* Library Size */}
         {totalLibrarySize > 0 && (
@@ -663,6 +977,264 @@ export default function LibraryDesign() {
             </div>
           </div>
         </div>
+      )}
+        </>
+      )}
+
+      {/* GENERATOR MODE */}
+      {mode === 'generator' && (
+        <>
+          {/* Input Section */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
+              Input Amino Acids
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+              Enter the amino acids you want to encode (e.g., ACDEFGHIKLMNPQRSTVWY). The tool will find the optimal degenerate codon(s).
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={aminoAcidInput}
+                onChange={(e) => setAminoAcidInput(e.target.value.toUpperCase())}
+                className="input-field flex-1 font-mono text-lg"
+                placeholder="Enter amino acids (e.g., ACDEFG)"
+              />
+              <button onClick={generateDegenerateCodons} className="btn-primary">
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Generate Codons
+              </button>
+              <button
+                onClick={() => setShowIUPAC(!showIUPAC)}
+                className="btn-icon"
+                title="IUPAC Reference"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick examples */}
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                Quick Examples:
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setAminoAcidInput('ACDEFGHIKLMNPQRSTVWY')}
+                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                >
+                  All 20 AAs
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('RK')}
+                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                >
+                  Positive Charged (RK)
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('DE')}
+                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                >
+                  Negative Charged (DE)
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('AVILMFYW')}
+                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                >
+                  Hydrophobic
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('STNQ')}
+                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                >
+                  Polar Uncharged
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* IUPAC Reference */}
+          {showIUPAC && (
+            <div className="card bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+              <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
+                IUPAC Degenerate Base Codes
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <h4 className="font-semibold mb-2">Two-Base Codes</h4>
+                  <ul className="space-y-1 font-mono text-xs">
+                    <li><strong>R</strong> = A or G (puRine)</li>
+                    <li><strong>Y</strong> = C or T (pYrimidine)</li>
+                    <li><strong>W</strong> = A or T (Weak)</li>
+                    <li><strong>S</strong> = G or C (Strong)</li>
+                    <li><strong>M</strong> = A or C (aMino)</li>
+                    <li><strong>K</strong> = G or T (Keto)</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-2">Three-Base Codes</h4>
+                  <ul className="space-y-1 font-mono text-xs">
+                    <li><strong>H</strong> = A or C or T (not G)</li>
+                    <li><strong>B</strong> = C or G or T (not A)</li>
+                    <li><strong>V</strong> = A or C or G (not T)</li>
+                    <li><strong>D</strong> = A or G or T (not C)</li>
+                    <li><strong>N</strong> = A or C or G or T (aNy)</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-2">Common Examples</h4>
+                  <ul className="space-y-1 font-mono text-xs">
+                    <li><strong>NNK</strong> = 32 codons (20 AA + 1 stop)</li>
+                    <li><strong>NNS</strong> = 32 codons (20 AA + 1 stop)</li>
+                    <li><strong>NNN</strong> = 64 codons (all)</li>
+                    <li><strong>NNM</strong> = 32 codons (20 AA, no stop)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {generatorResult && (
+            <>
+              {/* Optimal Codons */}
+              <div className="card">
+                <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
+                  Optimal Degenerate Codons
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+                      Input Amino Acids: <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                        {generatorResult.inputAminoAcids.join('')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                      Generated Codon{generatorResult.optimalCodons.length > 1 ? 's' : ''}:
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {generatorResult.optimalCodons.map((codon, idx) => (
+                        <div
+                          key={idx}
+                          className="px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-200 dark:border-primary-800 rounded-lg"
+                        >
+                          <div className="font-mono text-2xl font-bold text-primary-700 dark:text-primary-300">
+                            {codon}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Codon #{idx + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Analysis */}
+              <div className="card">
+                <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
+                  Library Analysis
+                </h3>
+
+                {/* Summary Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                    <div className="text-sm text-slate-600 dark:text-slate-400">Total Codons</div>
+                    <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
+                      {generatorResult.analysis.totalCodons}
+                    </div>
+                  </div>
+                  <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                    <div className="text-sm text-slate-600 dark:text-slate-400">Unique Amino Acids</div>
+                    <div className="text-3xl font-bold text-primary-600 dark:text-primary-400">
+                      {Object.keys(generatorResult.analysis.aminoAcidCounts).filter(aa => aa !== '*').length}
+                    </div>
+                  </div>
+                  <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                    <div className="text-sm text-slate-600 dark:text-slate-400">Extra Amino Acids</div>
+                    <div className={`text-3xl font-bold ${
+                      generatorResult.analysis.extraAminoAcids.length === 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-yellow-600 dark:text-yellow-400'
+                    }`}>
+                      {generatorResult.analysis.extraAminoAcids.length}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amino Acid Distribution */}
+                <div>
+                  <h4 className="font-semibold mb-3 text-slate-800 dark:text-slate-200">
+                    Amino Acid Distribution
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    {Object.entries(generatorResult.analysis.aminoAcidCounts)
+                      .filter(([aa]) => aa !== '*')
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([aa, count]) => {
+                        const frequency = (count / generatorResult.analysis.totalCodons) * 100;
+                        const isTarget = generatorResult.inputAminoAcids.includes(aa);
+                        return (
+                          <div
+                            key={aa}
+                            className={`p-3 rounded-lg border ${
+                              isTarget
+                                ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
+                                : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-mono font-bold text-lg">{aa}</span>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {AA_NAMES[aa]}
+                              </span>
+                            </div>
+                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {frequency.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-slate-600 dark:text-slate-400">
+                              {count}/{generatorResult.analysis.totalCodons} codons
+                            </div>
+                            {!isTarget && (
+                              <div className="mt-1 text-xs text-yellow-700 dark:text-yellow-400 font-semibold">
+                                Extra
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Warnings */}
+                {(generatorResult.analysis.extraAminoAcids.length > 0 || generatorResult.analysis.aminoAcidCounts['*']) && (
+                  <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <h4 className="font-semibold text-yellow-800 dark:text-yellow-300 mb-2 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      Warnings
+                    </h4>
+                    <ul className="space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
+                      {generatorResult.analysis.extraAminoAcids.length > 0 && (
+                        <li>
+                          The degenerate codon(s) also encode {generatorResult.analysis.extraAminoAcids.length} extra amino acid{generatorResult.analysis.extraAminoAcids.length > 1 ? 's' : ''}: {generatorResult.analysis.extraAminoAcids.join(', ')}
+                        </li>
+                      )}
+                      {generatorResult.analysis.aminoAcidCounts['*'] && (
+                        <li>
+                          Stop codon (*) is present: {generatorResult.analysis.aminoAcidCounts['*']} codon(s) ({((generatorResult.analysis.aminoAcidCounts['*'] / generatorResult.analysis.totalCodons) * 100).toFixed(1)}%)
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );
