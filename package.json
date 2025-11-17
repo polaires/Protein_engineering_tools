@@ -1,9 +1,9 @@
 {
-  "name": "molarity-calculator",
+  "name": "protein-engineering-tools",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Professional molarity calculator for students and researchers",
+  "description": "Professional toolkit for molecular biology and biochemistry",
   "author": "Your Name",
   "license": "MIT",
   "scripts": {

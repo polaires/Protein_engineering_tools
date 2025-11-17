@@ -164,142 +164,55 @@ function AppContent() {
 
               <div className="space-y-6">
                 <section>
-                  <h3 className="text-xl font-semibold mb-3 text-slate-800 dark:text-slate-200">
+                  <p className="text-lg text-slate-700 dark:text-slate-300 leading-relaxed">
+                    A comprehensive toolkit for molecular biology and biochemistry, designed for students and researchers in life sciences.
+                  </p>
+                </section>
+
+                <div className="divider" />
+
+                <section>
+                  <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">
                     Features
                   </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Solution - Molarity Calculator & Solutions
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                        <CalcIcon className="w-5 h-5" />
+                        Solution
                       </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li><strong>Calculator:</strong></li>
-                        <li className="ml-4">Multiple calculation modes (mass, molarity, volume, dilution)</li>
-                        <li className="ml-4">Customizable concentration units (M, mM, μM, nM, pM)</li>
-                        <li className="ml-4">Customizable volume units (L, mL, μL)</li>
-                        <li className="ml-4">Curated database of 50+ common laboratory chemicals</li>
-                        <li className="ml-4">PubChem API integration for additional chemicals</li>
-                        <li className="ml-4">Step-by-step calculation breakdowns</li>
-                        <li className="mt-2"><strong>Recipes:</strong></li>
-                        <li className="ml-4">Pre-configured buffer recipes (PBS, TBS, HEPES, etc.)</li>
-                        <li className="ml-4">15+ common laboratory solutions</li>
-                        <li className="ml-4">Detailed component lists with concentrations</li>
-                        <li className="mt-2"><strong>Recipe Builder:</strong></li>
-                        <li className="ml-4">Custom multi-component solution builder</li>
-                        <li className="ml-4">Concentration multiplier support (1×, 5×, 10×, custom stock solutions)</li>
-                        <li className="ml-4">Solubility warnings for high concentrations</li>
-                        <li className="ml-4">Save and organize custom recipes</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Protein - Sequence Analysis & Concentration
-                      </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li><strong>Sequence Analysis:</strong></li>
-                        <li className="ml-4">Molecular weight calculation</li>
-                        <li className="ml-4">Theoretical isoelectric point (pI)</li>
-                        <li className="ml-4">Amino acid composition and percentages</li>
-                        <li className="ml-4">Atomic composition (C, H, N, O, S)</li>
-                        <li className="ml-4">Extinction coefficient (reduced and oxidized)</li>
-                        <li className="ml-4">Instability index (protein stability prediction)</li>
-                        <li className="ml-4">Aliphatic index</li>
-                        <li className="ml-4">Grand average of hydropathicity (GRAVY)</li>
-                        <li className="ml-4">Aromaticity calculation</li>
-                        <li className="mt-2"><strong>Concentration Calculator (Beer-Lambert Law):</strong></li>
-                        <li className="ml-4">Auto-fills MW and ε from sequence analysis</li>
-                        <li className="ml-4">A280 absorbance measurements (NanoDrop/Cuvette)</li>
-                        <li className="ml-4">Automatic concentration in mg/mL and μM</li>
-                        <li className="ml-4">Batch tracking with date-stamped history</li>
-                        <li className="ml-4">Export/import measurement data (JSON)</li>
-                        <li className="ml-4">Manual input supported (no sequence required)</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        DNA - Molecular Cloning Tools
-                      </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li><strong>Golden Gate Assembly Calculator:</strong></li>
-                        <li className="ml-4">Based on NEB NEBuilder Ligase Master Mix protocol</li>
-                        <li className="ml-4">Calculate volumes for equimolar assembly (0.05 pmol default)</li>
-                        <li className="ml-4">Multi-fragment input (size in bp, concentration in ng/μL)</li>
-                        <li className="ml-4">Customizable molar ratio and total reaction volume</li>
-                        <li className="ml-4">Automatic master mix calculation (1/3 of total volume)</li>
-                        <li className="ml-4">Dilution suggestions for volumes &lt;1 μL</li>
-                        <li className="ml-4">Water volume auto-calculation</li>
-                        <li className="ml-4">Complete assembly protocol with step-by-step instructions</li>
-                        <li className="mt-2"><strong>Codon Optimization for E. coli:</strong></li>
-                        <li className="ml-4">Optimize DNA sequences for E. coli K-12 expression</li>
-                        <li className="ml-4">Based on E. coli codon usage frequencies</li>
-                        <li className="ml-4">DNA input: optimizes existing sequences</li>
-                        <li className="ml-4">Protein input: reverse translation with optimal codons</li>
-                        <li className="ml-4">CAI (Codon Adaptation Index) calculation</li>
-                        <li className="ml-4">GC content analysis and optimization</li>
-                        <li className="ml-4">Codon change tracking and sequence comparison</li>
-                        <li className="ml-4">Ready-to-order optimized sequences</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        Element - Interactive Periodic Table
-                      </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li><strong>PubChem Periodic Table:</strong></li>
-                        <li className="ml-4">Interactive periodic table from PubChem (NCBI)</li>
-                        <li className="ml-4">Click elements for detailed information</li>
-                        <li className="ml-4">Atomic number, mass, and electron configuration</li>
-                        <li className="ml-4">Element properties and characteristics</li>
-                        <li className="ml-4">Access to compound databases</li>
-                        <li className="ml-4">Color-coded by element categories</li>
-                        <li className="ml-4">Direct link to PubChem resources</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        General
-                      </h4>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
-                        <li>Offline functionality with IndexedDB storage</li>
-                        <li>Export/import data for backup</li>
-                        <li>Dark mode support</li>
-                        <li>Cloud storage with optional authentication</li>
-                      </ul>
-                    </div>
-                  </div>
-                </section>
-
-                <div className="divider" />
-
-                <section>
-                  <h3 className="text-xl font-semibold mb-3 text-slate-800 dark:text-slate-200">
-                    How to Use
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        1. Select Calculation Mode
-                      </h4>
-                      <p className="text-slate-700 dark:text-slate-300">
-                        Choose the type of calculation you need: mass, molarity, volume, or dilution.
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Molarity calculator with multiple modes, 50+ chemical database, buffer recipes, and custom recipe builder
                       </p>
                     </div>
 
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        2. Enter Parameters
+                    <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                        <Droplets className="w-5 h-5" />
+                        Protein
                       </h4>
-                      <p className="text-slate-700 dark:text-slate-300">
-                        Input the known values. Use the chemical search to automatically populate molecular weights.
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Sequence analysis (MW, pI, stability, hydropathicity) and A280 concentration calculator
                       </p>
                     </div>
 
-                    <div>
-                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
-                        3. View Results
+                    <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                        <DnaIcon className="w-5 h-5" />
+                        DNA
                       </h4>
-                      <p className="text-slate-700 dark:text-slate-300">
-                        Get instant results with step-by-step calculations to verify the math.
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Golden Gate assembly calculator, E. coli codon optimization, and library design tools
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                        <Atom className="w-5 h-5" />
+                        Element
+                      </h4>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Interactive periodic table with detailed element information from PubChem
                       </p>
                     </div>
                   </div>
@@ -309,73 +222,31 @@ function AppContent() {
 
                 <section>
                   <h3 className="text-xl font-semibold mb-3 text-slate-800 dark:text-slate-200">
-                    Formulas
+                    Technology
                   </h3>
-                  <div className="space-y-3 font-mono text-sm">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <div className="font-semibold mb-1">Molarity:</div>
-                      <code>M = moles / Volume (L)</code>
-                    </div>
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <div className="font-semibold mb-1">Mass:</div>
-                      <code>mass (g) = Molarity (M) × Volume (L) × MW (g/mol)</code>
-                    </div>
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <div className="font-semibold mb-1">Dilution:</div>
-                      <code>C₁ × V₁ = C₂ × V₂</code>
-                    </div>
-                  </div>
-                </section>
-
-                <div className="divider" />
-
-                <section>
-                  <h3 className="text-xl font-semibold mb-3 text-slate-800 dark:text-slate-200">
-                    Technology Stack
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                      <div className="font-semibold text-primary-700 dark:text-primary-300">
-                        Frontend
-                      </div>
-                      <div className="text-slate-700 dark:text-slate-300">
-                        React 18 + TypeScript
-                      </div>
-                    </div>
-                    <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                      <div className="font-semibold text-primary-700 dark:text-primary-300">
-                        Desktop
-                      </div>
-                      <div className="text-slate-700 dark:text-slate-300">
-                        Tauri
-                      </div>
-                    </div>
-                    <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                      <div className="font-semibold text-primary-700 dark:text-primary-300">
-                        Styling
-                      </div>
-                      <div className="text-slate-700 dark:text-slate-300">
-                        Tailwind CSS
-                      </div>
-                    </div>
-                    <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                      <div className="font-semibold text-primary-700 dark:text-primary-300">
-                        Database
-                      </div>
-                      <div className="text-slate-700 dark:text-slate-300">
-                        IndexedDB (idb)
-                      </div>
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      React 18 + TypeScript
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Tailwind CSS
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      IndexedDB
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Tauri
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      PubChem API
+                    </span>
                   </div>
                 </section>
 
                 <div className="divider" />
 
                 <section className="text-center text-sm text-slate-600 dark:text-slate-400">
-                  <p>Version 1.0.0</p>
-                  <p className="mt-2">
-                    Built for students and researchers in life sciences
-                  </p>
+                  <p className="font-medium">Version 1.0.0</p>
                 </section>
               </div>
             </div>
