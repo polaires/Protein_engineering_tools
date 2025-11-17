@@ -328,8 +328,11 @@ function AppContent() {
 
       {/* Footer */}
       <footer className="container mx-auto px-4 py-6 text-center text-sm text-slate-600 dark:text-slate-400">
-        <p>
-          Made with ❤️ for the scientific community
+        <p className="font-medium text-slate-700 dark:text-slate-300">
+          Developed by Wei Wang
+        </p>
+        <p className="mt-1">
+          For questions or suggestions: <a href="mailto:ww2607@columbia.edu" className="text-primary-600 dark:text-primary-400 hover:underline">ww2607@columbia.edu</a>
         </p>
       </footer>
     </div>
