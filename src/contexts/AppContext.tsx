@@ -15,7 +15,7 @@ import {
   LoginRequest,
 } from '@/types';
 import * as db from '@/services/database';
-import * as auth from '@/services/auth';
+import * as cloudApi from '@/services/cloudApi';
 import { CURATED_CHEMICALS } from '@/data/chemicals';
 import { CURATED_RECIPES } from '@/data/recipes';
 
@@ -27,6 +27,9 @@ interface AppContextType {
   // Authentication
   currentUser: User | null;
   isAuthenticated: boolean;
+  showLoginModal: boolean;
+  setShowLoginModal: (show: boolean) => void;
+  promptLogin: (message?: string) => void;
   register: (request: RegisterRequest) => Promise<{ success: boolean; message: string }>;
   login: (request: LoginRequest) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
@@ -80,6 +83,7 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [chemicals, setChemicals] = useState<Chemical[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
@@ -149,11 +153,11 @@ export function AppProvider({ children }: AppProviderProps) {
   // Initialize on mount and check for current user
   useEffect(() => {
     const init = async () => {
-      // Check if user is already logged in
-      const user = await auth.getCurrentUser();
+      // Check if user is already logged in (via JWT token in localStorage)
+      const user = await cloudApi.getCurrentUser();
       setCurrentUser(user);
 
-      // Initialize database
+      // Initialize database (always initialize, even for guest users)
       await initializeDatabase();
     };
     init();
@@ -163,15 +167,17 @@ export function AppProvider({ children }: AppProviderProps) {
   // Authentication Operations
   // ========================================================================
 
+  const promptLogin = useCallback((_message?: string) => {
+    setShowLoginModal(true);
+  }, []);
+
   const register = useCallback(
     async (request: RegisterRequest): Promise<{ success: boolean; message: string }> => {
       try {
-        const response = await auth.registerUser(request);
+        const response = await cloudApi.registerUser(request);
         if (response.success && response.user) {
           setCurrentUser(response.user);
           showToast('success', response.message);
-          // Reload data for new user
-          await initializeDatabase();
         } else {
           showToast('error', response.message);
         }
@@ -182,18 +188,16 @@ export function AppProvider({ children }: AppProviderProps) {
         return { success: false, message };
       }
     },
-    [initializeDatabase]
+    []
   );
 
   const login = useCallback(
     async (request: LoginRequest): Promise<{ success: boolean; message: string }> => {
       try {
-        const response = await auth.loginUser(request);
+        const response = await cloudApi.loginUser(request);
         if (response.success && response.user) {
           setCurrentUser(response.user);
           showToast('success', response.message);
-          // Reload data for logged-in user
-          await initializeDatabase();
         } else {
           showToast('error', response.message);
         }
@@ -204,16 +208,13 @@ export function AppProvider({ children }: AppProviderProps) {
         return { success: false, message };
       }
     },
-    [initializeDatabase]
+    []
   );
 
   const logout = useCallback(async (): Promise<void> => {
     try {
-      await auth.logoutUser();
+      await cloudApi.logoutUser();
       setCurrentUser(null);
-      // Clear local data
-      setRecipes([]);
-      setPreferences(null);
       showToast('info', 'Logged out successfully');
     } catch (error) {
       showToast('error', 'Logout failed');
@@ -453,6 +454,9 @@ export function AppProvider({ children }: AppProviderProps) {
     // Authentication
     currentUser,
     isAuthenticated,
+    showLoginModal,
+    setShowLoginModal,
+    promptLogin,
     register,
     login,
     logout,

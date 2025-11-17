@@ -3,29 +3,19 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, User as UserIcon } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
-import Auth from '@/components/Auth';
+import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 
 type Tab = 'solution' | 'protein' | 'dna' | 'about';
 
 function AppContent() {
-  const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout } = useApp();
+  const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('solution');
-
-  // Show auth screen if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <>
-        <Auth />
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
-      </>
-    );
-  }
 
   // Loading state
   if (loadingChemicals.isLoading || loadingRecipes.isLoading) {
@@ -60,21 +50,32 @@ function AppContent() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* User info */}
-              <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                <UserIcon className="w-4 h-4 text-primary-600 dark:text-primary-400" />
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {currentUser?.username}
-                </span>
-              </div>
-
-              <button
-                onClick={logout}
-                className="btn-icon"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
+              {/* User info or Login button */}
+              {isAuthenticated ? (
+                <>
+                  <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                    <UserIcon className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {currentUser?.username}
+                    </span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="btn-icon"
+                    title="Logout"
+                  >
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="btn-primary"
+                >
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Login
+                </button>
+              )}
 
               <a
                 href="https://github.com"
@@ -354,6 +355,13 @@ function AppContent() {
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        message="Login to save your custom recipes and measurements to the cloud"
+      />
 
       {/* Footer */}
       <footer className="container mx-auto px-4 py-6 text-center text-sm text-slate-600 dark:text-slate-400">
