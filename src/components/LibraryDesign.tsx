@@ -149,6 +149,7 @@ interface GeneratorResult {
 }
 
 type LibraryMode = 'analyzer' | 'generator';
+type OptimizationStrategy = 'minimal' | 'all' | 'balanced';
 
 export default function LibraryDesign() {
   const [mode, setMode] = useState<LibraryMode>('analyzer');
@@ -167,6 +168,7 @@ export default function LibraryDesign() {
   // Generator mode state
   const [aminoAcidInput, setAminoAcidInput] = useState<string>('');
   const [generatorResult, setGeneratorResult] = useState<GeneratorResult | null>(null);
+  const [optimizationStrategy, setOptimizationStrategy] = useState<OptimizationStrategy>('minimal');
 
   // Expand degenerate codon to all possible combinations
   const expandDegenerateCodon = (degenerateCodon: string): string[] => {
@@ -346,6 +348,30 @@ export default function LibraryDesign() {
   };
 
   // ============ DEGENERATE CODON GENERATOR FUNCTIONS ============
+
+  // Get amino acid property category
+  const getAAPropertyCategory = (aa: string): string => {
+    if (PROPERTY_GROUPS.charged_positive.includes(aa)) return 'charged_positive';
+    if (PROPERTY_GROUPS.charged_negative.includes(aa)) return 'charged_negative';
+    if (PROPERTY_GROUPS.polar.includes(aa)) return 'polar';
+    if (PROPERTY_GROUPS.nonpolar.includes(aa)) return 'nonpolar';
+    return 'unknown';
+  };
+
+  // Get amino acids with same properties for balanced strategy
+  const getAAsWithSameProperties = (aminoAcids: string[]): string[] => {
+    const categories = new Set(aminoAcids.map(aa => getAAPropertyCategory(aa)));
+    const result: string[] = [];
+
+    for (const category of categories) {
+      if (category === 'charged_positive') result.push(...PROPERTY_GROUPS.charged_positive);
+      else if (category === 'charged_negative') result.push(...PROPERTY_GROUPS.charged_negative);
+      else if (category === 'polar') result.push(...PROPERTY_GROUPS.polar);
+      else if (category === 'nonpolar') result.push(...PROPERTY_GROUPS.nonpolar);
+    }
+
+    return Array.from(new Set(result));
+  };
 
   // Get all bases required at each position for the input amino acids
   const getRequiredBases = (aminoAcids: string[]): { first: string[]; second: string[]; third: string[] } => {
@@ -533,6 +559,85 @@ export default function LibraryDesign() {
     };
   };
 
+  // Generate all possible degenerate codons (no optimization)
+  const generateAllCombinations = (aminoAcids: string[]): string[] => {
+    const requiredBases = getRequiredBases(aminoAcids);
+    const codons: string[] = [];
+
+    // Generate all combinations of bases at each position
+    for (const first of requiredBases.first) {
+      for (const second of requiredBases.second) {
+        for (const third of requiredBases.third) {
+          const firstCode = findOptimalDegenerateBase([first]);
+          const secondCode = findOptimalDegenerateBase([second]);
+          const thirdCode = findOptimalDegenerateBase([third]);
+          codons.push(`${firstCode}${secondCode}${thirdCode}`);
+        }
+      }
+    }
+
+    // Also try combinations of bases
+    const firstCode = findOptimalDegenerateBase(requiredBases.first);
+    const secondCode = findOptimalDegenerateBase(requiredBases.second);
+    const thirdCode = findOptimalDegenerateBase(requiredBases.third);
+    codons.push(`${firstCode}${secondCode}${thirdCode}`);
+
+    return Array.from(new Set(codons));
+  };
+
+  // Generate balanced degenerate codons (property-based with stop codon minimization)
+  const generateBalancedCodons = (aminoAcids: string[]): string[] => {
+    // Get amino acids with same properties
+    const expandedAAs = getAAsWithSameProperties(aminoAcids);
+
+    // Get required bases for expanded set
+    const requiredBases = getRequiredBases(expandedAAs);
+
+    // Try to find combinations that minimize stop codons
+    const candidateCodons: { codon: string; stopFreq: number; extraAAs: number }[] = [];
+
+    // Test various combinations
+    for (let i = 1; i <= Math.min(requiredBases.first.length, 3); i++) {
+      for (let j = 1; j <= Math.min(requiredBases.second.length, 3); j++) {
+        for (let k = 1; k <= Math.min(requiredBases.third.length, 3); k++) {
+          const firstSets = getCombinations(requiredBases.first, i);
+          const secondSets = getCombinations(requiredBases.second, j);
+          const thirdSets = getCombinations(requiredBases.third, k);
+
+          for (const firstBases of firstSets) {
+            for (const secondBases of secondSets) {
+              for (const thirdBases of thirdSets) {
+                const first = findOptimalDegenerateBase(firstBases);
+                const second = findOptimalDegenerateBase(secondBases);
+                const third = findOptimalDegenerateBase(thirdBases);
+                const codon = `${first}${second}${third}`;
+
+                const testAnalysis = analyzeSolution([codon], aminoAcids);
+                const stopCount = testAnalysis.aminoAcidCounts['*'] || 0;
+                const stopFreq = (stopCount / testAnalysis.totalCodons) * 100;
+
+                candidateCodons.push({
+                  codon,
+                  stopFreq,
+                  extraAAs: testAnalysis.extraAminoAcids.length
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Sort by stop frequency (ascending) then by extra AAs (ascending)
+    candidateCodons.sort((a, b) => {
+      if (Math.abs(a.stopFreq - b.stopFreq) > 0.1) return a.stopFreq - b.stopFreq;
+      return a.extraAAs - b.extraAAs;
+    });
+
+    // Return top candidates (max 5)
+    return candidateCodons.slice(0, 5).map(c => c.codon);
+  };
+
   // Main generator function
   const generateDegenerateCodons = () => {
     try {
@@ -545,26 +650,32 @@ export default function LibraryDesign() {
         return;
       }
 
-      // Get required bases
-      const requiredBases = getRequiredBases(aminoAcids);
+      let optimalCodons: string[];
 
-      // Optimize bases for each position
-      const optimizedFirst = optimizeBases(requiredBases.first, aminoAcids, 0);
-      const optimizedSecond = optimizeBases(requiredBases.second, aminoAcids, 1);
-      const optimizedThird = optimizeBases(
-        requiredBases.third,
-        aminoAcids,
-        2,
-        optimizedFirst[0],
-        optimizedSecond[0]
-      );
-
-      // Generate optimal degenerate codons
-      const optimalCodons = generateOptimalDegenerateCodons(
-        optimizedFirst,
-        optimizedSecond,
-        optimizedThird
-      );
+      if (optimizationStrategy === 'minimal') {
+        // Original minimal optimization
+        const requiredBases = getRequiredBases(aminoAcids);
+        const optimizedFirst = optimizeBases(requiredBases.first, aminoAcids, 0);
+        const optimizedSecond = optimizeBases(requiredBases.second, aminoAcids, 1);
+        const optimizedThird = optimizeBases(
+          requiredBases.third,
+          aminoAcids,
+          2,
+          optimizedFirst[0],
+          optimizedSecond[0]
+        );
+        optimalCodons = generateOptimalDegenerateCodons(
+          optimizedFirst,
+          optimizedSecond,
+          optimizedThird
+        );
+      } else if (optimizationStrategy === 'all') {
+        // Generate all possible combinations
+        optimalCodons = generateAllCombinations(aminoAcids);
+      } else {
+        // Balanced approach
+        optimalCodons = generateBalancedCodons(aminoAcids);
+      }
 
       // Analyze solution
       const analysis = analyzeSolution(optimalCodons, aminoAcids);
@@ -992,6 +1103,51 @@ export default function LibraryDesign() {
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
               Enter the amino acids you want to encode (e.g., ACDEFGHIKLMNPQRSTVWY). The tool will find the optimal degenerate codon(s).
             </p>
+
+            {/* Optimization Strategy Selector */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                Optimization Strategy:
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOptimizationStrategy('minimal')}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
+                    optimizationStrategy === 'minimal'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Minimal
+                </button>
+                <button
+                  onClick={() => setOptimizationStrategy('all')}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
+                    optimizationStrategy === 'all'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  All Combinations
+                </button>
+                <button
+                  onClick={() => setOptimizationStrategy('balanced')}
+                  className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
+                    optimizationStrategy === 'balanced'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  Balanced
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                {optimizationStrategy === 'minimal' && 'Most optimal/minimized combination'}
+                {optimizationStrategy === 'all' && 'All possible combinations (may include extra amino acids)'}
+                {optimizationStrategy === 'balanced' && 'Balanced with same-property alternatives, minimizing stop codons'}
+              </p>
+            </div>
+
             <div className="flex gap-2">
               <input
                 type="text"
@@ -1016,38 +1172,68 @@ export default function LibraryDesign() {
             {/* Quick examples */}
             <div className="mt-4">
               <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                Quick Examples:
+                Common Degenerate Codons:
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <button
                   onClick={() => setAminoAcidInput('ACDEFGHIKLMNPQRSTVWY')}
-                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
                 >
-                  All 20 AAs
+                  <span className="font-mono font-bold">NNK</span> - Hard randomization - All 20 a.a.
                 </button>
                 <button
-                  onClick={() => setAminoAcidInput('RK')}
-                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                  onClick={() => setAminoAcidInput('ACDFGHILNPRSTVYACDFGHILNPRSTVYACDFGHILNPRSTVY')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
                 >
-                  Positive Charged (RK)
+                  <span className="font-mono font-bold">NNC</span> - 15 a.a. - A,C,D,F,G,H,I,L,N,P,R,S,T,V,Y
                 </button>
                 <button
-                  onClick={() => setAminoAcidInput('DE')}
-                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                  onClick={() => setAminoAcidInput('DEFHIKLNQVY')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
                 >
-                  Negative Charged (DE)
+                  <span className="font-mono font-bold">NWW</span> - Charged, hydrophobic - D,E,F,H,I,K,L,N,Q,V,Y
                 </button>
                 <button
-                  onClick={() => setAminoAcidInput('AVILMFYW')}
-                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                  onClick={() => setAminoAcidInput('ADEGHNRST')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
                 >
-                  Hydrophobic
+                  <span className="font-mono font-bold">RVK</span> - Charge, hydrophilic - A,D,E,G,H,K,N,R,S,T
                 </button>
                 <button
-                  onClick={() => setAminoAcidInput('STNQ')}
-                  className="text-xs px-3 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+                  onClick={() => setAminoAcidInput('ACDGNSTY')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
                 >
-                  Polar Uncharged
+                  <span className="font-mono font-bold">DVT</span> - Hydrophilic - A,C,D,G,N,S,T,Y
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('CDGHNPRSTY')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
+                >
+                  <span className="font-mono font-bold">NVT</span> - Charge, hydrophilic - C,D,G,H,N,P,R,S,T,Y
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('ADGHNPRST')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
+                >
+                  <span className="font-mono font-bold">VVC</span> - Hydrophilic - A,D,G,H,N,P,R,S,T
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('AGST')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
+                >
+                  <span className="font-mono font-bold">RST</span> - Small side chains - A,G,S,T
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('FILV')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
+                >
+                  <span className="font-mono font-bold">NTT</span> - Hydrophobic - F,I,L,V
+                </button>
+                <button
+                  onClick={() => setAminoAcidInput('CFLWY')}
+                  className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
+                >
+                  <span className="font-mono font-bold">TDK</span> - Hydrophobic - C,F,L,W,Y
                 </button>
               </div>
             </div>
@@ -1173,18 +1359,45 @@ export default function LibraryDesign() {
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                     {Object.entries(generatorResult.analysis.aminoAcidCounts)
-                      .filter(([aa]) => aa !== '*')
                       .sort((a, b) => b[1] - a[1])
                       .map(([aa, count]) => {
                         const frequency = (count / generatorResult.analysis.totalCodons) * 100;
                         const isTarget = generatorResult.inputAminoAcids.includes(aa);
+                        const isStop = aa === '*';
+                        const isCysteine = aa === 'C';
+
+                        // Get property-based colors
+                        let bgColor = 'bg-slate-50 dark:bg-slate-800';
+                        let borderColor = 'border-slate-200 dark:border-slate-700';
+                        let highlightText = '';
+
+                        if (isStop) {
+                          bgColor = 'bg-red-100 dark:bg-red-900/30';
+                          borderColor = 'border-red-400 dark:border-red-700';
+                          highlightText = 'STOP';
+                        } else if (isCysteine) {
+                          bgColor = 'bg-orange-100 dark:bg-orange-900/30';
+                          borderColor = 'border-orange-400 dark:border-orange-700';
+                          highlightText = 'CYS';
+                        } else if (PROPERTY_GROUPS.charged_positive.includes(aa)) {
+                          bgColor = 'bg-blue-100 dark:bg-blue-900/30';
+                          borderColor = 'border-blue-300 dark:border-blue-700';
+                        } else if (PROPERTY_GROUPS.charged_negative.includes(aa)) {
+                          bgColor = 'bg-red-100 dark:bg-red-900/30';
+                          borderColor = 'border-red-300 dark:border-red-700';
+                        } else if (PROPERTY_GROUPS.polar.includes(aa)) {
+                          bgColor = 'bg-green-100 dark:bg-green-900/30';
+                          borderColor = 'border-green-300 dark:border-green-700';
+                        } else if (PROPERTY_GROUPS.nonpolar.includes(aa)) {
+                          bgColor = 'bg-amber-100 dark:bg-amber-900/30';
+                          borderColor = 'border-amber-300 dark:border-amber-700';
+                        }
+
                         return (
                           <div
                             key={aa}
-                            className={`p-3 rounded-lg border ${
-                              isTarget
-                                ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
-                                : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800'
+                            className={`p-3 rounded-lg border-2 ${bgColor} ${borderColor} ${
+                              (isStop || isCysteine) ? 'ring-2 ring-offset-2 ring-red-400 dark:ring-red-600' : ''
                             }`}
                           >
                             <div className="flex items-center justify-between mb-1">
@@ -1199,14 +1412,59 @@ export default function LibraryDesign() {
                             <div className="text-xs text-slate-600 dark:text-slate-400">
                               {count}/{generatorResult.analysis.totalCodons} codons
                             </div>
-                            {!isTarget && (
-                              <div className="mt-1 text-xs text-yellow-700 dark:text-yellow-400 font-semibold">
-                                Extra
-                              </div>
-                            )}
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {highlightText && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                                  isStop
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-orange-600 text-white'
+                                }`}>
+                                  {highlightText}
+                                </span>
+                              )}
+                              {!isTarget && !isStop && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-600 text-white font-semibold">
+                                  Extra
+                                </span>
+                              )}
+                              {isTarget && !isStop && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-600 text-white font-semibold">
+                                  Target
+                                </span>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
+                  </div>
+
+                  {/* Color Legend */}
+                  <div className="mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                      Property Colors:
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-300"></div>
+                        <span>Positive (+)</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-300"></div>
+                        <span>Negative (−)</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-300"></div>
+                        <span>Polar</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300"></div>
+                        <span>Nonpolar</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-400 ring-1 ring-red-400"></div>
+                        <span>Cysteine</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
