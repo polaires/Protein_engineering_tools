@@ -18,7 +18,7 @@ export default function CodonOptimizer() {
   // API state
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [organisms, setOrganisms] = useState<string[]>([]);
-  const [selectedOrganism, setSelectedOrganism] = useState('Escherichia coli general');
+  const [selectedOrganism, setSelectedOrganism] = useState('Escherichia coli str. K-12 substr. MG1655');
 
   // Optimization method
   const [method, setMethod] = useState<OptimizationMethod>('api');
@@ -33,6 +33,7 @@ export default function CodonOptimizer() {
   // Results
   const [result, setResult] = useState<CodonOptimizationResult | null>(null);
   const [apiResult, setApiResult] = useState<string | null>(null);
+  const [apiAvoidedSites, setApiAvoidedSites] = useState<string[] | null>(null);
   const [apiWarning, setApiWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,12 +59,20 @@ export default function CodonOptimizer() {
     try {
       const data = await CodonTransformerAPI.listOrganisms();
       setOrganisms(data.organisms);
-      // Set E. coli as default if available
-      const ecoliVariants = data.organisms.filter(org =>
-        org.toLowerCase().includes('escherichia coli')
+      // Set E. coli K-12 as default if available
+      const k12Strain = data.organisms.find(org =>
+        org === 'Escherichia coli str. K-12 substr. MG1655'
       );
-      if (ecoliVariants.length > 0) {
-        setSelectedOrganism(ecoliVariants[0]);
+      if (k12Strain) {
+        setSelectedOrganism(k12Strain);
+      } else {
+        // Fallback to any E. coli variant
+        const ecoliVariants = data.organisms.filter(org =>
+          org.toLowerCase().includes('escherichia coli')
+        );
+        if (ecoliVariants.length > 0) {
+          setSelectedOrganism(ecoliVariants[0]);
+        }
       }
     } catch (err) {
       console.error('Failed to load organisms:', err);
@@ -95,21 +104,22 @@ export default function CodonOptimizer() {
       if (response.success) {
         const optimizedDNA = response.dna_sequence || response.sequences?.[0] || '';
         setApiResult(optimizedDNA);
+        setApiAvoidedSites(response.restriction_sites_avoided || null);
         setApiWarning(response.warning || null);
 
-        // Check if restriction sites were successfully avoided
+        // Show success message with restriction site info
         if (avoidRestrictionSites.length > 0) {
-          const foundSites = checkRestrictionSites(optimizedDNA, avoidRestrictionSites);
-          if (foundSites.length > 0) {
-            setApiWarning(
-              (response.warning || '') +
-              ` Warning: The sequence still contains these restriction sites: ${foundSites.join(', ')}. ` +
-              'Consider using browser-based method for strict avoidance.'
-            );
+          const avoided = response.restriction_sites_avoided || [];
+          if (avoided.length === avoidRestrictionSites.length) {
+            showToast('success', `Sequence optimized. All ${avoided.length} restriction sites avoided!`);
+          } else if (avoided.length > 0) {
+            showToast('success', `Sequence optimized. ${avoided.length}/${avoidRestrictionSites.length} restriction sites avoided.`);
+          } else {
+            showToast('success', 'Sequence optimized using CodonTransformer');
           }
+        } else {
+          showToast('success', 'Sequence optimized using CodonTransformer');
         }
-
-        showToast('success', 'Sequence optimized using CodonTransformer');
       } else {
         setError(response.error || 'Optimization failed');
         showToast('error', 'Optimization failed');
@@ -205,6 +215,7 @@ export default function CodonOptimizer() {
     setInputSequence('');
     setResult(null);
     setApiResult(null);
+    setApiAvoidedSites(null);
     setApiWarning(null);
     setError(null);
   };
@@ -494,6 +505,25 @@ export default function CodonOptimizer() {
                 </div>
               </div>
             </div>
+
+            {/* Restriction Sites Avoided (API) */}
+            {apiAvoidedSites && apiAvoidedSites.length > 0 && (
+              <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <div className="font-semibold text-green-800 dark:text-green-200">
+                    Restriction Sites Successfully Avoided
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {apiAvoidedSites.map(site => (
+                    <span key={site} className="px-2 py-1 bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100 text-xs font-medium rounded">
+                      {site} ({RESTRICTION_SITES[site]})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Usage Information */}
