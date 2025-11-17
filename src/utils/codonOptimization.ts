@@ -159,6 +159,83 @@ export interface CodonOptimizationResult {
   identicalCodons: number;
   changedCodons: number;
   percentIdentity: number;
+  restrictionSitesAvoided?: string[];
+}
+
+// Common restriction sites for Golden Gate assembly
+export const RESTRICTION_SITES: Record<string, string> = {
+  'BsaI': 'GGTCTC',
+  'BbsI': 'GAAGAC',
+  'BsmBI': 'CGTCTC',
+  'SapI': 'GCTCTTC',
+  'BtgZI': 'GCGATG',
+  'Esp3I': 'CGTCTC', // Same as BsmBI
+};
+
+// Get reverse complement of a sequence
+function reverseComplement(seq: string): string {
+  const complement: Record<string, string> = {
+    'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'
+  };
+  return seq.split('').reverse().map(base => complement[base] || base).join('');
+}
+
+// Check if sequence contains any of the specified restriction sites
+export function checkRestrictionSites(sequence: string, sitesToAvoid: string[]): string[] {
+  const found: string[] = [];
+
+  for (const siteName of sitesToAvoid) {
+    const siteSeq = RESTRICTION_SITES[siteName];
+    if (!siteSeq) continue;
+
+    // Check both forward and reverse complement
+    const siteRC = reverseComplement(siteSeq);
+
+    if (sequence.includes(siteSeq) || sequence.includes(siteRC)) {
+      found.push(siteName);
+    }
+  }
+
+  return found;
+}
+
+// Find alternative codon that doesn't create restriction site
+function findAlternativeCodon(
+  aminoAcid: string,
+  previousCodons: string[],
+  nextCodons: string[],
+  sitesToAvoid: string[]
+): string {
+  const possibleCodons = AMINO_ACID_CODONS[aminoAcid];
+  if (!possibleCodons) return ECOLI_OPTIMAL_CODONS[aminoAcid];
+
+  // Sort codons by E. coli preference
+  const sortedCodons = [...possibleCodons].sort((a, b) => {
+    const weightA = ECOLI_CODON_WEIGHTS[a] || 0;
+    const weightB = ECOLI_CODON_WEIGHTS[b] || 0;
+    return weightB - weightA;
+  });
+
+  // Try each codon from most preferred to least
+  for (const codon of sortedCodons) {
+    // Build context: previous 2 codons + current + next 2 codons
+    const context = [
+      ...previousCodons.slice(-2),
+      codon,
+      ...nextCodons.slice(0, 2)
+    ].join('');
+
+    // Check if this context creates any restriction sites
+    const foundSites = checkRestrictionSites(context, sitesToAvoid);
+
+    if (foundSites.length === 0) {
+      return codon; // This codon doesn't create restriction sites
+    }
+  }
+
+  // If all codons create restriction sites, return the most preferred one
+  // (This is rare but possible)
+  return sortedCodons[0];
 }
 
 /**
@@ -239,7 +316,10 @@ function calculateCAI(sequence: string): number {
 /**
  * Optimize DNA sequence for E. coli expression
  */
-export function optimizeForEcoli(dnaSequence: string): CodonOptimizationResult {
+export function optimizeForEcoli(
+  dnaSequence: string,
+  avoidRestrictionSites: string[] = []
+): CodonOptimizationResult {
   // Clean sequence
   const cleaned = cleanDNASequence(dnaSequence);
 
@@ -258,14 +338,36 @@ export function optimizeForEcoli(dnaSequence: string): CodonOptimizationResult {
     throw new Error(`Premature stop codon found at position ${stopIndex + 1}`);
   }
 
-  // Optimize: replace each codon with E. coli optimal codon
+  // Remove stop codon from optimization (don't add it back)
+  const proteinWithoutStop = proteinSequence.replace(/\*+$/, '');
+
+  // Optimize with restriction site avoidance
   const optimizedCodons: string[] = [];
-  for (const aa of proteinSequence) {
-    const optimalCodon = ECOLI_OPTIMAL_CODONS[aa];
-    if (optimalCodon) {
-      optimizedCodons.push(optimalCodon);
-    } else {
-      throw new Error(`No optimal codon found for amino acid: ${aa}`);
+  const aaArray = proteinWithoutStop.split('');
+
+  if (avoidRestrictionSites.length === 0) {
+    // No restriction sites to avoid - use simple optimization
+    for (const aa of aaArray) {
+      const optimalCodon = ECOLI_OPTIMAL_CODONS[aa];
+      if (optimalCodon) {
+        optimizedCodons.push(optimalCodon);
+      } else {
+        throw new Error(`No optimal codon found for amino acid: ${aa}`);
+      }
+    }
+  } else {
+    // Avoid restriction sites - use contextual optimization
+    for (let i = 0; i < aaArray.length; i++) {
+      const aa = aaArray[i];
+
+      // Get context for restriction site checking
+      const previousCodons = optimizedCodons.slice();
+      const nextAAs = aaArray.slice(i + 1, i + 3);
+      const nextCodons = nextAAs.map(nextAA => ECOLI_OPTIMAL_CODONS[nextAA] || '');
+
+      // Find best codon that avoids restriction sites
+      const codon = findAlternativeCodon(aa, previousCodons, nextCodons, avoidRestrictionSites);
+      optimizedCodons.push(codon);
     }
   }
 
@@ -277,24 +379,28 @@ export function optimizeForEcoli(dnaSequence: string): CodonOptimizationResult {
   const originalCAI = calculateCAI(cleaned);
   const optimizedCAI = calculateCAI(optimizedSequence);
 
-  // Calculate identity
+  // Calculate identity (only compare the part without stop codon)
+  const originalWithoutStop = cleaned.substring(0, proteinWithoutStop.length * 3);
   let identicalCodons = 0;
-  for (let i = 0; i < cleaned.length; i += 3) {
-    const originalCodon = cleaned.substring(i, i + 3);
+  for (let i = 0; i < originalWithoutStop.length; i += 3) {
+    const originalCodon = originalWithoutStop.substring(i, i + 3);
     const optimizedCodon = optimizedSequence.substring(i, i + 3);
     if (originalCodon === optimizedCodon) {
       identicalCodons++;
     }
   }
 
-  const totalCodons = cleaned.length / 3;
+  const totalCodons = optimizedSequence.length / 3;
   const changedCodons = totalCodons - identicalCodons;
-  const percentIdentity = (identicalCodons / totalCodons) * 100;
+  const percentIdentity = totalCodons > 0 ? (identicalCodons / totalCodons) * 100 : 0;
+
+  // Check if restriction sites were successfully avoided
+  const remainingSites = checkRestrictionSites(optimizedSequence, avoidRestrictionSites);
 
   return {
     originalSequence: cleaned,
     optimizedSequence,
-    proteinSequence,
+    proteinSequence: proteinWithoutStop,
     originalGC,
     optimizedGC,
     originalCAI,
@@ -302,22 +408,48 @@ export function optimizeForEcoli(dnaSequence: string): CodonOptimizationResult {
     identicalCodons,
     changedCodons,
     percentIdentity,
+    restrictionSitesAvoided: avoidRestrictionSites.filter(site => !remainingSites.includes(site)),
   };
 }
 
 /**
  * Reverse translate protein sequence to DNA using E. coli optimal codons
  */
-export function reverseTranslate(proteinSequence: string): string {
+export function reverseTranslate(
+  proteinSequence: string,
+  avoidRestrictionSites: string[] = []
+): string {
   const cleaned = proteinSequence.toUpperCase().replace(/[^ACDEFGHIKLMNPQRSTVWY*]/g, '');
 
+  // Remove stop codons (don't add them)
+  const proteinWithoutStop = cleaned.replace(/\*+/g, '');
+
   const codons: string[] = [];
-  for (const aa of cleaned) {
-    const optimalCodon = ECOLI_OPTIMAL_CODONS[aa];
-    if (optimalCodon) {
-      codons.push(optimalCodon);
-    } else {
-      throw new Error(`Invalid amino acid: ${aa}`);
+  const aaArray = proteinWithoutStop.split('');
+
+  if (avoidRestrictionSites.length === 0) {
+    // No restriction sites to avoid
+    for (const aa of aaArray) {
+      const optimalCodon = ECOLI_OPTIMAL_CODONS[aa];
+      if (optimalCodon) {
+        codons.push(optimalCodon);
+      } else {
+        throw new Error(`Invalid amino acid: ${aa}`);
+      }
+    }
+  } else {
+    // Avoid restriction sites
+    for (let i = 0; i < aaArray.length; i++) {
+      const aa = aaArray[i];
+
+      // Get context for restriction site checking
+      const previousCodons = codons.slice();
+      const nextAAs = aaArray.slice(i + 1, i + 3);
+      const nextCodons = nextAAs.map(nextAA => ECOLI_OPTIMAL_CODONS[nextAA] || '');
+
+      // Find best codon that avoids restriction sites
+      const codon = findAlternativeCodon(aa, previousCodons, nextCodons, avoidRestrictionSites);
+      codons.push(codon);
     }
   }
 

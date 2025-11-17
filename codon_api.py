@@ -40,6 +40,7 @@ class OptimizationRequest(BaseModel):
     temperature: float = Field(0.2, ge=0.0, le=2.0, description="Sampling temperature (for non-deterministic)")
     top_p: float = Field(0.95, ge=0.0, le=1.0, description="Nucleus sampling threshold")
     num_sequences: int = Field(1, ge=1, le=10, description="Number of sequences to generate")
+    avoid_restriction_sites: List[str] = Field(default_factory=list, description="Restriction sites to avoid (e.g., ['BsaI', 'BbsI'])")
 
 class OptimizationResponse(BaseModel):
     success: bool
@@ -49,6 +50,8 @@ class OptimizationResponse(BaseModel):
     protein: Optional[str] = None
     formatted_output: Optional[str] = None
     error: Optional[str] = None
+    restriction_sites_avoided: Optional[List[str]] = None
+    warning: Optional[str] = None
 
 @app.on_event("startup")
 async def load_model():
@@ -97,6 +100,16 @@ async def optimize_codon(request: OptimizationRequest):
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     try:
+        # Warning for restriction site avoidance
+        warning_msg = None
+        if request.avoid_restriction_sites:
+            warning_msg = (
+                "Note: CodonTransformer API does not guarantee restriction site avoidance. "
+                "For strict restriction site avoidance, use the browser-based method. "
+                "The generated sequence may contain the specified restriction sites."
+            )
+            print(f"Warning: Restriction site avoidance requested but not fully supported: {request.avoid_restriction_sites}")
+
         # Predict DNA sequence(s)
         result = predict_dna_sequence(
             protein=request.protein,
@@ -146,7 +159,8 @@ async def optimize_codon(request: OptimizationRequest):
                 dna_sequence=dna_sequences[0] if dna_sequences else None,
                 organism=organism_name,
                 protein=request.protein,  # Use the input protein
-                formatted_output=formatted
+                formatted_output=formatted,
+                warning=warning_msg
             )
         else:
             # Single sequence returned
@@ -171,7 +185,8 @@ async def optimize_codon(request: OptimizationRequest):
                 dna_sequence=dna_seq,
                 organism=organism_name,
                 protein=request.protein,  # Use the input protein
-                formatted_output=formatted
+                formatted_output=formatted,
+                warning=warning_msg
             )
 
     except Exception as e:

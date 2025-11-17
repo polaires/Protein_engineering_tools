@@ -10,7 +10,7 @@ interface OptimizationRequest {
   temperature?: number;
   top_p?: number;
   num_sequences?: number;
-  match_protein?: boolean;
+  avoid_restriction_sites?: string[];
 }
 
 interface OptimizationResponse {
@@ -21,6 +21,8 @@ interface OptimizationResponse {
   protein?: string;
   formatted_output?: string;
   error?: string;
+  restriction_sites_avoided?: string[];
+  warning?: string;
 }
 
 interface HealthResponse {
