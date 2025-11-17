@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Dna, Plus, Trash2, Calculator, Download, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Dna, Plus, Trash2, Calculator, Download, HelpCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Genetic code table
 const GENETIC_CODE: Record<string, string> = {
@@ -28,31 +28,18 @@ const GENETIC_CODE: Record<string, string> = {
 
 // IUPAC degenerate base codes
 const IUPAC_CODES: Record<string, string[]> = {
-  'A': ['A'],
-  'C': ['C'],
-  'G': ['G'],
-  'T': ['T'],
-  'R': ['A', 'G'],        // puRine
-  'Y': ['C', 'T'],        // pYrimidine
-  'W': ['A', 'T'],        // Weak
-  'S': ['G', 'C'],        // Strong
-  'M': ['A', 'C'],        // aMino
-  'K': ['G', 'T'],        // Keto
-  'H': ['A', 'C', 'T'],   // not G
-  'B': ['C', 'G', 'T'],   // not A
-  'V': ['A', 'C', 'G'],   // not T
-  'D': ['A', 'G', 'T'],   // not C
-  'N': ['A', 'C', 'G', 'T'] // aNy
+  'A': ['A'], 'C': ['C'], 'G': ['G'], 'T': ['T'],
+  'R': ['A', 'G'], 'Y': ['C', 'T'], 'W': ['A', 'T'], 'S': ['G', 'C'],
+  'M': ['A', 'C'], 'K': ['G', 'T'], 'H': ['A', 'C', 'T'], 'B': ['C', 'G', 'T'],
+  'V': ['A', 'C', 'G'], 'D': ['A', 'G', 'T'], 'N': ['A', 'C', 'G', 'T']
 };
 
 // Amino acid names
 const AA_NAMES: Record<string, string> = {
-  'A': 'Alanine', 'R': 'Arginine', 'N': 'Asparagine', 'D': 'Aspartic acid',
-  'C': 'Cysteine', 'Q': 'Glutamine', 'E': 'Glutamic acid', 'G': 'Glycine',
-  'H': 'Histidine', 'I': 'Isoleucine', 'L': 'Leucine', 'K': 'Lysine',
-  'M': 'Methionine', 'F': 'Phenylalanine', 'P': 'Proline', 'S': 'Serine',
-  'T': 'Threonine', 'W': 'Tryptophan', 'Y': 'Tyrosine', 'V': 'Valine',
-  '*': 'STOP'
+  'A': 'Ala', 'R': 'Arg', 'N': 'Asn', 'D': 'Asp', 'C': 'Cys', 'Q': 'Gln',
+  'E': 'Glu', 'G': 'Gly', 'H': 'His', 'I': 'Ile', 'L': 'Leu', 'K': 'Lys',
+  'M': 'Met', 'F': 'Phe', 'P': 'Pro', 'S': 'Ser', 'T': 'Thr', 'W': 'Trp',
+  'Y': 'Tyr', 'V': 'Val', '*': 'STOP'
 };
 
 // Amino acid properties
@@ -80,6 +67,14 @@ const AA_PROPERTIES: Record<string, { charge: string; polarity: string; size: st
   '*': { charge: 'none', polarity: 'none', size: 'none' }
 };
 
+// Property grouping
+const PROPERTY_GROUPS = {
+  'charged_positive': ['R', 'K', 'H'],
+  'charged_negative': ['D', 'E'],
+  'polar': ['S', 'T', 'N', 'Q', 'Y', 'C'],
+  'nonpolar': ['A', 'V', 'L', 'I', 'M', 'F', 'W', 'P', 'G']
+};
+
 interface Position {
   id: string;
   name: string;
@@ -103,6 +98,14 @@ interface PositionResult {
   stopFrequency: number;
 }
 
+interface PropertyGroup {
+  name: string;
+  aas: AAResult[];
+  totalFrequency: number;
+  color: string;
+  icon: string;
+}
+
 export default function LibraryDesign() {
   const [positions, setPositions] = useState<Position[]>([
     { id: '1', name: 'Position 1', codon: 'NNK' },
@@ -112,6 +115,7 @@ export default function LibraryDesign() {
   const [results, setResults] = useState<PositionResult[]>([]);
   const [totalLibrarySize, setTotalLibrarySize] = useState<number>(0);
   const [showIUPAC, setShowIUPAC] = useState(false);
+  const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set());
 
   // Expand degenerate codon to all possible combinations
   const expandDegenerateCodon = (degenerateCodon: string): string[] => {
@@ -120,18 +124,13 @@ export default function LibraryDesign() {
     }
 
     const upper = degenerateCodon.toUpperCase();
-
-    // Validate IUPAC codes
     for (const base of upper) {
       if (!IUPAC_CODES[base]) {
         throw new Error(`Invalid IUPAC code: ${base}`);
       }
     }
 
-    // Expand each position
     const expandedPositions = upper.split('').map(base => IUPAC_CODES[base]);
-
-    // Generate all combinations using Cartesian product
     const cartesianProduct = (arrays: string[][]): string[][] => {
       return arrays.reduce((acc, curr) => {
         return acc.flatMap(a => curr.map(b => [...a, b]));
@@ -145,17 +144,14 @@ export default function LibraryDesign() {
   // Analyze a single position
   const analyzePosition = (position: Position): PositionResult => {
     try {
-      // Expand the degenerate codon
       const allCodons = expandDegenerateCodon(position.codon);
-
-      // Count amino acids
       const aaCounts: Record<string, number> = {};
+
       for (const codon of allCodons) {
         const aa = GENETIC_CODE[codon] || '?';
         aaCounts[aa] = (aaCounts[aa] || 0) + 1;
       }
 
-      // Calculate frequencies
       const totalCodons = allCodons.length;
       const aaResults: AAResult[] = Object.entries(aaCounts).map(([aa, count]) => ({
         aa,
@@ -165,7 +161,6 @@ export default function LibraryDesign() {
         properties: AA_PROPERTIES[aa] || { charge: 'unknown', polarity: 'unknown', size: 'unknown' }
       }));
 
-      // Sort by frequency
       aaResults.sort((a, b) => b.frequency - a.frequency);
 
       const hasStopCodon = aaCounts['*'] > 0;
@@ -184,6 +179,36 @@ export default function LibraryDesign() {
     }
   };
 
+  // Group amino acids by properties
+  const groupByProperties = (aaResults: AAResult[]): PropertyGroup[] => {
+    const groups: PropertyGroup[] = [
+      { name: 'Positive (+)', aas: [], totalFrequency: 0, color: 'bg-blue-500', icon: '+' },
+      { name: 'Negative (−)', aas: [], totalFrequency: 0, color: 'bg-red-500', icon: '−' },
+      { name: 'Polar', aas: [], totalFrequency: 0, color: 'bg-green-500', icon: '○' },
+      { name: 'Nonpolar', aas: [], totalFrequency: 0, color: 'bg-yellow-500', icon: '●' }
+    ];
+
+    aaResults.forEach(aa => {
+      if (aa.aa === '*') return;
+
+      if (PROPERTY_GROUPS.charged_positive.includes(aa.aa)) {
+        groups[0].aas.push(aa);
+        groups[0].totalFrequency += aa.frequency;
+      } else if (PROPERTY_GROUPS.charged_negative.includes(aa.aa)) {
+        groups[1].aas.push(aa);
+        groups[1].totalFrequency += aa.frequency;
+      } else if (PROPERTY_GROUPS.polar.includes(aa.aa)) {
+        groups[2].aas.push(aa);
+        groups[2].totalFrequency += aa.frequency;
+      } else if (PROPERTY_GROUPS.nonpolar.includes(aa.aa)) {
+        groups[3].aas.push(aa);
+        groups[3].totalFrequency += aa.frequency;
+      }
+    });
+
+    return groups.filter(g => g.aas.length > 0);
+  };
+
   // Calculate entire library
   const calculateLibrary = () => {
     try {
@@ -198,12 +223,24 @@ export default function LibraryDesign() {
 
       setResults(newResults);
       setTotalLibrarySize(libSize);
+      setExpandedPositions(new Set()); // Collapse all on new calculation
     } catch (error) {
       alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  // Add position
+  // Toggle position expansion
+  const togglePosition = (positionId: string) => {
+    const newExpanded = new Set(expandedPositions);
+    if (newExpanded.has(positionId)) {
+      newExpanded.delete(positionId);
+    } else {
+      newExpanded.add(positionId);
+    }
+    setExpandedPositions(newExpanded);
+  };
+
+  // Add/remove/update positions (keeping original functions)
   const addPosition = () => {
     const newId = String(Math.max(...positions.map(p => parseInt(p.id)), 0) + 1);
     setPositions([...positions, {
@@ -213,14 +250,12 @@ export default function LibraryDesign() {
     }]);
   };
 
-  // Remove position
   const removePosition = (id: string) => {
     if (positions.length > 1) {
       setPositions(positions.filter(p => p.id !== id));
     }
   };
 
-  // Update position
   const updatePosition = (id: string, field: 'name' | 'codon', value: string) => {
     setPositions(positions.map(p =>
       p.id === id ? { ...p, [field]: value } : p
@@ -402,115 +437,197 @@ export default function LibraryDesign() {
         </div>
       </div>
 
-      {/* Results */}
+      {/* Results - Compact View */}
       {results.length > 0 && (
         <div className="space-y-4">
-          {results.map((result) => (
-            <div key={result.position.id} className="card">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                    {result.position.name}
-                  </h3>
-                  <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1 mt-1">
-                    <div>
-                      Degenerate Codon: <span className="font-mono font-semibold">{result.position.codon}</span>
+          {results.map((result) => {
+            const groups = groupByProperties(result.aaResults);
+            const isExpanded = expandedPositions.has(result.position.id);
+            const topAAs = result.aaResults.filter(aa => aa.aa !== '*').slice(0, 5);
+
+            return (
+              <div key={result.position.id} className="card">
+                {/* Compact Summary */}
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                          {result.position.name}
+                        </h3>
+                        <span className="font-mono text-sm font-bold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded">
+                          {result.position.codon}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-4 mt-2 text-sm text-slate-600 dark:text-slate-400">
+                        <span>{result.totalCodons} codons</span>
+                        <span>•</span>
+                        <span>{result.uniqueAAs} amino acids</span>
+                        {result.hasStopCodon && (
+                          <>
+                            <span>•</span>
+                            <span className="text-red-600 dark:text-red-400 font-semibold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Stop {result.stopFrequency.toFixed(1)}%
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      Possible Codons: <span className="font-semibold">{result.totalCodons}</span> |
-                      Unique Amino Acids: <span className="font-semibold">{result.uniqueAAs}</span>
+                    <button
+                      onClick={() => togglePosition(result.position.id)}
+                      className="btn-secondary"
+                    >
+                      {isExpanded ? (
+                        <>
+                          <ChevronUp className="w-4 h-4 mr-1" />
+                          Hide Details
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="w-4 h-4 mr-1" />
+                          Show Details
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Top 5 AAs - Always Visible */}
+                  <div>
+                    <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                      Most Frequent
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {topAAs.map((aa) => (
+                        <div
+                          key={aa.aa}
+                          className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg"
+                        >
+                          <span className="font-mono font-bold text-lg">{aa.aa}</span>
+                          <div className="text-xs">
+                            <div className="font-semibold">{aa.frequency.toFixed(1)}%</div>
+                            <div className="text-slate-500 dark:text-slate-400">
+                              {aa.count}/{result.totalCodons}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
+
+                  {/* Property Groups - Always Visible */}
+                  <div>
+                    <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                      Property Distribution
+                    </div>
+                    <div className="space-y-2">
+                      {groups.map((group) => (
+                        <div key={group.name}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              {group.name}
+                            </span>
+                            <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                              {group.totalFrequency.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`${group.color} h-full transition-all duration-300`}
+                                style={{ width: `${group.totalFrequency}%` }}
+                              />
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 min-w-[60px]">
+                              {group.aas.map(aa => aa.aa).join(', ')}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Detailed Table - Expandable */}
+                  {isExpanded && (
+                    <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3">
+                        Complete Amino Acid Distribution
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {result.aaResults.map((aa) => (
+                          <div
+                            key={aa.aa}
+                            className={`p-3 rounded-lg border ${
+                              aa.aa === '*'
+                                ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
+                                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-mono font-bold text-lg">{aa.aa}</span>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {aa.name}
+                              </span>
+                            </div>
+                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {aa.frequency.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-slate-600 dark:text-slate-400">
+                              {aa.count}/{result.totalCodons} codons
+                            </div>
+                            {aa.aa !== '*' && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded ${
+                                    aa.properties.charge === 'positive'
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                      : aa.properties.charge === 'negative'
+                                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                  }`}
+                                >
+                                  {aa.properties.charge === 'positive'
+                                    ? '+'
+                                    : aa.properties.charge === 'negative'
+                                    ? '−'
+                                    : '○'}
+                                </span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                  {aa.properties.size}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {result.hasStopCodon && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span className="text-sm font-semibold">
-                      Stop: {result.stopFrequency.toFixed(1)}%
-                    </span>
-                  </div>
-                )}
               </div>
+            );
+          })}
 
-              {/* AA Distribution Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-slate-200 dark:border-slate-700">
-                      <th className="text-left py-2 px-3">AA</th>
-                      <th className="text-left py-2 px-3">Name</th>
-                      <th className="text-right py-2 px-3">Frequency</th>
-                      <th className="text-right py-2 px-3">Count</th>
-                      <th className="text-left py-2 px-3">Charge</th>
-                      <th className="text-left py-2 px-3">Polarity</th>
-                      <th className="text-left py-2 px-3">Size</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.aaResults.map((aa, aaIdx) => (
-                      <tr
-                        key={aaIdx}
-                        className={`border-b border-slate-100 dark:border-slate-800 ${aa.aa === '*' ? 'bg-red-50 dark:bg-red-900/10' : ''}`}
-                      >
-                        <td className="py-2 px-3 font-mono font-bold">
-                          {aa.aa}
-                        </td>
-                        <td className="py-2 px-3">{aa.name}</td>
-                        <td className="py-2 px-3 text-right font-semibold">
-                          {aa.frequency.toFixed(1)}%
-                        </td>
-                        <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-400">
-                          {aa.count}/{result.totalCodons}
-                        </td>
-                        <td className="py-2 px-3">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            aa.properties.charge === 'positive' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
-                            aa.properties.charge === 'negative' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                            'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                          }`}>
-                            {aa.properties.charge}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            aa.properties.polarity === 'polar' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
-                            'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
-                          }`}>
-                            {aa.properties.polarity}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400">
-                          {aa.properties.size}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-
-          {/* Summary Statistics */}
+          {/* Overall Summary */}
           <div className="card bg-slate-50 dark:bg-slate-800/50">
             <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
               Library Summary
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-slate-600 dark:text-slate-400">Total Positions</div>
-                <div className="text-2xl font-bold text-slate-800 dark:text-slate-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                <div className="text-sm text-slate-600 dark:text-slate-400">Total Positions</div>
+                <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
                   {results.length}
                 </div>
               </div>
-              <div>
-                <div className="text-slate-600 dark:text-slate-400">Library Size</div>
-                <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
+              <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                <div className="text-sm text-slate-600 dark:text-slate-400">Library Size</div>
+                <div className="text-3xl font-bold text-primary-600 dark:text-primary-400">
                   {formatLibrarySize(totalLibrarySize)}
                 </div>
               </div>
-              <div>
-                <div className="text-slate-600 dark:text-slate-400">Positions with Stop Codons</div>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+              <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                <div className="text-sm text-slate-600 dark:text-slate-400">Stop Codons</div>
+                <div className="text-3xl font-bold text-red-600 dark:text-red-400">
                   {results.filter(r => r.hasStopCodon).length}
                 </div>
               </div>
