@@ -3,15 +3,16 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
+import Element from '@/components/Element';
 import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 
-type Tab = 'solution' | 'protein' | 'dna' | 'about';
+type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
@@ -113,6 +114,13 @@ function AppContent() {
               DNA
             </button>
             <button
+              onClick={() => setActiveTab('element')}
+              className={`calc-mode-tab ${activeTab === 'element' ? 'active' : ''}`}
+            >
+              <Atom className="w-4 h-4 inline mr-2" />
+              Element
+            </button>
+            <button
               onClick={() => setActiveTab('about')}
               className={`calc-mode-tab ${activeTab === 'about' ? 'active' : ''}`}
             >
@@ -140,6 +148,12 @@ function AppContent() {
         {activeTab === 'dna' && (
           <div className="animate-in">
             <DNA />
+          </div>
+        )}
+
+        {activeTab === 'element' && (
+          <div className="animate-in">
+            <Element />
           </div>
         )}
 
@@ -228,12 +242,28 @@ function AppContent() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
+                        Element - Interactive Periodic Table
+                      </h4>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                        <li><strong>PubChem Periodic Table:</strong></li>
+                        <li className="ml-4">Interactive periodic table from PubChem (NCBI)</li>
+                        <li className="ml-4">Click elements for detailed information</li>
+                        <li className="ml-4">Atomic number, mass, and electron configuration</li>
+                        <li className="ml-4">Element properties and characteristics</li>
+                        <li className="ml-4">Access to compound databases</li>
+                        <li className="ml-4">Color-coded by element categories</li>
+                        <li className="ml-4">Direct link to PubChem resources</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">
                         General
                       </h4>
                       <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                         <li>Offline functionality with IndexedDB storage</li>
                         <li>Export/import data for backup</li>
                         <li>Dark mode support</li>
+                        <li>Cloud storage with optional authentication</li>
                       </ul>
                     </div>
                   </div>
