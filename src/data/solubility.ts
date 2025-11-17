@@ -428,43 +428,65 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
     const data = await response.json();
     const sections = data.Record?.Section || [];
 
-    // Look for solubility information in various sections
-    for (const section of sections) {
-      if (section.TOCHeading === 'Chemical and Physical Properties') {
-        const subsections = section.Section || [];
+    // Helper function to recursively search for solubility data
+    const findSolubility = (sections: any[]): { text: string } | null => {
+      for (const section of sections) {
+        // Check if this section has solubility information
+        if (section.TOCHeading && /solubility/i.test(section.TOCHeading)) {
+          // Try to extract information from this section
+          const info = section.Information?.[0];
+          if (info?.Value?.StringWithMarkup?.[0]?.String) {
+            return { text: info.Value.StringWithMarkup[0].String };
+          }
 
-        for (const subsection of subsections) {
-          if (subsection.TOCHeading === 'Experimental Properties') {
-            const properties = subsection.Section || [];
-
-            for (const prop of properties) {
-              if (prop.TOCHeading === 'Solubility' || prop.TOCHeading === 'Water Solubility') {
-                const info = prop.Information?.[0];
-                if (info?.Value?.StringWithMarkup?.[0]?.String) {
-                  const solubilityText = info.Value.StringWithMarkup[0].String;
-
-                  // Try to parse solubility value
-                  const parsed = parseSolubilityString(solubilityText);
-                  if (parsed) {
-                    return {
-                      waterSolubility: parsed.value,
-                      unit: parsed.unit,
-                      notes: solubilityText
-                    };
-                  }
-
-                  // If we can't parse, return the text as notes
-                  return {
-                    waterSolubility: null,
-                    unit: null,
-                    notes: solubilityText
-                  };
+          // Also check multiple Information entries
+          if (section.Information && Array.isArray(section.Information)) {
+            for (const info of section.Information) {
+              if (info?.Value?.StringWithMarkup?.[0]?.String) {
+                const text = info.Value.StringWithMarkup[0].String;
+                // Prefer entries that mention water
+                if (/water/i.test(text) || /h2o/i.test(text) || /aqueous/i.test(text)) {
+                  return { text };
                 }
               }
             }
+            // If no water-specific entry found, return first one
+            if (section.Information[0]?.Value?.StringWithMarkup?.[0]?.String) {
+              return { text: section.Information[0].Value.StringWithMarkup[0].String };
+            }
           }
         }
+
+        // Recursively search in subsections
+        if (section.Section && Array.isArray(section.Section)) {
+          const result = findSolubility(section.Section);
+          if (result) return result;
+        }
       }
+      return null;
+    };
+
+    const result = findSolubility(sections);
+
+    if (result) {
+      const solubilityText = result.text;
+
+      // Try to parse solubility value
+      const parsed = parseSolubilityString(solubilityText);
+      if (parsed) {
+        return {
+          waterSolubility: parsed.value,
+          unit: parsed.unit,
+          notes: solubilityText
+        };
+      }
+
+      // If we can't parse, return the text as notes
+      return {
+        waterSolubility: null,
+        unit: null,
+        notes: solubilityText
+      };
     }
 
     return null;
@@ -476,18 +498,19 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
 
 /**
  * Parse solubility string from PubChem
- * Examples: "100 mg/mL", "5.5 g/L at 25 °C", "freely soluble"
+ * Examples: "100 mg/mL", "5.5 g/L at 25 °C", "freely soluble", "1 g/100 mL", "10000 mg/L"
  */
 function parseSolubilityString(text: string): { value: number; unit: string } | null {
   // Remove extra whitespace
   const cleaned = text.trim();
 
-  // Try to match common patterns
-  // Pattern 1: "100 mg/mL", "5.5 g/L", etc.
-  const numericMatch = cleaned.match(/(\d+\.?\d*)\s*(mg\/mL|g\/L|mg\/L|μg\/mL|g\/100\s*mL)/i);
+  // Try to match common patterns with more flexibility
+  // Pattern 1: Numbers with units - handle various formats
+  // Match patterns like: "100 mg/mL", "5.5 g/L", "1 g/100 mL", "10,000 mg/L", "1.5E+5 mg/L"
+  const numericMatch = cleaned.match(/(\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?)\s*(mg\/mL|g\/L|mg\/L|μg\/mL|ug\/mL|g\/100\s*mL|g\/100mL|mg\/100\s*mL|mg\/100mL|g\/dL|g per 100 mL|g per L)/i);
   if (numericMatch) {
-    const value = parseFloat(numericMatch[1]);
-    let unit = numericMatch[2].toLowerCase().replace(/\s/g, '');
+    let value = parseFloat(numericMatch[1].replace(',', '')); // Handle comma as thousands separator
+    let unit = numericMatch[2].toLowerCase().replace(/\s+/g, '').replace('per', '/');
 
     // Convert to g/L for consistency
     let valueInGPerL = value;
@@ -495,21 +518,37 @@ function parseSolubilityString(text: string): { value: number; unit: string } | 
       valueInGPerL = value; // mg/mL = g/L
     } else if (unit === 'mg/l') {
       valueInGPerL = value / 1000;
-    } else if (unit === 'μg/ml') {
+    } else if (unit === 'μg/ml' || unit === 'ug/ml') {
       valueInGPerL = value / 1000;
-    } else if (unit === 'g/100ml') {
+    } else if (unit === 'g/100ml' || unit === 'g/dl') {
       valueInGPerL = value * 10;
+    } else if (unit === 'mg/100ml') {
+      valueInGPerL = value / 100;
     }
 
     return { value: valueInGPerL, unit: 'g/L' };
   }
 
-  // Pattern 2: Qualitative descriptions
-  if (/very\s+soluble|freely\s+soluble/i.test(cleaned)) {
+  // Pattern 2: Handle percentage notation (e.g., "10% w/v" means 10 g/100mL = 100 g/L)
+  const percentMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*%\s*(?:w\/v)?/i);
+  if (percentMatch) {
+    const percent = parseFloat(percentMatch[1]);
+    return { value: percent * 10, unit: 'g/L' }; // % w/v = g/100mL, so multiply by 10 for g/L
+  }
+
+  // Pattern 3: Parts per notation (e.g., "1 part in 10 parts water")
+  const partsMatch = cleaned.match(/1\s+(?:part|g)?\s+in\s+(\d+(?:\.\d+)?)\s+(?:parts?\s+)?(?:water|H2O)?/i);
+  if (partsMatch) {
+    const parts = parseFloat(partsMatch[1]);
+    return { value: 1000 / parts, unit: 'g/L' }; // 1 in X parts means 1g in X mL = 1000/X g/L
+  }
+
+  // Pattern 4: Qualitative descriptions
+  if (/very\s+soluble|freely\s+soluble|miscible/i.test(cleaned)) {
     return { value: 500, unit: 'g/L' }; // Assume high solubility
   }
 
-  if (/soluble/i.test(cleaned) && !/slightly|poorly|sparingly/i.test(cleaned)) {
+  if (/soluble/i.test(cleaned) && !/slightly|poorly|sparingly|in[-\s]?soluble/i.test(cleaned)) {
     return { value: 100, unit: 'g/L' }; // Assume moderate solubility
   }
 
@@ -517,7 +556,7 @@ function parseSolubilityString(text: string): { value: number; unit: string } | 
     return { value: 10, unit: 'g/L' }; // Assume low solubility
   }
 
-  if (/poorly\s+soluble|insoluble|negligible/i.test(cleaned)) {
+  if (/poorly\s+soluble|practically\s+insoluble|insoluble|negligible/i.test(cleaned)) {
     return { value: 1, unit: 'g/L' }; // Assume very low solubility
   }
 
