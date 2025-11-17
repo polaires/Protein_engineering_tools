@@ -62,7 +62,7 @@ export default function RecipeLabel({ recipe, onClose, batchNumber }: RecipeLabe
           {/* Label Content */}
           <div
             ref={labelRef}
-            className="p-8 bg-white text-black"
+            className="p-8 bg-white text-black recipe-label-content"
             style={{
               fontFamily: '"Courier New", Courier, monospace',
               fontSize: '14px',
@@ -211,19 +211,17 @@ export default function RecipeLabel({ recipe, onClose, batchNumber }: RecipeLabe
           .print\\:hidden {
             display: none !important;
           }
-          ${labelRef.current ? `
-            #root > div > div > div:last-child,
-            #root > div > div > div:last-child * {
-              visibility: visible;
-            }
-            #root > div > div > div:last-child {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              padding: 20mm;
-            }
-          ` : ''}
+          .recipe-label-content,
+          .recipe-label-content * {
+            visibility: visible;
+          }
+          .recipe-label-content {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 20mm;
+          }
         }
         @page {
           size: auto;
