@@ -10,8 +10,12 @@ import {
   UserPreferences,
   ToastMessage,
   LoadingState,
+  User,
+  RegisterRequest,
+  LoginRequest,
 } from '@/types';
 import * as db from '@/services/database';
+import * as auth from '@/services/auth';
 import { CURATED_CHEMICALS } from '@/data/chemicals';
 import { CURATED_RECIPES } from '@/data/recipes';
 
@@ -20,6 +24,13 @@ import { CURATED_RECIPES } from '@/data/recipes';
 // ============================================================================
 
 interface AppContextType {
+  // Authentication
+  currentUser: User | null;
+  isAuthenticated: boolean;
+  register: (request: RegisterRequest) => Promise<{ success: boolean; message: string }>;
+  login: (request: LoginRequest) => Promise<{ success: boolean; message: string }>;
+  logout: () => Promise<void>;
+
   // Chemicals
   chemicals: Chemical[];
   loadingChemicals: LoadingState;
@@ -68,6 +79,7 @@ interface AppProviderProps {
 }
 
 export function AppProvider({ children }: AppProviderProps) {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [chemicals, setChemicals] = useState<Chemical[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
@@ -80,6 +92,8 @@ export function AppProvider({ children }: AppProviderProps) {
     isLoading: true,
     message: 'Loading recipes...',
   });
+
+  const isAuthenticated = currentUser !== null;
 
   // ========================================================================
   // Initialization
@@ -132,10 +146,79 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, []);
 
-  // Initialize on mount
+  // Initialize on mount and check for current user
   useEffect(() => {
-    initializeDatabase();
+    const init = async () => {
+      // Check if user is already logged in
+      const user = await auth.getCurrentUser();
+      setCurrentUser(user);
+
+      // Initialize database
+      await initializeDatabase();
+    };
+    init();
   }, [initializeDatabase]);
+
+  // ========================================================================
+  // Authentication Operations
+  // ========================================================================
+
+  const register = useCallback(
+    async (request: RegisterRequest): Promise<{ success: boolean; message: string }> => {
+      try {
+        const response = await auth.registerUser(request);
+        if (response.success && response.user) {
+          setCurrentUser(response.user);
+          showToast('success', response.message);
+          // Reload data for new user
+          await initializeDatabase();
+        } else {
+          showToast('error', response.message);
+        }
+        return { success: response.success, message: response.message };
+      } catch (error) {
+        const message = 'Registration failed';
+        showToast('error', message);
+        return { success: false, message };
+      }
+    },
+    [initializeDatabase]
+  );
+
+  const login = useCallback(
+    async (request: LoginRequest): Promise<{ success: boolean; message: string }> => {
+      try {
+        const response = await auth.loginUser(request);
+        if (response.success && response.user) {
+          setCurrentUser(response.user);
+          showToast('success', response.message);
+          // Reload data for logged-in user
+          await initializeDatabase();
+        } else {
+          showToast('error', response.message);
+        }
+        return { success: response.success, message: response.message };
+      } catch (error) {
+        const message = 'Login failed';
+        showToast('error', message);
+        return { success: false, message };
+      }
+    },
+    [initializeDatabase]
+  );
+
+  const logout = useCallback(async (): Promise<void> => {
+    try {
+      await auth.logoutUser();
+      setCurrentUser(null);
+      // Clear local data
+      setRecipes([]);
+      setPreferences(null);
+      showToast('info', 'Logged out successfully');
+    } catch (error) {
+      showToast('error', 'Logout failed');
+    }
+  }, []);
 
   // ========================================================================
   // Chemical Operations
@@ -367,6 +450,13 @@ export function AppProvider({ children }: AppProviderProps) {
   // ========================================================================
 
   const value: AppContextType = {
+    // Authentication
+    currentUser,
+    isAuthenticated,
+    register,
+    login,
+    logout,
+
     // Chemicals
     chemicals,
     loadingChemicals,

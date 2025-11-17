@@ -3,18 +3,29 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, User as UserIcon } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
+import Auth from '@/components/Auth';
 import { ToastContainer } from '@/components/Toast';
 
 type Tab = 'solution' | 'protein' | 'dna' | 'about';
 
 function AppContent() {
-  const { toasts, removeToast, loadingChemicals, loadingRecipes } = useApp();
+  const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('solution');
+
+  // Show auth screen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Auth />
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </>
+    );
+  }
 
   // Loading state
   if (loadingChemicals.isLoading || loadingRecipes.isLoading) {
@@ -48,15 +59,33 @@ function AppContent() {
               </div>
             </div>
 
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-icon"
-              title="View on GitHub"
-            >
-              <Github className="w-5 h-5" />
-            </a>
+            <div className="flex items-center gap-2">
+              {/* User info */}
+              <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                <UserIcon className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {currentUser?.username}
+                </span>
+              </div>
+
+              <button
+                onClick={logout}
+                className="btn-icon"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+
+              <a
+                href="https://github.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-icon"
+                title="View on GitHub"
+              >
+                <Github className="w-5 h-5" />
+              </a>
+            </div>
           </div>
 
           {/* Navigation Tabs */}
