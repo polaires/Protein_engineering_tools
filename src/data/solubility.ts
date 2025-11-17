@@ -465,7 +465,10 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
 
     findSolubility(sections);
 
+    console.log(`[PubChem CID ${cid}] Found ${solubilityTexts.length} solubility entries:`, solubilityTexts);
+
     if (solubilityTexts.length === 0) {
+      console.log(`[PubChem CID ${cid}] No solubility data found`);
       return null;
     }
 
@@ -474,9 +477,11 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
 
     for (const text of solubilityTexts) {
       const parsed = parseSolubilityString(text);
+      console.log(`[PubChem CID ${cid}] Parsing "${text}":`, parsed);
 
       // Prefer entries that mention water and can be parsed
       if (parsed && (/water/i.test(text) || /h2o/i.test(text) || /aqueous/i.test(text))) {
+        console.log(`[PubChem CID ${cid}] Selected water-specific entry:`, text, parsed);
         return {
           waterSolubility: parsed.value,
           unit: parsed.unit,
@@ -492,6 +497,7 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
 
     // If we found a parseable entry (even without water mention), use it
     if (bestMatch) {
+      console.log(`[PubChem CID ${cid}] Using fallback entry:`, bestMatch.text, bestMatch.parsed);
       return {
         waterSolubility: bestMatch.parsed!.value,
         unit: bestMatch.parsed!.unit,
@@ -501,6 +507,7 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
 
     // If we have text but couldn't parse, return as notes
     if (solubilityTexts.length > 0) {
+      console.log(`[PubChem CID ${cid}] Could not parse any entries, returning first as notes:`, solubilityTexts[0]);
       return {
         waterSolubility: null,
         unit: null,
@@ -508,6 +515,7 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
       };
     }
 
+    console.log(`[PubChem CID ${cid}] No solubility data available`);
     return null;
   } catch (error) {
     console.error('Error fetching PubChem solubility:', error);
