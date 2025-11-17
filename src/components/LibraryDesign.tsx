@@ -169,6 +169,7 @@ export default function LibraryDesign() {
   const [aminoAcidInput, setAminoAcidInput] = useState<string>('');
   const [generatorResult, setGeneratorResult] = useState<GeneratorResult | null>(null);
   const [optimizationStrategy, setOptimizationStrategy] = useState<OptimizationStrategy>('minimal');
+  const [selectedCodonIndex, setSelectedCodonIndex] = useState<number>(0);
 
   // Expand degenerate codon to all possible combinations
   const expandDegenerateCodon = (degenerateCodon: string): string[] => {
@@ -685,9 +686,19 @@ export default function LibraryDesign() {
         optimalCodons,
         analysis
       });
+      setSelectedCodonIndex(0); // Reset to first codon
     } catch (error) {
       alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  };
+
+  // Get analysis for the selected codon only
+  const getSelectedCodonAnalysis = (): GeneratorResult['analysis'] | null => {
+    if (!generatorResult || selectedCodonIndex >= generatorResult.optimalCodons.length) {
+      return null;
+    }
+    const selectedCodon = generatorResult.optimalCodons[selectedCodonIndex];
+    return analyzeSolution([selectedCodon], generatorResult.inputAminoAcids);
   };
 
   return (
@@ -1299,21 +1310,29 @@ export default function LibraryDesign() {
 
                   <div>
                     <div className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-2">
-                      Generated Codon{generatorResult.optimalCodons.length > 1 ? 's' : ''}:
+                      Generated Codon{generatorResult.optimalCodons.length > 1 ? 's' : ''}
+                      {generatorResult.optimalCodons.length > 1 && (
+                        <span className="text-xs font-normal ml-2">(Click to select for analysis)</span>
+                      )}:
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {generatorResult.optimalCodons.map((codon, idx) => (
-                        <div
+                        <button
                           key={idx}
-                          className="px-4 py-3 bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-200 dark:border-primary-800 rounded-lg"
+                          onClick={() => setSelectedCodonIndex(idx)}
+                          className={`px-4 py-3 rounded-lg border-2 transition-all ${
+                            selectedCodonIndex === idx
+                              ? 'bg-primary-100 dark:bg-primary-900/40 border-primary-500 dark:border-primary-400 ring-2 ring-primary-400 dark:ring-primary-500'
+                              : 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/30'
+                          }`}
                         >
                           <div className="font-mono text-2xl font-bold text-primary-700 dark:text-primary-300">
                             {codon}
                           </div>
                           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            Codon #{idx + 1}
+                            {selectedCodonIndex === idx ? '✓ Selected' : `Codon #${idx + 1}`}
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -1322,173 +1341,191 @@ export default function LibraryDesign() {
 
               {/* Analysis */}
               <div className="card">
-                <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
-                  Library Analysis
-                </h3>
-
-                {/* Summary Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
-                    <div className="text-sm text-slate-600 dark:text-slate-400">Total Codons</div>
-                    <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
-                      {generatorResult.analysis.totalCodons}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                    Library Analysis
+                  </h3>
+                  {generatorResult.optimalCodons.length > 1 && (
+                    <div className="text-sm text-slate-600 dark:text-slate-400">
+                      Analyzing: <span className="font-mono font-bold text-primary-600 dark:text-primary-400">
+                        {generatorResult.optimalCodons[selectedCodonIndex]}
+                      </span>
                     </div>
-                  </div>
-                  <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
-                    <div className="text-sm text-slate-600 dark:text-slate-400">Unique Amino Acids</div>
-                    <div className="text-3xl font-bold text-primary-600 dark:text-primary-400">
-                      {Object.keys(generatorResult.analysis.aminoAcidCounts).filter(aa => aa !== '*').length}
-                    </div>
-                  </div>
-                  <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
-                    <div className="text-sm text-slate-600 dark:text-slate-400">Extra Amino Acids</div>
-                    <div className={`text-3xl font-bold ${
-                      generatorResult.analysis.extraAminoAcids.length === 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-yellow-600 dark:text-yellow-400'
-                    }`}>
-                      {generatorResult.analysis.extraAminoAcids.length}
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Amino Acid Distribution */}
-                <div>
-                  <h4 className="font-semibold mb-3 text-slate-800 dark:text-slate-200">
-                    Amino Acid Distribution
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                    {Object.entries(generatorResult.analysis.aminoAcidCounts)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([aa, count]) => {
-                        const frequency = (count / generatorResult.analysis.totalCodons) * 100;
-                        const isTarget = generatorResult.inputAminoAcids.includes(aa);
-                        const isStop = aa === '*';
-                        const isCysteine = aa === 'C';
+                {(() => {
+                  const selectedAnalysis = getSelectedCodonAnalysis();
+                  if (!selectedAnalysis) return null;
 
-                        // Get property-based colors
-                        let bgColor = 'bg-slate-50 dark:bg-slate-800';
-                        let borderColor = 'border-slate-200 dark:border-slate-700';
-                        let highlightText = '';
+                  return (
+                    <>
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                          <div className="text-sm text-slate-600 dark:text-slate-400">Total Codons</div>
+                          <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
+                            {selectedAnalysis.totalCodons}
+                          </div>
+                        </div>
+                        <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                          <div className="text-sm text-slate-600 dark:text-slate-400">Unique Amino Acids</div>
+                          <div className="text-3xl font-bold text-primary-600 dark:text-primary-400">
+                            {Object.keys(selectedAnalysis.aminoAcidCounts).filter(aa => aa !== '*').length}
+                          </div>
+                        </div>
+                        <div className="text-center p-4 bg-white dark:bg-slate-700 rounded-lg">
+                          <div className="text-sm text-slate-600 dark:text-slate-400">Extra Amino Acids</div>
+                          <div className={`text-3xl font-bold ${
+                            selectedAnalysis.extraAminoAcids.length === 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-yellow-600 dark:text-yellow-400'
+                          }`}>
+                            {selectedAnalysis.extraAminoAcids.length}
+                          </div>
+                        </div>
+                      </div>
 
-                        if (isStop) {
-                          bgColor = 'bg-red-100 dark:bg-red-900/30';
-                          borderColor = 'border-red-400 dark:border-red-700';
-                          highlightText = 'STOP';
-                        } else if (isCysteine) {
-                          bgColor = 'bg-orange-100 dark:bg-orange-900/30';
-                          borderColor = 'border-orange-400 dark:border-orange-700';
-                          highlightText = 'CYS';
-                        } else if (PROPERTY_GROUPS.charged_positive.includes(aa)) {
-                          bgColor = 'bg-blue-100 dark:bg-blue-900/30';
-                          borderColor = 'border-blue-300 dark:border-blue-700';
-                        } else if (PROPERTY_GROUPS.charged_negative.includes(aa)) {
-                          bgColor = 'bg-red-100 dark:bg-red-900/30';
-                          borderColor = 'border-red-300 dark:border-red-700';
-                        } else if (PROPERTY_GROUPS.polar.includes(aa)) {
-                          bgColor = 'bg-green-100 dark:bg-green-900/30';
-                          borderColor = 'border-green-300 dark:border-green-700';
-                        } else if (PROPERTY_GROUPS.nonpolar.includes(aa)) {
-                          bgColor = 'bg-amber-100 dark:bg-amber-900/30';
-                          borderColor = 'border-amber-300 dark:border-amber-700';
-                        }
+                      {/* Amino Acid Distribution */}
+                      <div>
+                        <h4 className="font-semibold mb-3 text-slate-800 dark:text-slate-200">
+                          Amino Acid Distribution
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                          {Object.entries(selectedAnalysis.aminoAcidCounts)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([aa, count]) => {
+                              const frequency = (count / selectedAnalysis.totalCodons) * 100;
+                              const isTarget = generatorResult.inputAminoAcids.includes(aa);
+                              const isStop = aa === '*';
+                              const isCysteine = aa === 'C';
 
-                        return (
-                          <div
-                            key={aa}
-                            className={`p-3 rounded-lg border-2 ${bgColor} ${borderColor} ${
-                              (isStop || isCysteine) ? 'ring-2 ring-offset-2 ring-red-400 dark:ring-red-600' : ''
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-mono font-bold text-lg">{aa}</span>
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {AA_NAMES[aa]}
-                              </span>
+                              // Get property-based colors
+                              let bgColor = 'bg-slate-50 dark:bg-slate-800';
+                              let borderColor = 'border-slate-200 dark:border-slate-700';
+                              let highlightText = '';
+
+                              if (isStop) {
+                                bgColor = 'bg-red-100 dark:bg-red-900/30';
+                                borderColor = 'border-red-400 dark:border-red-700';
+                                highlightText = 'STOP';
+                              } else if (isCysteine) {
+                                bgColor = 'bg-orange-100 dark:bg-orange-900/30';
+                                borderColor = 'border-orange-400 dark:border-orange-700';
+                                highlightText = 'CYS';
+                              } else if (PROPERTY_GROUPS.charged_positive.includes(aa)) {
+                                bgColor = 'bg-blue-100 dark:bg-blue-900/30';
+                                borderColor = 'border-blue-300 dark:border-blue-700';
+                              } else if (PROPERTY_GROUPS.charged_negative.includes(aa)) {
+                                bgColor = 'bg-red-100 dark:bg-red-900/30';
+                                borderColor = 'border-red-300 dark:border-red-700';
+                              } else if (PROPERTY_GROUPS.polar.includes(aa)) {
+                                bgColor = 'bg-green-100 dark:bg-green-900/30';
+                                borderColor = 'border-green-300 dark:border-green-700';
+                              } else if (PROPERTY_GROUPS.nonpolar.includes(aa)) {
+                                bgColor = 'bg-amber-100 dark:bg-amber-900/30';
+                                borderColor = 'border-amber-300 dark:border-amber-700';
+                              }
+
+                              return (
+                                <div
+                                  key={aa}
+                                  className={`p-3 rounded-lg border-2 ${bgColor} ${borderColor} ${
+                                    (isStop || isCysteine) ? 'ring-2 ring-offset-2 ring-red-400 dark:ring-red-600' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-mono font-bold text-lg">{aa}</span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                      {AA_NAMES[aa]}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                    {frequency.toFixed(1)}%
+                                  </div>
+                                  <div className="text-xs text-slate-600 dark:text-slate-400">
+                                    {count}/{selectedAnalysis.totalCodons} codons
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {highlightText && (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
+                                        isStop
+                                          ? 'bg-red-600 text-white'
+                                          : 'bg-orange-600 text-white'
+                                      }`}>
+                                        {highlightText}
+                                      </span>
+                                    )}
+                                    {!isTarget && !isStop && (
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-600 text-white font-semibold">
+                                        Extra
+                                      </span>
+                                    )}
+                                    {isTarget && !isStop && (
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-green-600 text-white font-semibold">
+                                        Target
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+
+                        {/* Color Legend */}
+                        <div className="mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                          <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                            Property Colors:
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-300"></div>
+                              <span>Positive (+)</span>
                             </div>
-                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                              {frequency.toFixed(1)}%
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-300"></div>
+                              <span>Negative (−)</span>
                             </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-400">
-                              {count}/{generatorResult.analysis.totalCodons} codons
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-300"></div>
+                              <span>Polar</span>
                             </div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {highlightText && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${
-                                  isStop
-                                    ? 'bg-red-600 text-white'
-                                    : 'bg-orange-600 text-white'
-                                }`}>
-                                  {highlightText}
-                                </span>
-                              )}
-                              {!isTarget && !isStop && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-600 text-white font-semibold">
-                                  Extra
-                                </span>
-                              )}
-                              {isTarget && !isStop && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-600 text-white font-semibold">
-                                  Target
-                                </span>
-                              )}
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300"></div>
+                              <span>Nonpolar</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 rounded bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-400 ring-1 ring-red-400"></div>
+                              <span>Cysteine</span>
                             </div>
                           </div>
-                        );
-                      })}
-                  </div>
+                        </div>
+                      </div>
 
-                  {/* Color Legend */}
-                  <div className="mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                      Property Colors:
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900/30 border border-blue-300"></div>
-                        <span>Positive (+)</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 rounded bg-red-100 dark:bg-red-900/30 border border-red-300"></div>
-                        <span>Negative (−)</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-300"></div>
-                        <span>Polar</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 rounded bg-amber-100 dark:bg-amber-900/30 border border-amber-300"></div>
-                        <span>Nonpolar</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4 rounded bg-orange-100 dark:bg-orange-900/30 border-2 border-orange-400 ring-1 ring-red-400"></div>
-                        <span>Cysteine</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Warnings */}
-                {(generatorResult.analysis.extraAminoAcids.length > 0 || generatorResult.analysis.aminoAcidCounts['*']) && (
-                  <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                    <h4 className="font-semibold text-yellow-800 dark:text-yellow-300 mb-2 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      Warnings
-                    </h4>
-                    <ul className="space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
-                      {generatorResult.analysis.extraAminoAcids.length > 0 && (
-                        <li>
-                          The degenerate codon(s) also encode {generatorResult.analysis.extraAminoAcids.length} extra amino acid{generatorResult.analysis.extraAminoAcids.length > 1 ? 's' : ''}: {generatorResult.analysis.extraAminoAcids.join(', ')}
-                        </li>
+                      {/* Warnings */}
+                      {(selectedAnalysis.extraAminoAcids.length > 0 || selectedAnalysis.aminoAcidCounts['*']) && (
+                        <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                          <h4 className="font-semibold text-yellow-800 dark:text-yellow-300 mb-2 flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4" />
+                            Warnings
+                          </h4>
+                          <ul className="space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
+                            {selectedAnalysis.extraAminoAcids.length > 0 && (
+                              <li>
+                                The degenerate codon also encodes {selectedAnalysis.extraAminoAcids.length} extra amino acid{selectedAnalysis.extraAminoAcids.length > 1 ? 's' : ''}: {selectedAnalysis.extraAminoAcids.join(', ')}
+                              </li>
+                            )}
+                            {selectedAnalysis.aminoAcidCounts['*'] && (
+                              <li>
+                                Stop codon (*) is present: {selectedAnalysis.aminoAcidCounts['*']} codon(s) ({((selectedAnalysis.aminoAcidCounts['*'] / selectedAnalysis.totalCodons) * 100).toFixed(1)}%)
+                              </li>
+                            )}
+                          </ul>
+                        </div>
                       )}
-                      {generatorResult.analysis.aminoAcidCounts['*'] && (
-                        <li>
-                          Stop codon (*) is present: {generatorResult.analysis.aminoAcidCounts['*']} codon(s) ({((generatorResult.analysis.aminoAcidCounts['*'] / generatorResult.analysis.totalCodons) * 100).toFixed(1)}%)
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
+                    </>
+                  );
+                })()}
               </div>
             </>
           )}
