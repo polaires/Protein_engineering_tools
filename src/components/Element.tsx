@@ -22,7 +22,7 @@ export default function Element() {
       {/* PubChem Periodic Table Iframe */}
       <div className="card p-0 overflow-hidden">
         <iframe
-          src="https://pubchem.ncbi.nlm.nih.gov/periodic-table/"
+          src="https://pubchem.ncbi.nlm.nih.gov/periodic-table/#view=table&embed=true"
           title="PubChem Interactive Periodic Table"
           className="w-full h-[800px] border-0"
           style={{
