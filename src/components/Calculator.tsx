@@ -12,9 +12,10 @@ import {
   ConcentrationUnit,
   VolumeUnit,
   Recipe,
+  Chemical,
 } from '@/types';
 import { performCalculation, formatResult, convertToMolarity, convertToMilliliters } from '@/utils/calculations';
-import { checkSolubility } from '@/data/solubility';
+import { checkSolubilityAsync } from '@/data/solubility';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
 import RecipeList from './RecipeList';
@@ -77,8 +78,8 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   const [showSteps, setShowSteps] = useState(false);
 
   // Solubility checking
-  const [selectedChemicalId, setSelectedChemicalId] = useState<string | null>(null);
-  const [solubilityCheck, setSolubilityCheck] = useState<ReturnType<typeof checkSolubility> | null>(null);
+  const [selectedChemical, setSelectedChemical] = useState<Chemical | null>(null);
+  const [solubilityCheck, setSolubilityCheck] = useState<Awaited<ReturnType<typeof checkSolubilityAsync>> | null>(null);
 
   // Update calculation mode when changed
   useEffect(() => {
@@ -94,15 +95,15 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   };
 
   // Handle chemical selection
-  const handleChemicalSelect = (chemicalId: string, molecularWeight: number) => {
-    setCalculation((prev) => ({ ...prev, molecularWeight }));
-    setSelectedChemicalId(chemicalId);
-    addToRecentChemicals(chemicalId);
+  const handleChemicalSelect = (chemical: Chemical) => {
+    setCalculation((prev) => ({ ...prev, molecularWeight: chemical.molecularWeight }));
+    setSelectedChemical(chemical);
+    addToRecentChemicals(chemical.id);
     setSolubilityCheck(null); // Clear previous solubility check
   };
 
   // Perform calculation with unit conversion
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     // Convert to base units (M and mL) before calculation
     const convertedCalculation: MolarityCalculation = {
       ...calculation,
@@ -130,14 +131,30 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     setResult(calcResult);
 
     // Check solubility if calculation was successful and we have the necessary data
-    if (calcResult.success && selectedChemicalId && calcResult.value && convertedCalculation.volume) {
+    if (calcResult.success && selectedChemical && calcResult.value && convertedCalculation.volume) {
       // Calculate concentration in mg/mL
       const mass = calcResult.value; // in grams
       const volumeML = convertedCalculation.volume; // in mL
       const concentrationMgML = (mass / volumeML) * 1000; // convert g/mL to mg/mL
 
-      const solubilityResult = checkSolubility(selectedChemicalId, concentrationMgML);
-      setSolubilityCheck(solubilityResult);
+      // Extract PubChem CID if available
+      let pubchemCid: string | undefined;
+      if (selectedChemical.id.startsWith('pubchem-')) {
+        pubchemCid = selectedChemical.id.replace('pubchem-', '');
+      }
+
+      // Use async solubility check
+      try {
+        const solubilityResult = await checkSolubilityAsync(
+          selectedChemical.id,
+          concentrationMgML,
+          pubchemCid
+        );
+        setSolubilityCheck(solubilityResult);
+      } catch (error) {
+        console.error('Solubility check failed:', error);
+        setSolubilityCheck(null);
+      }
     } else {
       setSolubilityCheck(null);
     }
@@ -243,9 +260,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                 Molecular Weight (g/mol) *
               </label>
               <ChemicalSearch
-                onSelect={(chemical) =>
-                  handleChemicalSelect(chemical.id, chemical.molecularWeight)
-                }
+                onSelect={handleChemicalSelect}
                 placeholder="Search chemical or enter MW manually"
                 allowCustom={true}
               />
@@ -314,9 +329,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                 Molecular Weight (g/mol) *
               </label>
               <ChemicalSearch
-                onSelect={(chemical) =>
-                  handleChemicalSelect(chemical.id, chemical.molecularWeight)
-                }
+                onSelect={handleChemicalSelect}
                 placeholder="Search chemical"
                 allowCustom={true}
               />
@@ -383,9 +396,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                 Molecular Weight (g/mol) *
               </label>
               <ChemicalSearch
-                onSelect={(chemical) =>
-                  handleChemicalSelect(chemical.id, chemical.molecularWeight)
-                }
+                onSelect={handleChemicalSelect}
                 placeholder="Search chemical"
                 allowCustom={true}
               />
@@ -721,6 +732,12 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   Solubility data at {solubilityCheck.solubilityData.temperature}
                 </p>
               )}
+              {/* Data source indicator */}
+              <p className="text-xs mt-3 text-slate-500 dark:text-slate-400 italic">
+                {solubilityCheck.source === 'database' && '📚 From curated database'}
+                {solubilityCheck.source === 'pubchem' && '🌐 From PubChem API'}
+                {solubilityCheck.source === 'general' && 'ℹ️ General concentration guidelines'}
+              </p>
             </div>
           </div>
         </div>
