@@ -4,11 +4,12 @@
  */
 
 import { useState } from 'react';
-import { Dna, Plus, Trash2, AlertCircle, Zap } from 'lucide-react';
+import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import CodonOptimizer from './CodonOptimizer';
+import LibraryDesign from './LibraryDesign';
 
-type DNATab = 'assembly' | 'codon';
+type DNATab = 'assembly' | 'codon' | 'library';
 
 interface DNAFragment {
   id: string;
@@ -169,7 +170,7 @@ export default function DNA() {
         </p>
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2 mt-4 flex-wrap">
           <button
             onClick={() => setActiveTab('assembly')}
             className={`calc-mode-tab ${activeTab === 'assembly' ? 'active' : ''}`}
@@ -183,6 +184,13 @@ export default function DNA() {
           >
             <Zap className="w-4 h-4 inline mr-2" />
             Codon Optimization
+          </button>
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`calc-mode-tab ${activeTab === 'library' ? 'active' : ''}`}
+          >
+            <FlaskRound className="w-4 h-4 inline mr-2" />
+            Library Design
           </button>
         </div>
       </div>
@@ -454,6 +462,11 @@ export default function DNA() {
       {/* Codon Optimization Tab */}
       {activeTab === 'codon' && (
         <CodonOptimizer />
+      )}
+
+      {/* Library Design Tab */}
+      {activeTab === 'library' && (
+        <LibraryDesign />
       )}
     </div>
   );
