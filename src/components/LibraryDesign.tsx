@@ -565,42 +565,17 @@ export default function LibraryDesign() {
     const requiredBases = getRequiredBases(aminoAcids);
     const codons: string[] = [];
 
-    // Generate all combinations of bases at each position
-    for (const first of requiredBases.first) {
-      for (const second of requiredBases.second) {
-        for (const third of requiredBases.third) {
-          const firstCode = findOptimalDegenerateBase([first]);
-          const secondCode = findOptimalDegenerateBase([second]);
-          const thirdCode = findOptimalDegenerateBase([third]);
-          codons.push(`${firstCode}${secondCode}${thirdCode}`);
-        }
-      }
-    }
+    // Strategy: Generate combinations of increasing complexity
+    // Start with minimal, then add combinations that include the required amino acids plus extras
 
-    // Also try combinations of bases
-    const firstCode = findOptimalDegenerateBase(requiredBases.first);
-    const secondCode = findOptimalDegenerateBase(requiredBases.second);
-    const thirdCode = findOptimalDegenerateBase(requiredBases.third);
-    codons.push(`${firstCode}${secondCode}${thirdCode}`);
+    // 1. Try all combinations of required bases at each position
+    const maxFirstBases = Math.min(requiredBases.first.length, 4);
+    const maxSecondBases = Math.min(requiredBases.second.length, 4);
+    const maxThirdBases = Math.min(requiredBases.third.length, 4);
 
-    return Array.from(new Set(codons));
-  };
-
-  // Generate balanced degenerate codons (property-based with stop codon minimization)
-  const generateBalancedCodons = (aminoAcids: string[]): string[] => {
-    // Get amino acids with same properties
-    const expandedAAs = getAAsWithSameProperties(aminoAcids);
-
-    // Get required bases for expanded set
-    const requiredBases = getRequiredBases(expandedAAs);
-
-    // Try to find combinations that minimize stop codons
-    const candidateCodons: { codon: string; stopFreq: number; extraAAs: number }[] = [];
-
-    // Test various combinations
-    for (let i = 1; i <= Math.min(requiredBases.first.length, 3); i++) {
-      for (let j = 1; j <= Math.min(requiredBases.second.length, 3); j++) {
-        for (let k = 1; k <= Math.min(requiredBases.third.length, 3); k++) {
+    for (let i = 1; i <= maxFirstBases; i++) {
+      for (let j = 1; j <= maxSecondBases; j++) {
+        for (let k = 1; k <= maxThirdBases; k++) {
           const firstSets = getCombinations(requiredBases.first, i);
           const secondSets = getCombinations(requiredBases.second, j);
           const thirdSets = getCombinations(requiredBases.third, k);
@@ -613,15 +588,14 @@ export default function LibraryDesign() {
                 const third = findOptimalDegenerateBase(thirdBases);
                 const codon = `${first}${second}${third}`;
 
+                // Check if this combination covers all required amino acids
                 const testAnalysis = analyzeSolution([codon], aminoAcids);
-                const stopCount = testAnalysis.aminoAcidCounts['*'] || 0;
-                const stopFreq = (stopCount / testAnalysis.totalCodons) * 100;
+                const coveredAAs = Object.keys(testAnalysis.aminoAcidCounts).filter(aa => aa !== '*');
+                const coversAll = aminoAcids.every(aa => coveredAAs.includes(aa));
 
-                candidateCodons.push({
-                  codon,
-                  stopFreq,
-                  extraAAs: testAnalysis.extraAminoAcids.length
-                });
+                if (coversAll) {
+                  codons.push(codon);
+                }
               }
             }
           }
@@ -629,14 +603,119 @@ export default function LibraryDesign() {
       }
     }
 
-    // Sort by stop frequency (ascending) then by extra AAs (ascending)
-    candidateCodons.sort((a, b) => {
+    return Array.from(new Set(codons));
+  };
+
+  // Generate balanced degenerate codons (property-based with stop codon minimization)
+  const generateBalancedCodons = (aminoAcids: string[]): string[] => {
+    // Strategy: Generate codons that include chemically similar amino acids
+    // while minimizing stop codons and maintaining diversity
+
+    const candidateCodons: {
+      codon: string;
+      stopFreq: number;
+      extraAAs: number;
+      totalCodons: number;
+      diversity: number; // Number of different property groups covered
+    }[] = [];
+
+    // Get property groups covered by input amino acids
+    const inputCategories = new Set(aminoAcids.map(aa => getAAPropertyCategory(aa)));
+
+    // Strategy 1: Include all amino acids with same properties
+    const expandedAAs = getAAsWithSameProperties(aminoAcids);
+
+    // Strategy 2: Also try combinations that balance properties
+    // For each input amino acid, try to include some similar ones
+    const balancedSets: string[][] = [
+      expandedAAs, // All with same properties
+      aminoAcids, // Just the input (minimal)
+    ];
+
+    // Add sets that gradually expand each property category
+    for (const category of inputCategories) {
+      let propertyAAs: string[] = [];
+
+      if (category === 'charged_positive') propertyAAs = PROPERTY_GROUPS.charged_positive;
+      else if (category === 'charged_negative') propertyAAs = PROPERTY_GROUPS.charged_negative;
+      else if (category === 'polar') propertyAAs = PROPERTY_GROUPS.polar;
+      else if (category === 'nonpolar') propertyAAs = PROPERTY_GROUPS.nonpolar;
+
+      // Create a set with original AAs + all from this property
+      const otherInputAAs = aminoAcids.filter(aa => getAAPropertyCategory(aa) !== category);
+      balancedSets.push([...otherInputAAs, ...propertyAAs]);
+    }
+
+    // Test codons for each strategy
+    for (const aaSet of balancedSets) {
+      const bases = getRequiredBases(aaSet);
+      const maxFirst = Math.min(bases.first.length, 3);
+      const maxSecond = Math.min(bases.second.length, 3);
+      const maxThird = Math.min(bases.third.length, 3);
+
+      for (let i = 1; i <= maxFirst; i++) {
+        for (let j = 1; j <= maxSecond; j++) {
+          for (let k = 1; k <= maxThird; k++) {
+            const firstSets = getCombinations(bases.first, i);
+            const secondSets = getCombinations(bases.second, j);
+            const thirdSets = getCombinations(bases.third, k);
+
+            for (const firstBases of firstSets.slice(0, 5)) { // Limit to avoid too many combinations
+              for (const secondBases of secondSets.slice(0, 5)) {
+                for (const thirdBases of thirdSets.slice(0, 5)) {
+                  const first = findOptimalDegenerateBase(firstBases);
+                  const second = findOptimalDegenerateBase(secondBases);
+                  const third = findOptimalDegenerateBase(thirdBases);
+                  const codon = `${first}${second}${third}`;
+
+                  const testAnalysis = analyzeSolution([codon], aminoAcids);
+                  const coveredAAs = Object.keys(testAnalysis.aminoAcidCounts).filter(aa => aa !== '*');
+                  const coversAll = aminoAcids.every(aa => coveredAAs.includes(aa));
+
+                  if (coversAll) {
+                    const stopCount = testAnalysis.aminoAcidCounts['*'] || 0;
+                    const stopFreq = (stopCount / testAnalysis.totalCodons) * 100;
+
+                    // Calculate diversity (number of property groups)
+                    const categories = new Set(coveredAAs.map(aa => getAAPropertyCategory(aa)));
+                    const diversity = categories.size;
+
+                    candidateCodons.push({
+                      codon,
+                      stopFreq,
+                      extraAAs: testAnalysis.extraAminoAcids.length,
+                      totalCodons: testAnalysis.totalCodons,
+                      diversity
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Remove duplicates
+    const uniqueCodons = new Map<string, typeof candidateCodons[0]>();
+    for (const candidate of candidateCodons) {
+      if (!uniqueCodons.has(candidate.codon)) {
+        uniqueCodons.set(candidate.codon, candidate);
+      }
+    }
+
+    // Sort by: 1) Stop frequency (lower better), 2) Diversity (higher better), 3) Total codons (lower better)
+    const sorted = Array.from(uniqueCodons.values()).sort((a, b) => {
+      // Primary: stop frequency (lower is better)
       if (Math.abs(a.stopFreq - b.stopFreq) > 0.1) return a.stopFreq - b.stopFreq;
-      return a.extraAAs - b.extraAAs;
+      // Secondary: diversity (higher is better)
+      if (a.diversity !== b.diversity) return b.diversity - a.diversity;
+      // Tertiary: total codons (lower is better for more focused library)
+      return a.totalCodons - b.totalCodons;
     });
 
-    // Return top candidates (max 5)
-    return candidateCodons.slice(0, 5).map(c => c.codon);
+    // Return top 10 candidates for better variety
+    return sorted.slice(0, 10).map(c => c.codon);
   };
 
   // Main generator function
@@ -1193,7 +1272,7 @@ export default function LibraryDesign() {
                   <span className="font-mono font-bold">NNK</span> - Hard randomization - All 20 a.a.
                 </button>
                 <button
-                  onClick={() => setAminoAcidInput('ACDFGHILNPRSTVYACDFGHILNPRSTVYACDFGHILNPRSTVY')}
+                  onClick={() => setAminoAcidInput('ACDFGHILNPRSTVY')}
                   className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-left"
                 >
                   <span className="font-mono font-bold">NNC</span> - 15 a.a. - A,C,D,F,G,H,I,L,N,P,R,S,T,V,Y
