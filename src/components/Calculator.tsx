@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles } from 'lucide-react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -14,6 +14,7 @@ import {
   Recipe,
 } from '@/types';
 import { performCalculation, formatResult, convertToMolarity, convertToMilliliters } from '@/utils/calculations';
+import { checkSolubility } from '@/data/solubility';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
 import RecipeList from './RecipeList';
@@ -75,6 +76,10 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [showSteps, setShowSteps] = useState(false);
 
+  // Solubility checking
+  const [selectedChemicalId, setSelectedChemicalId] = useState<string | null>(null);
+  const [solubilityCheck, setSolubilityCheck] = useState<ReturnType<typeof checkSolubility> | null>(null);
+
   // Update calculation mode when changed
   useEffect(() => {
     setCalculation((prev) => ({ ...prev, mode: selectedMode }));
@@ -91,7 +96,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   // Handle chemical selection
   const handleChemicalSelect = (chemicalId: string, molecularWeight: number) => {
     setCalculation((prev) => ({ ...prev, molecularWeight }));
+    setSelectedChemicalId(chemicalId);
     addToRecentChemicals(chemicalId);
+    setSolubilityCheck(null); // Clear previous solubility check
   };
 
   // Perform calculation with unit conversion
@@ -121,6 +128,19 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
 
     const calcResult = performCalculation(convertedCalculation);
     setResult(calcResult);
+
+    // Check solubility if calculation was successful and we have the necessary data
+    if (calcResult.success && selectedChemicalId && calcResult.value && convertedCalculation.volume) {
+      // Calculate concentration in mg/mL
+      const mass = calcResult.value; // in grams
+      const volumeML = convertedCalculation.volume; // in mL
+      const concentrationMgML = (mass / volumeML) * 1000; // convert g/mL to mg/mL
+
+      const solubilityResult = checkSolubility(selectedChemicalId, concentrationMgML);
+      setSolubilityCheck(solubilityResult);
+    } else {
+      setSolubilityCheck(null);
+    }
 
     if (calcResult.success) {
       showToast('success', 'Calculation completed');
@@ -153,6 +173,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     setInitialVolumeUnit(VolumeUnit.MILLILITER);
     setFinalVolumeUnit(VolumeUnit.MILLILITER);
     setResult(null);
+    setSolubilityCheck(null);
   };
 
   // Render input fields based on calculation mode
@@ -636,6 +657,72 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
               </ol>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Solubility Warning */}
+      {solubilityCheck && solubilityCheck.warning && (
+        <div className={`p-4 border-2 rounded-lg animate-in ${
+          solubilityCheck.isExceeded
+            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+            : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+        }`}>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+              solubilityCheck.isExceeded
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-yellow-600 dark:text-yellow-400'
+            }`} />
+            <div className="flex-1">
+              <h4 className={`font-semibold mb-2 ${
+                solubilityCheck.isExceeded
+                  ? 'text-red-800 dark:text-red-200'
+                  : 'text-yellow-800 dark:text-yellow-200'
+              }`}>
+                {solubilityCheck.isExceeded ? 'Solubility Limit Exceeded' : 'Approaching Solubility Limit'}
+              </h4>
+              <p className={`text-sm mb-2 ${
+                solubilityCheck.isExceeded
+                  ? 'text-red-700 dark:text-red-300'
+                  : 'text-yellow-700 dark:text-yellow-300'
+              }`}>
+                {solubilityCheck.warning}
+              </p>
+              {solubilityCheck.suggestions.length > 0 && (
+                <div className={`mt-3 p-3 rounded-lg ${
+                  solubilityCheck.isExceeded
+                    ? 'bg-red-100 dark:bg-red-900/40'
+                    : 'bg-yellow-100 dark:bg-yellow-900/40'
+                }`}>
+                  <p className={`text-sm font-semibold mb-2 ${
+                    solubilityCheck.isExceeded
+                      ? 'text-red-800 dark:text-red-200'
+                      : 'text-yellow-800 dark:text-yellow-200'
+                  }`}>
+                    Recommendations:
+                  </p>
+                  <ul className={`text-sm space-y-1 ${
+                    solubilityCheck.isExceeded
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-yellow-700 dark:text-yellow-300'
+                  }`}>
+                    {solubilityCheck.suggestions.map((suggestion, idx) => (
+                      <li key={idx} className="whitespace-pre-line">{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {solubilityCheck.solubilityData && solubilityCheck.solubilityData.temperature && (
+                <p className={`text-xs mt-2 ${
+                  solubilityCheck.isExceeded
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-yellow-600 dark:text-yellow-400'
+                }`}>
+                  Solubility data at {solubilityCheck.solubilityData.temperature}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
