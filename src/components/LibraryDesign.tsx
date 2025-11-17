@@ -646,12 +646,16 @@ export default function LibraryDesign() {
       balancedSets.push([...otherInputAAs, ...propertyAAs]);
     }
 
+    // Adaptive search limit based on number of amino acids
+    // More amino acids = need to explore more combinations
+    const searchLimit = aminoAcids.length <= 5 ? 5 : aminoAcids.length <= 10 ? 10 : 20;
+
     // Test codons for each strategy
     for (const aaSet of balancedSets) {
       const bases = getRequiredBases(aaSet);
-      const maxFirst = Math.min(bases.first.length, 3);
-      const maxSecond = Math.min(bases.second.length, 3);
-      const maxThird = Math.min(bases.third.length, 3);
+      const maxFirst = Math.min(bases.first.length, 4); // Increased from 3 to 4
+      const maxSecond = Math.min(bases.second.length, 4);
+      const maxThird = Math.min(bases.third.length, 4);
 
       for (let i = 1; i <= maxFirst; i++) {
         for (let j = 1; j <= maxSecond; j++) {
@@ -660,9 +664,10 @@ export default function LibraryDesign() {
             const secondSets = getCombinations(bases.second, j);
             const thirdSets = getCombinations(bases.third, k);
 
-            for (const firstBases of firstSets.slice(0, 5)) { // Limit to avoid too many combinations
-              for (const secondBases of secondSets.slice(0, 5)) {
-                for (const thirdBases of thirdSets.slice(0, 5)) {
+            // Use adaptive search limit
+            for (const firstBases of firstSets.slice(0, searchLimit)) {
+              for (const secondBases of secondSets.slice(0, searchLimit)) {
+                for (const thirdBases of thirdSets.slice(0, searchLimit)) {
                   const first = findOptimalDegenerateBase(firstBases);
                   const second = findOptimalDegenerateBase(secondBases);
                   const third = findOptimalDegenerateBase(thirdBases);
@@ -755,6 +760,33 @@ export default function LibraryDesign() {
       } else {
         // Balanced approach
         optimalCodons = generateBalancedCodons(aminoAcids);
+      }
+
+      // Check for empty results and provide helpful warnings
+      if (optimalCodons.length === 0) {
+        if (optimizationStrategy === 'balanced') {
+          alert(
+            `No balanced degenerate codons found for the input amino acids.\n\n` +
+            `This can happen when:\n` +
+            `• The search space is too large or complex\n` +
+            `• The amino acid combination has no valid balanced solution\n\n` +
+            `Try:\n` +
+            `• Using "Minimal" strategy for the most compact library\n` +
+            `• Using "All Combinations" to see all possible options\n` +
+            `• Reducing the number of amino acids in your input`
+          );
+        } else if (optimizationStrategy === 'all') {
+          alert(
+            `No degenerate codons found that cover all input amino acids.\n\n` +
+            `This is unexpected. Please verify your amino acid input.`
+          );
+        } else {
+          alert(
+            `No degenerate codons found for the input amino acids.\n\n` +
+            `Please verify your amino acid input.`
+          );
+        }
+        return;
       }
 
       // Analyze solution
