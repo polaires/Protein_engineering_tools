@@ -428,64 +428,83 @@ export async function fetchPubChemSolubility(cid: string): Promise<{
     const data = await response.json();
     const sections = data.Record?.Section || [];
 
+    // Collect all potential solubility texts
+    const solubilityTexts: string[] = [];
+
     // Helper function to recursively search for solubility data
-    const findSolubility = (sections: any[]): { text: string } | null => {
+    const findSolubility = (sections: any[], depth = 0): void => {
       for (const section of sections) {
         // Check if this section has solubility information
         if (section.TOCHeading && /solubility/i.test(section.TOCHeading)) {
-          // Try to extract information from this section
-          const info = section.Information?.[0];
-          if (info?.Value?.StringWithMarkup?.[0]?.String) {
-            return { text: info.Value.StringWithMarkup[0].String };
-          }
-
-          // Also check multiple Information entries
+          // Extract all Information entries from this section
           if (section.Information && Array.isArray(section.Information)) {
             for (const info of section.Information) {
+              // Try different possible structures
               if (info?.Value?.StringWithMarkup?.[0]?.String) {
-                const text = info.Value.StringWithMarkup[0].String;
-                // Prefer entries that mention water
-                if (/water/i.test(text) || /h2o/i.test(text) || /aqueous/i.test(text)) {
-                  return { text };
-                }
+                solubilityTexts.push(info.Value.StringWithMarkup[0].String);
+              } else if (info?.Value?.String) {
+                solubilityTexts.push(info.Value.String);
+              } else if (typeof info?.Value === 'string') {
+                solubilityTexts.push(info.Value);
               }
-            }
-            // If no water-specific entry found, return first one
-            if (section.Information[0]?.Value?.StringWithMarkup?.[0]?.String) {
-              return { text: section.Information[0].Value.StringWithMarkup[0].String };
+
+              // Also check for Number values
+              if (info?.Value?.Number && info?.Value?.Unit) {
+                solubilityTexts.push(`${info.Value.Number} ${info.Value.Unit}`);
+              }
             }
           }
         }
 
         // Recursively search in subsections
-        if (section.Section && Array.isArray(section.Section)) {
-          const result = findSolubility(section.Section);
-          if (result) return result;
+        if (section.Section && Array.isArray(section.Section) && depth < 10) {
+          findSolubility(section.Section, depth + 1);
         }
       }
-      return null;
     };
 
-    const result = findSolubility(sections);
+    findSolubility(sections);
 
-    if (result) {
-      const solubilityText = result.text;
+    if (solubilityTexts.length === 0) {
+      return null;
+    }
 
-      // Try to parse solubility value
-      const parsed = parseSolubilityString(solubilityText);
-      if (parsed) {
+    // Try to find water solubility data
+    let bestMatch: { text: string; parsed: { value: number; unit: string } | null } | null = null;
+
+    for (const text of solubilityTexts) {
+      const parsed = parseSolubilityString(text);
+
+      // Prefer entries that mention water and can be parsed
+      if (parsed && (/water/i.test(text) || /h2o/i.test(text) || /aqueous/i.test(text))) {
         return {
           waterSolubility: parsed.value,
           unit: parsed.unit,
-          notes: solubilityText
+          notes: text
         };
       }
 
-      // If we can't parse, return the text as notes
+      // Keep track of the first parseable entry as a fallback
+      if (parsed && !bestMatch) {
+        bestMatch = { text, parsed };
+      }
+    }
+
+    // If we found a parseable entry (even without water mention), use it
+    if (bestMatch) {
+      return {
+        waterSolubility: bestMatch.parsed!.value,
+        unit: bestMatch.parsed!.unit,
+        notes: bestMatch.text
+      };
+    }
+
+    // If we have text but couldn't parse, return as notes
+    if (solubilityTexts.length > 0) {
       return {
         waterSolubility: null,
         unit: null,
-        notes: solubilityText
+        notes: solubilityTexts[0]
       };
     }
 
