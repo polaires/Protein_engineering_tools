@@ -56,16 +56,17 @@ export default function RecipeLabel({ recipe, onClose, batchNumber }: RecipeLabe
             </div>
           </div>
 
-          {/* Label Content */}
-          <div
-            id="recipe-label-print-content"
-            className="p-8 bg-white text-black"
-            style={{
-              fontFamily: '"Courier New", Courier, monospace',
-              fontSize: '14px',
-              lineHeight: '1.6'
-            }}
-          >
+          {/* Label Content - Wrapped for printing */}
+          <div className="print-container">
+            <div
+              id="recipe-label-print-content"
+              className="p-8 bg-white text-black"
+              style={{
+                fontFamily: '"Courier New", Courier, monospace',
+                fontSize: '14px',
+                lineHeight: '1.6'
+              }}
+            >
             {/* Product Name */}
             <div
               style={{
@@ -196,6 +197,8 @@ export default function RecipeLabel({ recipe, onClose, batchNumber }: RecipeLabe
               FOR RESEARCH USE ONLY
             </div>
           </div>
+          {/* End print-container */}
+          </div>
         </div>
       </div>
 
@@ -207,33 +210,54 @@ export default function RecipeLabel({ recipe, onClose, batchNumber }: RecipeLabe
             margin: 15mm;
           }
 
-          /* Hide everything except the main app */
-          body * {
-            visibility: hidden !important;
+          /* Hide everything using display to prevent page breaks */
+          body > *:not(.print-container) {
+            display: none !important;
           }
 
-          /* Make label and its children visible */
-          #recipe-label-print-content,
-          #recipe-label-print-content * {
-            visibility: visible !important;
-          }
-
-          /* Position label at top of page */
-          #recipe-label-print-content {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            background: white !important;
-            padding: 10mm !important;
+          /* Reset body and html for printing */
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
             margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* Show only the label container */
+          .print-container {
+            display: block !important;
+            position: static !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+          }
+
+          /* Style the label content for printing */
+          #recipe-label-print-content {
+            display: block !important;
+            position: static !important;
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
             box-shadow: none !important;
             border-radius: 0 !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
 
-          /* Ensure text is black */
+          /* Ensure text is black and properly formatted */
           #recipe-label-print-content * {
             color: black !important;
+            background: transparent !important;
+          }
+
+          /* Hide the modal overlay and controls */
+          .no-print {
+            display: none !important;
           }
         }
       `}</style>
