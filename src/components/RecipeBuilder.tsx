@@ -4,9 +4,10 @@
  */
 
 import { useState } from 'react';
-import { Plus, Trash2, Save, X, Beaker } from 'lucide-react';
+import { Plus, Trash2, Save, X, Beaker, FileText } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
+import RecipeLabel from './RecipeLabel';
 import {
   Chemical,
   Recipe,
@@ -44,6 +45,9 @@ export default function RecipeBuilder() {
   // Currently adding component
   const [showAddComponent, setShowAddComponent] = useState(false);
   const [newComponent, setNewComponent] = useState<RecipeBuilderComponent | null>(null);
+
+  // Label preview
+  const [showLabel, setShowLabel] = useState(false);
 
   // Calculate mass for a component
   const calculateComponentMass = (component: RecipeBuilderComponent): number => {
@@ -208,6 +212,32 @@ export default function RecipeBuilder() {
 
   // Calculate total mass
   const totalMass = components.reduce((sum, component) => sum + calculateComponentMass(component), 0);
+
+  // Build preview recipe for label
+  const buildPreviewRecipe = (): Recipe => {
+    return {
+      id: `preview-${Date.now()}`,
+      name: concentrationMultiplier > 1 ? `${concentrationMultiplier}× ${recipeName || 'Untitled Recipe'}` : (recipeName || 'Untitled Recipe'),
+      description: recipeDescription || undefined,
+      category: recipeCategory,
+      components: components.map(c => ({
+        chemicalId: c.chemical!.id,
+        chemical: c.chemical,
+        concentration: c.concentration * concentrationMultiplier,
+        concentrationUnit: c.concentrationUnit,
+        mass: calculateComponentMass(c),
+        notes: c.notes,
+      })),
+      totalVolume,
+      volumeUnit,
+      pH: targetpH ? parseFloat(targetpH) : undefined,
+      notes: notes || undefined,
+      instructions: generateInstructions(),
+      isCustom: true,
+      createdAt: new Date(),
+      modifiedAt: new Date(),
+    };
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -684,11 +714,28 @@ export default function RecipeBuilder() {
             <Save className="w-5 h-5 mr-2" />
             Save Recipe
           </button>
+          <button
+            onClick={() => setShowLabel(true)}
+            className="btn-secondary flex items-center gap-2"
+            disabled={components.length === 0}
+            title="Preview label for this recipe"
+          >
+            <FileText className="w-5 h-5" />
+            Preview Label
+          </button>
           <button onClick={handleClearAll} className="btn-secondary">
             Clear All
           </button>
         </div>
       </div>
+
+      {/* Recipe Label Preview */}
+      {showLabel && components.length > 0 && (
+        <RecipeLabel
+          recipe={buildPreviewRecipe()}
+          onClose={() => setShowLabel(false)}
+        />
+      )}
     </div>
   );
 }

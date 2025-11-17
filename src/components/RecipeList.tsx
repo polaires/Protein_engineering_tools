@@ -3,10 +3,11 @@
  */
 
 import { useState, useMemo } from 'react';
-import { Beaker, Star, Search } from 'lucide-react';
+import { Beaker, Star, Search, FileText } from 'lucide-react';
 import { Recipe, RecipeCategory, RecipeListProps } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 import { calculateMass } from '@/utils/calculations';
+import RecipeLabel from './RecipeLabel';
 
 export default function RecipeList({ category, onSelectRecipe }: RecipeListProps) {
   const { recipes, preferences, toggleFavoriteRecipe, getChemicalById } = useApp();
@@ -16,6 +17,7 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
     category || 'all'
   );
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+  const [showLabel, setShowLabel] = useState(false);
 
   // Filter and search recipes
   const filteredRecipes = useMemo(() => {
@@ -196,7 +198,7 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6">
           <div className="glass-card max-w-4xl w-full max-h-[90vh] overflow-y-auto p-8">
             <div className="flex items-start justify-between mb-6">
-              <div>
+              <div className="flex-1">
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
                   {selectedRecipe.name}
                 </h2>
@@ -206,12 +208,22 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
                   </p>
                 )}
               </div>
-              <button
-                onClick={() => setSelectedRecipe(null)}
-                className="btn-icon"
-              >
-                ×
-              </button>
+              <div className="flex gap-2 ml-4">
+                <button
+                  onClick={() => setShowLabel(true)}
+                  className="btn-secondary flex items-center gap-2"
+                  title="Print Label"
+                >
+                  <FileText className="w-4 h-4" />
+                  Print Label
+                </button>
+                <button
+                  onClick={() => setSelectedRecipe(null)}
+                  className="btn-icon"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             {/* Recipe Info */}
@@ -314,6 +326,17 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
             )}
           </div>
         </div>
+      )}
+
+      {/* Recipe Label Modal */}
+      {showLabel && selectedRecipe && (
+        <RecipeLabel
+          recipe={{
+            ...selectedRecipe,
+            components: calculateRecipeComponents(selectedRecipe)
+          }}
+          onClose={() => setShowLabel(false)}
+        />
       )}
     </div>
   );
