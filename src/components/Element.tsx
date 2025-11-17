@@ -10,22 +10,40 @@ import { elements, categoryColors, categoryNames, Element as ElementType } from 
 export default function Element() {
   const [selectedElement, setSelectedElement] = useState<ElementType | null>(null);
 
-  const periodicTable: (ElementType | null)[][] = [
+  // Helper to get element by atomic number
+  const getElement = (num: number): ElementType | null => {
+    return elements.find(el => el.number === num) || null;
+  };
+
+  // Main periodic table (Periods 1-7)
+  const periodicTable: (ElementType | null | 'lanthanide-marker' | 'actinide-marker')[][] = [
     // Period 1
-    [elements[0], null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, elements[1]],
+    [getElement(1), null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, getElement(2)],
     // Period 2
-    [elements[2], elements[3], null, null, null, null, null, null, null, null, null, null, elements[4], elements[5], elements[6], elements[7], elements[8], elements[9]],
+    [getElement(3), getElement(4), null, null, null, null, null, null, null, null, null, null, getElement(5), getElement(6), getElement(7), getElement(8), getElement(9), getElement(10)],
     // Period 3
-    [elements[10], elements[11], null, null, null, null, null, null, null, null, null, null, elements[12], elements[13], elements[14], elements[15], elements[16], elements[17]],
+    [getElement(11), getElement(12), null, null, null, null, null, null, null, null, null, null, getElement(13), getElement(14), getElement(15), getElement(16), getElement(17), getElement(18)],
     // Period 4
-    [elements[18], elements[19], elements[20], elements[21], elements[22], elements[23], elements[24], elements[25], elements[26], elements[27], elements[28], elements[29], elements[30], elements[31], elements[32], elements[33], elements[34], elements[35]],
-    // Period 5 - simplified
-    [elements[36], elements[37], null, null, null, null, null, null, null, null, elements[38], null, null, null, null, elements[39], elements[40]],
-    // Period 6 - simplified
-    [elements[41], elements[42], null, null, null, null, null, null, null, null, elements[43], elements[44], null, null, null, null, elements[45]],
-    // Period 7 - simplified
-    [elements[46], elements[47], null, null, null, null, null, null, null, null, null, null, null, null, null, null, elements[48]],
+    [getElement(19), getElement(20), getElement(21), getElement(22), getElement(23), getElement(24), getElement(25), getElement(26), getElement(27), getElement(28), getElement(29), getElement(30), getElement(31), getElement(32), getElement(33), getElement(34), getElement(35), getElement(36)],
+    // Period 5
+    [getElement(37), getElement(38), getElement(39), getElement(40), getElement(41), getElement(42), getElement(43), getElement(44), getElement(45), getElement(46), getElement(47), getElement(48), getElement(49), getElement(50), getElement(51), getElement(52), getElement(53), getElement(54)],
+    // Period 6
+    [getElement(55), getElement(56), 'lanthanide-marker', getElement(72), getElement(73), getElement(74), getElement(75), getElement(76), getElement(77), getElement(78), getElement(79), getElement(80), getElement(81), getElement(82), getElement(83), getElement(84), getElement(85), getElement(86)],
+    // Period 7
+    [getElement(87), getElement(88), 'actinide-marker', getElement(104), getElement(105), getElement(106), getElement(107), getElement(108), getElement(109), getElement(110), getElement(111), getElement(112), getElement(113), getElement(114), getElement(115), getElement(116), getElement(117), getElement(118)],
   ];
+
+  // Lanthanides (elements 57-71)
+  const lanthanides: (ElementType | null)[] = [];
+  for (let i = 57; i <= 71; i++) {
+    lanthanides.push(getElement(i));
+  }
+
+  // Actinides (elements 89-103)
+  const actinides: (ElementType | null)[] = [];
+  for (let i = 89; i <= 103; i++) {
+    actinides.push(getElement(i));
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -36,18 +54,19 @@ export default function Element() {
           Interactive Periodic Table of Elements
         </h2>
         <p className="text-slate-600 dark:text-slate-400">
-          Click any element to view its properties, electron configuration, and detailed information.
+          Complete table of all 118 elements. Click any element to view its properties, electron configuration, and detailed information.
         </p>
       </div>
 
       {/* Periodic Table Grid */}
       <div className="card overflow-x-auto">
         <div className="min-w-max">
+          {/* Main table */}
           {periodicTable.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex gap-1">
+            <div key={rowIndex} className="flex gap-1 mb-1">
               {row.map((element, colIndex) => (
                 <div key={colIndex} className="w-14 h-16">
-                  {element ? (
+                  {element && typeof element === 'object' && 'symbol' in element ? (
                     <button
                       onClick={() => setSelectedElement(element)}
                       className={`w-full h-full ${categoryColors[element.category]} text-slate-900 rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border border-slate-300`}
@@ -57,6 +76,14 @@ export default function Element() {
                       <div className="text-lg font-bold">{element.symbol}</div>
                       <div className="text-[9px] font-normal truncate max-w-full px-1">{element.name}</div>
                     </button>
+                  ) : element === 'lanthanide-marker' ? (
+                    <div className="w-full h-full bg-pink-200 dark:bg-pink-900 rounded flex items-center justify-center text-[10px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-300">
+                      57-71
+                    </div>
+                  ) : element === 'actinide-marker' ? (
+                    <div className="w-full h-full bg-rose-200 dark:bg-rose-900 rounded flex items-center justify-center text-[10px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-300">
+                      89-103
+                    </div>
                   ) : (
                     <div className="w-full h-full" />
                   )}
@@ -64,6 +91,55 @@ export default function Element() {
               ))}
             </div>
           ))}
+
+          {/* Spacer */}
+          <div className="h-4"></div>
+
+          {/* Lanthanides */}
+          <div className="flex gap-1 mb-1">
+            <div className="w-14 h-16"></div>
+            <div className="w-14 h-16"></div>
+            {lanthanides.map((element, idx) => (
+              <div key={idx} className="w-14 h-16">
+                {element ? (
+                  <button
+                    onClick={() => setSelectedElement(element)}
+                    className={`w-full h-full ${categoryColors[element.category]} text-slate-900 rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border border-slate-300`}
+                    title={element.name}
+                  >
+                    <div className="text-[10px] font-normal">{element.number}</div>
+                    <div className="text-lg font-bold">{element.symbol}</div>
+                    <div className="text-[9px] font-normal truncate max-w-full px-1">{element.name}</div>
+                  </button>
+                ) : (
+                  <div className="w-full h-full" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Actinides */}
+          <div className="flex gap-1">
+            <div className="w-14 h-16"></div>
+            <div className="w-14 h-16"></div>
+            {actinides.map((element, idx) => (
+              <div key={idx} className="w-14 h-16">
+                {element ? (
+                  <button
+                    onClick={() => setSelectedElement(element)}
+                    className={`w-full h-full ${categoryColors[element.category]} text-slate-900 rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border border-slate-300`}
+                    title={element.name}
+                  >
+                    <div className="text-[10px] font-normal">{element.number}</div>
+                    <div className="text-lg font-bold">{element.symbol}</div>
+                    <div className="text-[9px] font-normal truncate max-w-full px-1">{element.name}</div>
+                  </button>
+                ) : (
+                  <div className="w-full h-full" />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -177,6 +253,7 @@ export default function Element() {
           <li><strong>Explore categories</strong> - Elements are color-coded by type (metals, nonmetals, noble gases, etc.)</li>
           <li><strong>View properties</strong> - See melting point, boiling point, density, and electronegativity</li>
           <li><strong>External resources</strong> - Access Wikipedia and PubChem for more detailed information</li>
+          <li><strong>Lanthanides and Actinides</strong> - Displayed separately below the main table for clarity</li>
         </ul>
       </div>
     </div>
