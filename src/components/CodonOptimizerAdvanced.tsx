@@ -4,11 +4,12 @@
  */
 
 import { useState } from 'react';
-import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield } from 'lucide-react';
+import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield, Edit3 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { OptimizationRequest, OptimizationResponse } from '@/types/codon';
 import { optimizeCodonSequence } from '@/utils/optimizationService';
 import { extractSequence } from '@/utils/fastaParser';
+import { ManualCodonEditor } from '@/components/CodonOptimizerNew/ManualCodonEditor';
 import {
   LineChart,
   Line,
@@ -20,6 +21,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
+import '@/components/CodonOptimizerNew/CodonOptimizer.css';
 
 export default function CodonOptimizerAdvanced() {
   const { showToast } = useApp();
@@ -43,7 +45,7 @@ export default function CodonOptimizerAdvanced() {
   const [loading, setLoading] = useState(false);
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison' | 'manual'>('summary');
 
   const commonEnzymes = ['BsaI', 'BbsI', 'BsmBI', 'SapI', 'BtgZI', 'Esp3I'];
 
@@ -498,6 +500,17 @@ export default function CodonOptimizerAdvanced() {
               >
                 Comparison ({result.changes.length} changes)
               </button>
+              <button
+                onClick={() => setActiveTab('manual')}
+                className={`px-4 py-2 font-semibold transition-colors flex items-center gap-2 ${
+                  activeTab === 'manual'
+                    ? 'text-green-700 dark:text-green-300 border-b-2 border-green-700 dark:border-green-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <Edit3 className="w-4 h-4" />
+                Manual Editor
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -608,6 +621,27 @@ export default function CodonOptimizerAdvanced() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === 'manual' && (
+              <div className="manual-editor-wrapper">
+                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                  <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2 flex items-center gap-2">
+                    <Edit3 className="w-5 h-5" />
+                    Interactive Manual Codon Editor
+                  </h4>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Fine-tune the optimization by manually selecting alternative codons from the dropdowns.
+                    The CAI score updates in real-time as you make changes. All replacements are validated to ensure synonymous substitutions only.
+                  </p>
+                </div>
+                <ManualCodonEditor
+                  result={result}
+                  onSequenceUpdate={() => {
+                    showToast('success', 'Sequence updated - CAI recalculated');
+                  }}
+                />
               </div>
             )}
           </div>
