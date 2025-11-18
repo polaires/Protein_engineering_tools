@@ -10,11 +10,73 @@ import { Tooltip } from './Tooltip';
 
 interface ResultsSummaryProps {
   result: OptimizationResponse;
+  optimizationTime?: number | null;
 }
 
-export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
+// Helper function to categorize CAI
+const categorizeCAI = (cai: number): { category: string; color: string; message: string } => {
+  if (cai >= 0.92) {
+    return {
+      category: 'Excellent',
+      color: '#28a745',
+      message: 'Highly optimized for E. coli expression'
+    };
+  } else if (cai >= 0.80) {
+    return {
+      category: 'Good',
+      color: '#28a745',
+      message: 'Well optimized for E. coli'
+    };
+  } else if (cai >= 0.50) {
+    return {
+      category: 'Moderate',
+      color: '#ffc107',
+      message: 'Average codon usage'
+    };
+  } else {
+    return {
+      category: 'Poor',
+      color: '#dc3545',
+      message: 'Sub-optimal codon usage for E. coli'
+    };
+  }
+};
+
+// Helper function to interpret GC content
+const interpretGC = (gc: number): { status: string; color: string; message: string } => {
+  const gcPercent = gc * 100;
+  if (gcPercent >= 48 && gcPercent <= 54) {
+    return {
+      status: 'Optimal',
+      color: '#28a745',
+      message: 'Within E. coli optimal range (48-54%)'
+    };
+  } else if (gcPercent >= 40 && gcPercent <= 60) {
+    return {
+      status: 'Acceptable',
+      color: '#28a745',
+      message: 'Acceptable for E. coli expression'
+    };
+  } else if (gcPercent >= 30 && gcPercent <= 70) {
+    return {
+      status: 'Caution',
+      color: '#ffc107',
+      message: 'May affect expression efficiency'
+    };
+  } else {
+    return {
+      status: 'Warning',
+      color: '#dc3545',
+      message: 'Extreme GC content - may cause issues'
+    };
+  }
+};
+
+export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result, optimizationTime }) => {
   const caiImprovement = ((result.final_cai - result.original_cai) / result.original_cai) * 100;
   const gcChange = ((result.gc_content_final - result.gc_content_original) * 100).toFixed(2);
+  const caiCategory = categorizeCAI(result.final_cai);
+  const gcInterpretation = interpretGC(result.gc_content_final);
 
   const downloadFasta = (sequence: string, filename: string, header: string) => {
     const fastaContent = `>${header}\n${sequence.match(/.{1,60}/g)?.join('\n') || sequence}`;
@@ -35,6 +97,15 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
     <div className="results-summary">
       <h3>Optimization Results</h3>
 
+      {optimizationTime && (
+        <div className="performance-metrics">
+          <span>⚡ Optimization completed in {optimizationTime.toFixed(0)}ms</span>
+          <span className="performance-note">
+            Expected: &lt;1000ms for 1000bp, &lt;5000ms for 5000bp
+          </span>
+        </div>
+      )}
+
       <div className="metrics-grid">
         <div className="metric-card">
           <h4>
@@ -53,7 +124,9 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
             </div>
             <div className="metric-value">
               <span className="label">Final:</span>
-              <span className="value highlight">{result.final_cai.toFixed(4)}</span>
+              <span className="value highlight" style={{ color: caiCategory.color }}>
+                {result.final_cai.toFixed(4)}
+              </span>
             </div>
             {result.original_cai > 0 && (
               <div className="metric-improvement">
@@ -78,10 +151,15 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
             </div>
             <div className="metric-value">
               <span className="label">Final:</span>
-              <span className="value highlight">{(result.gc_content_final * 100).toFixed(2)}%</span>
+              <span className="value highlight" style={{ color: gcInterpretation.color }}>
+                {(result.gc_content_final * 100).toFixed(2)}%
+              </span>
             </div>
             <div className="metric-improvement">
               <span>{gcChange >= '0' ? '↑' : '↓'} {Math.abs(parseFloat(gcChange)).toFixed(2)}%</span>
+            </div>
+            <div className="gc-status" style={{ fontSize: '12px', color: gcInterpretation.color, marginTop: '8px' }}>
+              {gcInterpretation.status}: {gcInterpretation.message}
             </div>
           </div>
         </div>
@@ -125,6 +203,39 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Expected Results Panel */}
+      <div className="expected-results-panel">
+        <h4>Result Interpretation</h4>
+        <div className="interpretation-grid">
+          <div className="interpretation-item">
+            <span className="interpretation-label">Your CAI:</span>
+            <span className="interpretation-value" style={{ color: caiCategory.color }}>
+              {result.final_cai.toFixed(4)} ({caiCategory.category})
+            </span>
+          </div>
+          <div className="interpretation-message" style={{ color: caiCategory.color }}>
+            {caiCategory.message}
+          </div>
+        </div>
+
+        <div className="expected-ranges">
+          <h5>Expected CAI Ranges for E. coli</h5>
+          <ul>
+            <li><strong>Native genes:</strong> 0.2 - 0.8 (varies by expression level)</li>
+            <li><strong>Optimized sequences:</strong> 0.92 - 0.98 (with constraints)</li>
+            <li><strong>Perfect optimization:</strong> ~1.0 (rarely achieved with constraints)</li>
+          </ul>
+        </div>
+
+        <div className="scientific-references">
+          <h5>Scientific References</h5>
+          <ul>
+            <li>Sharp & Li (1987) - CAI algorithm</li>
+            <li>Carbone et al. (2003) - E. coli codon usage tables</li>
+          </ul>
+        </div>
       </div>
 
       <div className="sequence-output">

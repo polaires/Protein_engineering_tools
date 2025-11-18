@@ -32,6 +32,7 @@ export const CodonOptimizer: React.FC = () => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison' | 'manual'>('summary');
+  const [optimizationTime, setOptimizationTime] = useState<number | null>(null);
 
   const handleOptimize = async () => {
     try {
@@ -53,9 +54,13 @@ export const CodonOptimizer: React.FC = () => {
         end_length: options.end_length || 24,
       };
 
-      // Perform optimization
+      // Perform optimization with timing
+      const startTime = performance.now();
       const optimizationResult = optimizeCodonSequence(request);
+      const endTime = performance.now();
+
       setResult(optimizationResult);
+      setOptimizationTime(endTime - startTime);
       setActiveTab('summary');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during optimization');
@@ -70,6 +75,7 @@ export const CodonOptimizer: React.FC = () => {
     setResult(null);
     setError(null);
     setSequenceType('unknown');
+    setOptimizationTime(null);
   };
 
   const handleLoadSession = (loadedResult: OptimizationResponse) => {
@@ -166,7 +172,7 @@ export const CodonOptimizer: React.FC = () => {
             </div>
 
             <div className="tab-content">
-              {activeTab === 'summary' && <ResultsSummary result={result} />}
+              {activeTab === 'summary' && <ResultsSummary result={result} optimizationTime={optimizationTime} />}
 
               {activeTab === 'chart' && (
                 <div className="charts-container">
