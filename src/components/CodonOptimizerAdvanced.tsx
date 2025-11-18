@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield, Edit3, BarChart3 } from 'lucide-react';
+import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield, Edit3, BarChart3, FileText } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { OptimizationRequest, OptimizationResponse } from '@/types/codon';
 import { optimizeCodonSequence } from '@/utils/optimizationService';
@@ -12,6 +12,10 @@ import { extractSequence } from '@/utils/fastaParser';
 import { ManualCodonEditor } from '@/components/CodonOptimizerNew/ManualCodonEditor';
 import { EnhancedCAIChart, CodonUsageHeatmap, GCContentWindow } from '@/components/AdvancedVisualizations';
 import { EnhancedComparisonTable } from '@/components/EnhancedComparisonTable';
+import { Tooltip as TooltipComponent } from '@/components/CodonOptimizerNew/Tooltip';
+import { SessionManager } from '@/components/CodonOptimizerNew/SessionManager';
+import { HelpPanel } from '@/components/CodonOptimizerNew/HelpPanel';
+import { GFP_EXAMPLE, GFP_PROTEIN_EXAMPLE } from '@/constants/examples';
 import {
   LineChart,
   Line,
@@ -24,6 +28,64 @@ import {
   ReferenceLine,
 } from 'recharts';
 import '@/components/CodonOptimizerNew/CodonOptimizer.css';
+
+// Helper functions for CAI and GC interpretation
+const categorizeCAI = (cai: number): { category: string; color: string; message: string } => {
+  if (cai >= 0.92) {
+    return {
+      category: 'Excellent',
+      color: '#28a745',
+      message: 'Highly optimized for E. coli expression'
+    };
+  } else if (cai >= 0.80) {
+    return {
+      category: 'Good',
+      color: '#28a745',
+      message: 'Well optimized for E. coli'
+    };
+  } else if (cai >= 0.50) {
+    return {
+      category: 'Moderate',
+      color: '#ffc107',
+      message: 'Average codon usage'
+    };
+  } else {
+    return {
+      category: 'Poor',
+      color: '#dc3545',
+      message: 'Sub-optimal codon usage for E. coli'
+    };
+  }
+};
+
+const interpretGC = (gc: number): { status: string; color: string; message: string } => {
+  const gcPercent = gc * 100;
+  if (gcPercent >= 48 && gcPercent <= 54) {
+    return {
+      status: 'Optimal',
+      color: '#28a745',
+      message: 'Within E. coli optimal range (48-54%)'
+    };
+  } else if (gcPercent >= 40 && gcPercent <= 60) {
+    return {
+      status: 'Acceptable',
+      color: '#28a745',
+      message: 'Acceptable for E. coli expression'
+    };
+  } else if (gcPercent >= 30 && gcPercent <= 70) {
+    return {
+      status: 'Caution',
+      color: '#ffc107',
+      message: 'May affect expression efficiency'
+    };
+  } else {
+    return {
+      status: 'Warning',
+      color: '#dc3545',
+      message: 'Extreme GC content - may cause issues'
+    };
+  }
+};
 
 export default function CodonOptimizerAdvanced() {
   const { showToast } = useApp();
@@ -45,6 +107,7 @@ export default function CodonOptimizerAdvanced() {
   const [result, setResult] = useState<OptimizationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [optimizationTime, setOptimizationTime] = useState<number | null>(null);
 
   // Active tab
   const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison' | 'manual' | 'advanced'>('summary');
@@ -79,9 +142,13 @@ export default function CodonOptimizerAdvanced() {
         end_length: endLength,
       };
 
-      // Perform optimization
+      // Perform optimization with timing
+      const startTime = performance.now();
       const optimizationResult = optimizeCodonSequence(request);
+      const endTime = performance.now();
+
       setResult(optimizationResult);
+      setOptimizationTime(endTime - startTime);
       setActiveTab('summary');
 
       showToast('success', `Sequence optimized! CAI improved from ${optimizationResult.original_cai.toFixed(3)} to ${optimizationResult.final_cai.toFixed(3)}`);
@@ -100,9 +167,17 @@ export default function CodonOptimizerAdvanced() {
   };
 
   const handleLoadExample = () => {
-    // GFP protein sequence
-    setInputSequence('MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK');
-    setInputMode('protein');
+    // Load different example based on input mode
+    const exampleSequence = inputMode === 'dna' ? GFP_EXAMPLE : GFP_PROTEIN_EXAMPLE;
+    // Extract just the sequence part (without FASTA header)
+    const cleanExample = extractSequence(exampleSequence);
+    setInputSequence(cleanExample);
+  };
+
+  const handleLoadSession = (loadedResult: OptimizationResponse) => {
+    setResult(loadedResult);
+    setInputSequence(loadedResult.original_sequence);
+    setActiveTab('summary');
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -131,6 +206,104 @@ export default function CodonOptimizerAdvanced() {
         ? prev.filter(e => e !== enzyme)
         : [...prev, enzyme]
     );
+  };
+
+  const exportReport = () => {
+    if (!result) return;
+
+    const timestamp = new Date().toLocaleString();
+    const caiCat = categorizeCAI(result.final_cai);
+    const gcInterp = interpretGC(result.gc_content_final);
+    const caiImprovement = ((result.final_cai - result.original_cai) / result.original_cai) * 100;
+
+    const report = `# Codon Optimization Report
+Generated: ${timestamp}
+
+## Optimization Summary
+
+### Performance
+${optimizationTime ? `- Optimization Time: ${optimizationTime.toFixed(0)}ms` : ''}
+- CAI Improvement: ${caiImprovement >= 0 ? '+' : ''}${caiImprovement.toFixed(1)}%
+- Codons Changed: ${result.changes.length} / ${result.codons_final.length}
+- Change Rate: ${((result.changes.length / result.codons_final.length) * 100).toFixed(1)}%
+${result.restriction_sites_removed > 0 ? `- Restriction Sites Removed: ${result.restriction_sites_removed}` : ''}
+${result.terminators_removed > 0 ? `- Terminators Removed: ${result.terminators_removed}` : ''}
+
+## Metrics Analysis
+
+### CAI Score
+- Original: ${result.original_cai.toFixed(4)}
+- Optimized: ${result.optimized_cai.toFixed(4)}
+- Final: ${result.final_cai.toFixed(4)} (${caiCat.category})
+- Interpretation: ${caiCat.message}
+
+### GC Content
+- Original: ${(result.gc_content_original * 100).toFixed(2)}%
+- Final: ${(result.gc_content_final * 100).toFixed(2)}%
+- Status: ${gcInterp.status}
+- Interpretation: ${gcInterp.message}
+
+### Sequence Changes
+- Codons Modified: ${result.changes.length}
+- Total Codons: ${result.codons_final.length}
+${result.restriction_sites_found > 0 ? `- Restriction Sites Found: ${result.restriction_sites_found}` : ''}
+${result.restriction_sites_removed > 0 ? `- Restriction Sites Removed: ${result.restriction_sites_removed}` : ''}
+${result.terminators_found > 0 ? `- Terminators Found: ${result.terminators_found}` : ''}
+${result.terminators_removed > 0 ? `- Terminators Removed: ${result.terminators_removed}` : ''}
+
+## Result Interpretation
+
+**Your CAI: ${result.final_cai.toFixed(4)} (${caiCat.category})**
+${caiCat.message}
+
+### Expected CAI Ranges for E. coli
+- Native genes: 0.2 - 0.8 (varies by expression level)
+- Optimized sequences: 0.92 - 0.98 (with constraints)
+- Perfect optimization: ~1.0 (rarely achieved with constraints)
+
+## Sequences
+
+### Original Sequence
+\`\`\`
+>${result.original_sequence.length}bp
+${result.original_sequence.match(/.{1,60}/g)?.join('\n') || result.original_sequence}
+\`\`\`
+
+### Optimized Sequence
+\`\`\`
+>${result.final_sequence.length}bp (CAI: ${result.final_cai.toFixed(4)})
+${(result.final_sequence || result.optimized_sequence).match(/.{1,60}/g)?.join('\n') || (result.final_sequence || result.optimized_sequence)}
+\`\`\`
+
+### Protein Sequence
+\`\`\`
+>${result.protein_sequence.length}aa
+${result.protein_sequence.match(/.{1,60}/g)?.join('\n') || result.protein_sequence}
+\`\`\`
+
+## Codon Changes Detail
+
+${result.changes.length > 0 ? result.changes.slice(0, 20).map((change, idx) =>
+  `${idx + 1}. Position ${change.position}: ${change.original} → ${change.optimized} (${change.amino_acid})`
+).join('\n') : 'No changes made'}
+${result.changes.length > 20 ? `\n... and ${result.changes.length - 20} more changes` : ''}
+
+## Scientific References
+
+- Sharp, P. M., & Li, W. H. (1987). The codon Adaptation Index--a measure of directional synonymous codon usage bias, and its potential applications. Nucleic Acids Research, 15(3), 1281-1295.
+- Carbone, A., Zinovyev, A., & Képès, F. (2003). Codon adaptation index as a measure of dominating codon bias. Bioinformatics, 19(16), 2005-2015.
+
+---
+Generated by Codon Optimizer for E. coli
+`;
+
+    const blob = new Blob([report], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `codon_optimization_report_${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // CAI Chart Component
@@ -240,6 +413,9 @@ export default function CodonOptimizerAdvanced() {
 
   return (
     <div className="space-y-6">
+      {/* Help Panel */}
+      <HelpPanel />
+
       {/* Info Card */}
       <div className="card bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
         <div className="flex items-start justify-between mb-3">
@@ -453,6 +629,9 @@ export default function CodonOptimizerAdvanced() {
         </div>
       </div>
 
+      {/* Session Manager */}
+      <SessionManager result={result} onLoadSession={handleLoadSession} />
+
       {/* Error Display */}
       {error && (
         <div className="card bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800">
@@ -471,35 +650,68 @@ export default function CodonOptimizerAdvanced() {
         <div className="space-y-6">
           {/* Results Summary */}
           <div className="card bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800">
-            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
-              <Info className="w-5 h-5" />
-              Optimization Results
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <Info className="w-5 h-5" />
+                Optimization Results
+              </h3>
+              <button
+                onClick={exportReport}
+                className="export-report-btn"
+                title="Export full report as Markdown"
+              >
+                <FileText size={16} />
+                Export Report
+              </button>
+            </div>
+
+            {optimizationTime && (
+              <div className="performance-metrics">
+                <span>⚡ Optimization completed in {optimizationTime.toFixed(0)}ms</span>
+                <span className="performance-note">
+                  Expected: &lt;1000ms for 1000bp, &lt;5000ms for 5000bp
+                </span>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
-                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">CAI Score</div>
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <TooltipComponent text="Codon Adaptation Index (CAI) measures how similar your codon usage is to highly expressed E. coli genes. Values range from 0 to 1, where 1 indicates optimal codon usage. Higher CAI typically correlates with improved protein expression.">
+                    <span>CAI Score</span>
+                  </TooltipComponent>
+                </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-lg font-bold text-slate-700 dark:text-slate-300">
                     {result.original_cai.toFixed(3)}
                   </span>
                   <ArrowRight className="w-4 h-4 text-green-600 dark:text-green-400" />
-                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                  <span className="text-2xl font-bold" style={{ color: categorizeCAI(result.final_cai).color }}>
                     {result.final_cai.toFixed(3)}
                   </span>
+                </div>
+                <div className="text-xs mt-1" style={{ color: categorizeCAI(result.final_cai).color }}>
+                  {categorizeCAI(result.final_cai).category}
                 </div>
               </div>
 
               <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
-                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">GC Content</div>
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <TooltipComponent text="GC Content is the percentage of guanine (G) and cytosine (C) bases in the DNA sequence. E. coli typically has ~50-52% GC content. Extreme GC content can affect expression, stability, and synthesis efficiency.">
+                    <span>GC Content</span>
+                  </TooltipComponent>
+                </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-lg font-bold text-slate-700 dark:text-slate-300">
                     {(result.gc_content_original * 100).toFixed(1)}%
                   </span>
                   <ArrowRight className="w-4 h-4 text-green-600 dark:text-green-400" />
-                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                  <span className="text-2xl font-bold" style={{ color: interpretGC(result.gc_content_final).color }}>
                     {(result.gc_content_final * 100).toFixed(1)}%
                   </span>
+                </div>
+                <div className="text-xs mt-1" style={{ color: interpretGC(result.gc_content_final).color }}>
+                  {interpretGC(result.gc_content_final).status}: {interpretGC(result.gc_content_final).message}
                 </div>
               </div>
 
@@ -553,6 +765,39 @@ export default function CodonOptimizerAdvanced() {
                 )}
               </div>
             )}
+
+            {/* Interpretation Panel */}
+            <div className="expected-results-panel">
+              <h4>Result Interpretation</h4>
+              <div className="interpretation-grid">
+                <div className="interpretation-item">
+                  <span className="interpretation-label">Your CAI:</span>
+                  <span className="interpretation-value" style={{ color: categorizeCAI(result.final_cai).color }}>
+                    {result.final_cai.toFixed(4)} ({categorizeCAI(result.final_cai).category})
+                  </span>
+                </div>
+                <div className="interpretation-message" style={{ color: categorizeCAI(result.final_cai).color }}>
+                  {categorizeCAI(result.final_cai).message}
+                </div>
+              </div>
+
+              <div className="expected-ranges">
+                <h5>Expected CAI Ranges for E. coli</h5>
+                <ul>
+                  <li><strong>Native genes:</strong> 0.2 - 0.8 (varies by expression level)</li>
+                  <li><strong>Optimized sequences:</strong> 0.92 - 0.98 (with constraints)</li>
+                  <li><strong>Perfect optimization:</strong> ~1.0 (rarely achieved with constraints)</li>
+                </ul>
+              </div>
+
+              <div className="scientific-references">
+                <h5>Scientific References</h5>
+                <ul>
+                  <li>Sharp & Li (1987) - CAI algorithm</li>
+                  <li>Carbone et al. (2003) - E. coli codon usage tables</li>
+                </ul>
+              </div>
+            </div>
 
             {/* Tabs */}
             <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700">
