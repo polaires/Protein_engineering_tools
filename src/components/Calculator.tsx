@@ -82,6 +82,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   // Solubility checking
   const [selectedChemical, setSelectedChemical] = useState<Chemical | null>(null);
   const [solubilityCheck, setSolubilityCheck] = useState<Awaited<ReturnType<typeof checkSolubilityAsync>> | null>(null);
+  const [pubchemCid, setPubchemCid] = useState<string | null>(null);
 
   // Update calculation mode when changed
   useEffect(() => {
@@ -143,9 +144,12 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
       const concentrationMgML = (mass / volumeML) * 1000; // convert g/mL to mg/mL
 
       // Extract PubChem CID if available
-      let pubchemCid: string | undefined;
+      let cidForCheck: string | undefined;
       if (selectedChemical.id.startsWith('pubchem-')) {
-        pubchemCid = selectedChemical.id.replace('pubchem-', '');
+        cidForCheck = selectedChemical.id.replace('pubchem-', '');
+        setPubchemCid(cidForCheck); // Store for linking
+      } else {
+        setPubchemCid(null);
       }
 
       // Use async solubility check
@@ -153,16 +157,18 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         const solubilityResult = await checkSolubilityAsync(
           selectedChemical.id,
           concentrationMgML,
-          pubchemCid,
+          cidForCheck,
           selectedChemical.commonName // Pass the chemical name for fallback lookup
         );
         setSolubilityCheck(solubilityResult);
       } catch (error) {
         console.error('Solubility check failed:', error);
         setSolubilityCheck(null);
+        setPubchemCid(null);
       }
     } else {
       setSolubilityCheck(null);
+      setPubchemCid(null);
     }
 
     if (calcResult.success) {
@@ -198,6 +204,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     setFinalVolumeUnit(VolumeUnit.MILLILITER);
     setResult(null);
     setSolubilityCheck(null);
+    setPubchemCid(null);
   };
 
   // Render input fields based on calculation mode
@@ -777,7 +784,24 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
               {/* Data source indicator */}
               <p className="text-xs mt-3 text-slate-500 dark:text-slate-400 italic">
                 {solubilityCheck.source === 'database' && '📚 From curated database'}
-                {solubilityCheck.source === 'pubchem' && '🌐 From PubChem API'}
+                {solubilityCheck.source === 'pubchem' && (
+                  <>
+                    🌐 From PubChem API
+                    {pubchemCid && (
+                      <>
+                        {' - '}
+                        <a
+                          href={`https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemCid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          View on PubChem ↗
+                        </a>
+                      </>
+                    )}
+                  </>
+                )}
                 {solubilityCheck.source === 'general' && 'ℹ️ General concentration guidelines'}
               </p>
             </div>
