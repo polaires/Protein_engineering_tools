@@ -194,14 +194,14 @@ export default function CodonOptimizerAdvanced() {
         </div>
 
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData} margin={{ top: 20, right: 60, left: 80, bottom: 50 }}>
+          <LineChart data={chartData} margin={{ top: 20, right: 60, left: 100, bottom: 50 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="position"
               label={{ value: 'Codon Position', position: 'insideBottom', offset: -10 }}
             />
             <YAxis
-              label={{ value: 'Relative Adaptiveness (w_i)', angle: -90, position: 'insideLeft', offset: 10 }}
+              label={{ value: 'Relative Adaptiveness (w_i)', angle: -90, position: 'insideLeft', offset: 15 }}
               domain={[0, 1]}
             />
             <Tooltip content={<CustomTooltip />} />
