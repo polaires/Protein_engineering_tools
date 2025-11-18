@@ -4,12 +4,13 @@
  */
 
 import { useState } from 'react';
-import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield, Edit3 } from 'lucide-react';
+import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield, Edit3, BarChart3 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { OptimizationRequest, OptimizationResponse } from '@/types/codon';
 import { optimizeCodonSequence } from '@/utils/optimizationService';
 import { extractSequence } from '@/utils/fastaParser';
 import { ManualCodonEditor } from '@/components/CodonOptimizerNew/ManualCodonEditor';
+import { EnhancedCAIChart, CodonUsageHeatmap, GCContentWindow } from '@/components/AdvancedVisualizations';
 import {
   LineChart,
   Line,
@@ -45,7 +46,7 @@ export default function CodonOptimizerAdvanced() {
   const [loading, setLoading] = useState(false);
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison' | 'manual'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison' | 'manual' | 'advanced'>('summary');
 
   const commonEnzymes = ['BsaI', 'BbsI', 'BsmBI', 'SapI', 'BtgZI', 'Esp3I'];
 
@@ -511,6 +512,17 @@ export default function CodonOptimizerAdvanced() {
                 <Edit3 className="w-4 h-4" />
                 Manual Editor
               </button>
+              <button
+                onClick={() => setActiveTab('advanced')}
+                className={`px-4 py-2 font-semibold transition-colors flex items-center gap-2 ${
+                  activeTab === 'advanced'
+                    ? 'text-green-700 dark:text-green-300 border-b-2 border-green-700 dark:border-green-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                Advanced Analysis
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -642,6 +654,56 @@ export default function CodonOptimizerAdvanced() {
                     showToast('success', 'Sequence updated - CAI recalculated');
                   }}
                 />
+              </div>
+            )}
+
+            {activeTab === 'advanced' && (
+              <div className="space-y-8">
+                <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                  <h4 className="font-semibold text-purple-800 dark:text-purple-200 mb-2 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5" />
+                    Advanced Sequence Analysis
+                  </h4>
+                  <p className="text-sm text-purple-700 dark:text-purple-300">
+                    Explore detailed visualizations including enhanced CAI charts with zoom/pan,
+                    codon usage heatmaps, and GC content sliding window analysis.
+                  </p>
+                </div>
+
+                {/* Enhanced CAI Charts with zoom and export */}
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">
+                    Enhanced CAI Visualization
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Interactive charts with zoom, pan, brush selection, and export capabilities (CSV/SVG).
+                    Click the zoom icon to enable brush selection for detailed analysis.
+                  </p>
+
+                  {result.w_i_values_original.length > 0 && (
+                    <EnhancedCAIChart result={result} type="original" />
+                  )}
+
+                  <EnhancedCAIChart result={result} type="optimized" />
+
+                  {(result.restriction_sites_removed > 0 || result.terminators_removed > 0) && (
+                    <EnhancedCAIChart result={result} type="final" />
+                  )}
+                </div>
+
+                <div className="divider" />
+
+                {/* Codon Usage Heatmap */}
+                <div>
+                  <CodonUsageHeatmap result={result} />
+                </div>
+
+                <div className="divider" />
+
+                {/* GC Content Sliding Window */}
+                <div>
+                  <GCContentWindow result={result} windowSize={50} />
+                </div>
               </div>
             )}
           </div>
