@@ -299,6 +299,34 @@
   color: #333;
 }
 
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.export-report-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.export-report-btn:hover {
+  background: #5568d3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1293,6 +1321,127 @@
   color: #667eea;
 }
 
+/* Help Panel Styles */
+.help-panel {
+  margin-bottom: 30px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.help-panel-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.help-panel-toggle:hover {
+  filter: brightness(1.1);
+}
+
+.help-panel-toggle svg:last-child {
+  margin-left: auto;
+}
+
+.help-panel-content {
+  padding: 25px;
+  background: white;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.help-section {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.help-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.help-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 1.3em;
+  border-left: 4px solid #667eea;
+  padding-left: 12px;
+}
+
+.help-section h4 {
+  margin: 15px 0 10px 0;
+  color: #444;
+  font-size: 1.1em;
+}
+
+.help-section h5 {
+  margin: 10px 0 8px 0;
+  color: #555;
+  font-size: 1em;
+}
+
+.help-section p {
+  margin: 10px 0;
+  line-height: 1.6;
+  color: #555;
+}
+
+.help-section ul,
+.help-section ol {
+  margin: 10px 0;
+  padding-left: 25px;
+  line-height: 1.8;
+}
+
+.help-section li {
+  margin: 8px 0;
+  color: #555;
+}
+
+.help-section strong {
+  color: #333;
+}
+
+.help-subsection {
+  margin: 15px 0;
+  padding-left: 15px;
+  border-left: 2px solid #e9ecef;
+}
+
+.help-formula {
+  padding: 15px;
+  background: #f8f9fa;
+  border-left: 3px solid #667eea;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  text-align: center;
+  margin: 15px 0;
+  color: #333;
+}
+
 /* Tooltip Styles */
 .tooltip-wrapper {
   position: relative;
@@ -1645,5 +1794,24 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 5px;
+  }
+
+  .help-panel-content {
+    padding: 15px;
+  }
+
+  .help-section {
+    margin-bottom: 20px;
+  }
+
+  .results-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .export-report-btn {
+    width: 100%;
+    justify-content: center;
   }
 }

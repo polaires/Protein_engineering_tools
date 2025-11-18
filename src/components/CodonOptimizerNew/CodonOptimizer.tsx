@@ -15,6 +15,7 @@ import { SequenceComparison } from './SequenceComparison';
 import { ManualCodonEditor } from './ManualCodonEditor';
 import { EnzymeSelector } from './EnzymeSelector';
 import { SessionManager } from './SessionManager';
+import { HelpPanel } from './HelpPanel';
 import './CodonOptimizer.css';
 
 export const CodonOptimizer: React.FC = () => {
@@ -94,6 +95,8 @@ export const CodonOptimizer: React.FC = () => {
       </header>
 
       <div className="optimizer-content">
+        <HelpPanel />
+
         <div className="input-section">
           <SequenceInput
             value={sequence}
