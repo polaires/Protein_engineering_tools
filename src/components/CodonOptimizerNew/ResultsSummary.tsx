@@ -6,6 +6,7 @@
 import React from 'react';
 import { Download, Copy } from 'lucide-react';
 import { OptimizationResponse } from '../../types/codon';
+import { Tooltip } from './Tooltip';
 
 interface ResultsSummaryProps {
   result: OptimizationResponse;
@@ -36,7 +37,11 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
 
       <div className="metrics-grid">
         <div className="metric-card">
-          <h4>CAI Score</h4>
+          <h4>
+            <Tooltip text="Codon Adaptation Index (CAI) measures how similar your codon usage is to highly expressed E. coli genes. Values range from 0 to 1, where 1 indicates optimal codon usage. Higher CAI typically correlates with improved protein expression.">
+              CAI Score
+            </Tooltip>
+          </h4>
           <div className="metric-comparison">
             <div className="metric-value">
               <span className="label">Original:</span>
@@ -61,7 +66,11 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result }) => {
         </div>
 
         <div className="metric-card">
-          <h4>GC Content</h4>
+          <h4>
+            <Tooltip text="GC Content is the percentage of guanine (G) and cytosine (C) bases in the DNA sequence. E. coli typically has ~50-52% GC content. Extreme GC content can affect expression, stability, and synthesis efficiency.">
+              GC Content
+            </Tooltip>
+          </h4>
           <div className="metric-comparison">
             <div className="metric-value">
               <span className="label">Original:</span>

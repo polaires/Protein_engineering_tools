@@ -11,11 +11,12 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
+import { Tooltip } from './Tooltip';
 
 interface CAIChartProps {
   w_i_values: number[];
@@ -67,7 +68,11 @@ export const CAIChart: React.FC<CAIChartProps> = ({ w_i_values, codons, title })
 
   return (
     <div className="cai-chart">
-      <h4>{title}</h4>
+      <h4>
+        <Tooltip text="Relative Adaptiveness (w_i) is a measure for each codon showing how frequently it's used in highly expressed E. coli genes compared to other codons for the same amino acid. Values range from 0 to 1, where 1 indicates the most frequently used codon.">
+          {title}
+        </Tooltip>
+      </h4>
 
       <div className="chart-stats">
         <div className="stat-item">
@@ -106,7 +111,7 @@ export const CAIChart: React.FC<CAIChartProps> = ({ w_i_values, codons, title })
             label={{ value: 'Relative Adaptiveness (w_i)', angle: -90, position: 'insideLeft' }}
             domain={[0, 1]}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <RechartsTooltip content={<CustomTooltip />} />
           <Legend />
 
           {/* Mean line */}

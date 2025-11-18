@@ -14,6 +14,7 @@ import { CAIChart } from './CAIChart';
 import { SequenceComparison } from './SequenceComparison';
 import { ManualCodonEditor } from './ManualCodonEditor';
 import { EnzymeSelector } from './EnzymeSelector';
+import { SessionManager } from './SessionManager';
 import './CodonOptimizer.css';
 
 export const CodonOptimizer: React.FC = () => {
@@ -71,6 +72,12 @@ export const CodonOptimizer: React.FC = () => {
     setSequenceType('unknown');
   };
 
+  const handleLoadSession = (loadedResult: OptimizationResponse) => {
+    setResult(loadedResult);
+    setSequence(loadedResult.original_sequence);
+    setActiveTab('summary');
+  };
+
   return (
     <div className="codon-optimizer">
       <header className="optimizer-header">
@@ -126,6 +133,8 @@ export const CodonOptimizer: React.FC = () => {
             </div>
           )}
         </div>
+
+        <SessionManager result={result} onLoadSession={handleLoadSession} />
 
         {result && (
           <div className="results-section">

@@ -136,3 +136,11 @@ export interface CAIAnalysisResult {
   mean_w_i: number;
   std_w_i: number;
 }
+
+// Saved Session Types
+export interface SavedSession {
+  id: string;
+  name: string;
+  timestamp: number;
+  result: OptimizationResponse;
+}
