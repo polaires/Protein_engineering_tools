@@ -11,6 +11,7 @@ import { optimizeCodonSequence } from '@/utils/optimizationService';
 import { extractSequence } from '@/utils/fastaParser';
 import { ManualCodonEditor } from '@/components/CodonOptimizerNew/ManualCodonEditor';
 import { EnhancedCAIChart, CodonUsageHeatmap, GCContentWindow } from '@/components/AdvancedVisualizations';
+import { EnhancedComparisonTable } from '@/components/EnhancedComparisonTable';
 import {
   LineChart,
   Line,
@@ -687,36 +688,16 @@ export default function CodonOptimizerAdvanced() {
             )}
 
             {activeTab === 'comparison' && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-100 dark:bg-slate-800">
-                    <tr>
-                      <th className="p-2 text-left">Position</th>
-                      <th className="p-2 text-left">AA</th>
-                      <th className="p-2 text-left">Original Codon</th>
-                      <th className="p-2 text-left">Original w_i</th>
-                      <th className="p-2 text-left">Optimized Codon</th>
-                      <th className="p-2 text-left">Optimized w_i</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.changes.map((change, idx) => {
-                      const originalWi = result.w_i_values_original[change.position] || 0;
-                      const finalWi = result.w_i_values_final[change.position] || 0;
-
-                      return (
-                        <tr key={idx} className="border-b border-slate-200 dark:border-slate-700 bg-yellow-50 dark:bg-yellow-900/20">
-                          <td className="p-2">{change.position + 1}</td>
-                          <td className="p-2 font-bold">{change.amino_acid}</td>
-                          <td className="p-2 font-mono">{change.original}</td>
-                          <td className="p-2">{originalWi.toFixed(3)}</td>
-                          <td className="p-2 font-mono text-green-700 dark:text-green-300 font-bold">{change.optimized}</td>
-                          <td className="p-2 text-green-700 dark:text-green-300 font-bold">{finalWi.toFixed(3)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div>
+                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                  <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">
+                    Enhanced Comparison Table
+                  </h4>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Sort, filter, and analyze codon changes. Select specific changes for batch operations or export the full comparison data to CSV.
+                  </p>
+                </div>
+                <EnhancedComparisonTable result={result} />
               </div>
             )}
 
