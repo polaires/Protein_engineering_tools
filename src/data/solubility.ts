@@ -811,21 +811,81 @@ export function checkSolubility(
     };
   }
 
-  // Convert solubility to mg/mL for comparison
-  let solubilityMgML = data.waterSolubility;
+  // Convert base water solubility to mg/mL for comparison
+  let baseSolubilityMgML = data.waterSolubility;
   if (data.waterSolubilityUnit === 'g/L') {
-    solubilityMgML = data.waterSolubility; // g/L = mg/mL
+    baseSolubilityMgML = data.waterSolubility; // g/L = mg/mL
   }
 
-  const percentOfLimit = (concentrationMgML / solubilityMgML) * 100;
+  // Check alternative solvents for better solubility (especially pH-adjusted water)
+  let bestSolvent: { solvent: string; solubilityMgML: number; notes?: string } | null = null;
+
+  if (data.alternativeSolvents && data.alternativeSolvents.length > 0) {
+    for (const alt of data.alternativeSolvents) {
+      let altSolubilityMgML = alt.solubility;
+
+      // Convert alternative solvent solubility to mg/mL
+      if (alt.unit === 'g/L' || alt.unit === 'mg/mL') {
+        altSolubilityMgML = alt.solubility;
+      } else if (alt.unit === 'mg/L') {
+        altSolubilityMgML = alt.solubility / 1000;
+      }
+
+      // Prioritize water-based solvents (pH adjustment, water with base, etc.)
+      const isWaterBased = /water|pH|aqueous/i.test(alt.solvent);
+
+      if (!bestSolvent || (isWaterBased && altSolubilityMgML > bestSolvent.solubilityMgML)) {
+        bestSolvent = {
+          solvent: alt.solvent,
+          solubilityMgML: altSolubilityMgML,
+          notes: alt.notes
+        };
+      } else if (!isWaterBased && altSolubilityMgML > bestSolvent.solubilityMgML && !/water|pH|aqueous/i.test(bestSolvent.solvent)) {
+        // Only replace with non-water solvent if current best is also non-water
+        bestSolvent = {
+          solvent: alt.solvent,
+          solubilityMgML: altSolubilityMgML,
+          notes: alt.notes
+        };
+      }
+    }
+  }
+
+  // Determine which solubility limit to use
+  let effectiveSolubilityMgML = baseSolubilityMgML;
+  let usedAlternative = false;
+
+  // If concentration exceeds base water solubility but is within alternative solvent range, use that
+  if (bestSolvent && concentrationMgML > baseSolubilityMgML && concentrationMgML <= bestSolvent.solubilityMgML) {
+    effectiveSolubilityMgML = bestSolvent.solubilityMgML;
+    usedAlternative = true;
+  }
+
+  const percentOfLimit = (concentrationMgML / effectiveSolubilityMgML) * 100;
   const isExceeded = percentOfLimit > 100;
   const isNearLimit = percentOfLimit > 80 && percentOfLimit <= 100;
 
   let warning: string | null = null;
   const suggestions: string[] = [];
 
-  if (isExceeded) {
-    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds water solubility limit (${solubilityMgML.toFixed(1)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%.`;
+  if (usedAlternative && !isExceeded) {
+    // Concentration is OK with alternative solvent (pH adjustment, etc.)
+    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) requires ${bestSolvent!.solvent.toLowerCase()} (solubility: ${effectiveSolubilityMgML.toFixed(1)} mg/mL). Standard water solubility is only ${baseSolubilityMgML.toFixed(1)} mg/mL.`;
+
+    if (data.notes) {
+      suggestions.push(data.notes);
+    }
+
+    if (bestSolvent!.notes) {
+      suggestions.push(`💡 ${bestSolvent!.notes}`);
+    }
+  } else if (isExceeded) {
+    // Exceeds even the best alternative solvent
+    if (usedAlternative) {
+      warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds solubility even with ${bestSolvent!.solvent.toLowerCase()} (limit: ${effectiveSolubilityMgML.toFixed(1)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%.`;
+    } else {
+      warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds water solubility limit (${baseSolubilityMgML.toFixed(1)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%.`;
+    }
 
     if (data.notes) {
       suggestions.push(data.notes);
@@ -841,7 +901,11 @@ export function checkSolubility(
       suggestions.push('Consider preparing a more concentrated stock solution in an alternative solvent and diluting to working concentration.');
     }
   } else if (isNearLimit) {
-    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of water solubility limit (${solubilityMgML.toFixed(1)} mg/mL). May require heating or extended mixing.`;
+    if (usedAlternative) {
+      warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of solubility with ${bestSolvent!.solvent.toLowerCase()}. May require extended mixing.`;
+    } else {
+      warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of water solubility limit (${baseSolubilityMgML.toFixed(1)} mg/mL). May require heating or extended mixing.`;
+    }
 
     if (data.notes) {
       suggestions.push(data.notes);
