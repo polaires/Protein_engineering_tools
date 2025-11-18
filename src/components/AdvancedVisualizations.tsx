@@ -154,7 +154,7 @@ export function EnhancedCAIChart({ result, type }: EnhancedCAIChartProps) {
       <ResponsiveContainer width="100%" height={400} ref={chartRef}>
         <LineChart
           data={chartData}
-          margin={{ top: 5, right: 30, left: 20, bottom: showBrush ? 60 : 5 }}
+          margin={{ top: 20, right: 60, left: 80, bottom: showBrush ? 70 : 50 }}
           onMouseDown={(e: any) => {
             if (e && e.activeLabel) {
               setZoomDomain([e.activeLabel - 50, e.activeLabel + 50]);
@@ -164,11 +164,11 @@ export function EnhancedCAIChart({ result, type }: EnhancedCAIChartProps) {
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey="position"
-            label={{ value: 'Codon Position', position: 'insideBottom', offset: showBrush ? -50 : -5 }}
+            label={{ value: 'Codon Position', position: 'insideBottom', offset: -10 }}
             domain={zoomDomain || ['dataMin', 'dataMax']}
           />
           <YAxis
-            label={{ value: 'Relative Adaptiveness (w_i)', angle: -90, position: 'insideLeft' }}
+            label={{ value: 'Relative Adaptiveness (w_i)', angle: -90, position: 'insideLeft', offset: 10 }}
             domain={[0, 1]}
           />
           <Tooltip
@@ -403,14 +403,14 @@ export function GCContentWindow({ result, windowSize = 50 }: GCContentWindowProp
       </div>
 
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={windowData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+        <LineChart data={windowData} margin={{ top: 20, right: 60, left: 70, bottom: 50 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey="position"
-            label={{ value: 'Position (bp)', position: 'insideBottom', offset: -5 }}
+            label={{ value: 'Position (bp)', position: 'insideBottom', offset: -10 }}
           />
           <YAxis
-            label={{ value: 'GC Content (%)', angle: -90, position: 'insideLeft' }}
+            label={{ value: 'GC Content (%)', angle: -90, position: 'insideLeft', offset: 10 }}
             domain={[0, 100]}
           />
           <Tooltip
