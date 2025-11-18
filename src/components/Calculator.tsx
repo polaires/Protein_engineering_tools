@@ -11,10 +11,11 @@ import {
   CalculatorProps,
   ConcentrationUnit,
   VolumeUnit,
+  MassUnit,
   Recipe,
   Chemical,
 } from '@/types';
-import { performCalculation, formatResult, convertToMolarity, convertToMilliliters } from '@/utils/calculations';
+import { performCalculation, formatResult, convertToMolarity, convertToMilliliters, convertToGrams } from '@/utils/calculations';
 import { checkSolubilityAsync } from '@/data/solubility';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
@@ -69,6 +70,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   // Unit state
   const [molarityUnit, setMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MOLAR);
   const [volumeUnit, setVolumeUnit] = useState<VolumeUnit>(VolumeUnit.MILLILITER);
+  const [massUnit, setMassUnit] = useState<MassUnit>(MassUnit.GRAM);
   const [initialMolarityUnit, setInitialMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MOLAR);
   const [finalMolarityUnit, setFinalMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MOLAR);
   const [initialVolumeUnit, setInitialVolumeUnit] = useState<VolumeUnit>(VolumeUnit.MILLILITER);
@@ -104,7 +106,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
 
   // Perform calculation with unit conversion
   const handleCalculate = async () => {
-    // Convert to base units (M and mL) before calculation
+    // Convert to base units (M, mL, and g) before calculation
     const convertedCalculation: MolarityCalculation = {
       ...calculation,
       molarity: calculation.molarity !== undefined
@@ -112,6 +114,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         : undefined,
       volume: calculation.volume !== undefined
         ? convertToMilliliters(calculation.volume, volumeUnit)
+        : undefined,
+      mass: calculation.mass !== undefined
+        ? convertToGrams(calculation.mass, massUnit)
         : undefined,
       initialMolarity: calculation.initialMolarity !== undefined
         ? convertToMolarity(calculation.initialMolarity, initialMolarityUnit)
@@ -186,6 +191,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     });
     setMolarityUnit(ConcentrationUnit.MOLAR);
     setVolumeUnit(VolumeUnit.MILLILITER);
+    setMassUnit(MassUnit.GRAM);
     setInitialMolarityUnit(ConcentrationUnit.MOLAR);
     setFinalMolarityUnit(ConcentrationUnit.MOLAR);
     setInitialVolumeUnit(VolumeUnit.MILLILITER);
@@ -284,16 +290,27 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
           <div className="space-y-4">
             <div>
               <label className="input-label">
-                Mass (g) *
+                Mass *
               </label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 5.0"
-                step="any"
-                value={calculation.mass ?? ''}
-                onChange={(e) => handleInputChange('mass', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  className="input-field flex-1"
+                  placeholder={massUnit === MassUnit.GRAM ? "e.g., 0.292" : massUnit === MassUnit.MILLIGRAM ? "e.g., 292" : "e.g., 292000"}
+                  step="any"
+                  value={calculation.mass ?? ''}
+                  onChange={(e) => handleInputChange('mass', e.target.value)}
+                />
+                <select
+                  className="select-field w-20"
+                  value={massUnit}
+                  onChange={(e) => setMassUnit(e.target.value as MassUnit)}
+                >
+                  <option value={MassUnit.GRAM}>g</option>
+                  <option value={MassUnit.MILLIGRAM}>mg</option>
+                  <option value={MassUnit.MICROGRAM}>μg</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -353,16 +370,27 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
           <div className="space-y-4">
             <div>
               <label className="input-label">
-                Mass Available (g) *
+                Mass Available *
               </label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 5.0"
-                step="any"
-                value={calculation.mass ?? ''}
-                onChange={(e) => handleInputChange('mass', e.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  className="input-field flex-1"
+                  placeholder={massUnit === MassUnit.GRAM ? "e.g., 0.292" : massUnit === MassUnit.MILLIGRAM ? "e.g., 292" : "e.g., 292000"}
+                  step="any"
+                  value={calculation.mass ?? ''}
+                  onChange={(e) => handleInputChange('mass', e.target.value)}
+                />
+                <select
+                  className="select-field w-20"
+                  value={massUnit}
+                  onChange={(e) => setMassUnit(e.target.value as MassUnit)}
+                >
+                  <option value={MassUnit.GRAM}>g</option>
+                  <option value={MassUnit.MILLIGRAM}>mg</option>
+                  <option value={MassUnit.MICROGRAM}>μg</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -672,34 +700,47 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         </div>
       )}
 
-      {/* Solubility Warning */}
-      {solubilityCheck && solubilityCheck.warning && (
+      {/* Solubility Information */}
+      {solubilityCheck && (
         <div className={`p-4 border-2 rounded-lg animate-in ${
           solubilityCheck.isExceeded
             ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-            : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+            : solubilityCheck.warning
+            ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+            : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
         }`}>
           <div className="flex items-start gap-3">
             <AlertTriangle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
               solubilityCheck.isExceeded
                 ? 'text-red-600 dark:text-red-400'
-                : 'text-yellow-600 dark:text-yellow-400'
+                : solubilityCheck.warning
+                ? 'text-yellow-600 dark:text-yellow-400'
+                : 'text-green-600 dark:text-green-400'
             }`} />
             <div className="flex-1">
               <h4 className={`font-semibold mb-2 ${
                 solubilityCheck.isExceeded
                   ? 'text-red-800 dark:text-red-200'
-                  : 'text-yellow-800 dark:text-yellow-200'
+                  : solubilityCheck.warning
+                  ? 'text-yellow-800 dark:text-yellow-200'
+                  : 'text-green-800 dark:text-green-200'
               }`}>
-                {solubilityCheck.isExceeded ? 'Solubility Limit Exceeded' : 'Approaching Solubility Limit'}
+                {solubilityCheck.isExceeded ? 'Solubility Limit Exceeded' : solubilityCheck.warning ? 'Approaching Solubility Limit' : 'Solubility Check: Safe'}
               </h4>
-              <p className={`text-sm mb-2 ${
-                solubilityCheck.isExceeded
-                  ? 'text-red-700 dark:text-red-300'
-                  : 'text-yellow-700 dark:text-yellow-300'
-              }`}>
-                {solubilityCheck.warning}
-              </p>
+              {solubilityCheck.warning && (
+                <p className={`text-sm mb-2 ${
+                  solubilityCheck.isExceeded
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-yellow-700 dark:text-yellow-300'
+                }`}>
+                  {solubilityCheck.warning}
+                </p>
+              )}
+              {!solubilityCheck.warning && (
+                <p className="text-sm mb-2 text-green-700 dark:text-green-300">
+                  Concentration is within safe limits for water solubility.
+                </p>
+              )}
               {solubilityCheck.suggestions.length > 0 && (
                 <div className={`mt-3 p-3 rounded-lg ${
                   solubilityCheck.isExceeded

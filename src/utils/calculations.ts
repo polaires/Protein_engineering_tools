@@ -14,6 +14,7 @@ import {
   CalculationMode,
   ConcentrationUnit,
   VolumeUnit,
+  MassUnit,
 } from '@/types';
 
 // ============================================================================
@@ -362,6 +363,22 @@ export function convertToMilliliters(value: number, unit: VolumeUnit): number {
       return value / 1000;
     default:
       throw new Error(`Unknown volume unit: ${unit}`);
+  }
+}
+
+/**
+ * Convert mass to grams (base unit for calculations)
+ */
+export function convertToGrams(value: number, unit: MassUnit): number {
+  switch (unit) {
+    case MassUnit.GRAM:
+      return value;
+    case MassUnit.MILLIGRAM:
+      return value / 1000;
+    case MassUnit.MICROGRAM:
+      return value / 1000000;
+    default:
+      throw new Error(`Unknown mass unit: ${unit}`);
   }
 }
 

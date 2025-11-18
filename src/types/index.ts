@@ -123,6 +123,12 @@ export enum VolumeUnit {
   MICROLITER = 'μL',
 }
 
+export enum MassUnit {
+  GRAM = 'g',
+  MILLIGRAM = 'mg',
+  MICROGRAM = 'μg',
+}
+
 // ============================================================================
 // Database Types
 // ============================================================================
