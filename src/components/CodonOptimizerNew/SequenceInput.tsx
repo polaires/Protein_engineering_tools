@@ -7,7 +7,10 @@ import React, { useState } from 'react';
 import { Clipboard, FileText, Dna } from 'lucide-react';
 import { detectSequenceType, getSequenceLength } from '../../utils/sequenceValidator';
 import { extractSequence, isFastaFormat } from '../../utils/fastaParser';
-import { GFP_EXAMPLE } from '../../constants/examples';
+import {
+  GFP_EXAMPLE,
+  GFP_PROTEIN_EXAMPLE
+} from '../../constants/examples';
 import { reverseTranslate } from '../../utils/codonOptimizer';
 import { loadCodonUsageData } from '../../data/codonData';
 
@@ -96,8 +99,10 @@ export const SequenceInput: React.FC<SequenceInputProps> = ({
   };
 
   const handleLoadExample = () => {
-    onChange(GFP_EXAMPLE);
-    const extracted = extractSequence(GFP_EXAMPLE);
+    // Load different example based on input mode
+    const exampleSequence = inputMode === 'dna' ? GFP_EXAMPLE : GFP_PROTEIN_EXAMPLE;
+    onChange(exampleSequence);
+    const extracted = extractSequence(exampleSequence);
     const type = detectSequenceType(extracted);
     onSequenceTypeChange?.(type);
   };
@@ -164,8 +169,12 @@ export const SequenceInput: React.FC<SequenceInputProps> = ({
           <FileText size={14} />
           <input type="file" accept=".txt,.fasta,.fa,.seq" onChange={handleFileUpload} />
         </label>
-        <button onClick={handleLoadExample} className="action-btn-compact" title="Load GFP example">
-          Example
+        <button
+          onClick={handleLoadExample}
+          className="action-btn-compact"
+          title={inputMode === 'dna' ? 'Load GFP DNA example' : 'Load GFP protein example'}
+        >
+          {inputMode === 'dna' ? '🧬 DNA' : '🔬 Protein'} Example
         </button>
         <button onClick={handleClear} className="action-btn-compact btn-clear" title="Clear">
           ×
