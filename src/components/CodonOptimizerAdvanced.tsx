@@ -255,9 +255,35 @@ export default function CodonOptimizerAdvanced() {
 
       {/* Input Section */}
       <div className="card">
-        <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
-          Sequence Input
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+            Sequence Input
+          </h3>
+
+          {/* DNA/Protein Toggle */}
+          <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setInputMode('dna')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                inputMode === 'dna'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              DNA
+            </button>
+            <button
+              onClick={() => setInputMode('protein')}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                inputMode === 'protein'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              Protein
+            </button>
+          </div>
+        </div>
 
         <div className="mb-4">
           <label className="input-label">
@@ -272,8 +298,66 @@ export default function CodonOptimizerAdvanced() {
             value={inputSequence}
             onChange={(e) => setInputSequence(e.target.value)}
           />
-          <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Length: {inputSequence.length} characters
+          <div className="flex items-center justify-between mt-1">
+            <div className="text-sm text-slate-500 dark:text-slate-400">
+              Length: {inputSequence.replace(/\s/g, '').length} {inputMode === 'dna' ? 'bp' : 'aa'}
+            </div>
+            {inputMode === 'dna' && inputSequence.replace(/\s/g, '').length > 0 && (
+              <div className={`text-sm ${inputSequence.replace(/\s/g, '').length % 3 === 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                {inputSequence.replace(/\s/g, '').length % 3 === 0 ? '✓ Valid codon length' : '⚠ Length not divisible by 3'}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={async () => {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  setInputSequence(text);
+                  showToast('success', 'Sequence pasted from clipboard');
+                } catch (err) {
+                  showToast('error', 'Failed to read clipboard');
+                }
+              }}
+              className="btn-secondary text-sm"
+            >
+              Paste from Clipboard
+            </button>
+            <label className="btn-secondary text-sm cursor-pointer">
+              Load from File
+              <input
+                type="file"
+                accept=".txt,.fasta,.fa,.seq"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const text = event.target?.result as string;
+                      // Remove FASTA headers and whitespace
+                      const cleanedText = text
+                        .split('\n')
+                        .filter(line => !line.startsWith('>'))
+                        .join('')
+                        .replace(/\s/g, '');
+                      setInputSequence(cleanedText);
+                      showToast('success', 'File loaded successfully');
+                    };
+                    reader.readAsText(file);
+                  }
+                }}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => {
+                setInputSequence('');
+              }}
+              className="btn-secondary text-sm"
+            >
+              Clear
+            </button>
           </div>
         </div>
 
