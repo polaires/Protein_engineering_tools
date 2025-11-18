@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
-import CodonOptimizer from './CodonOptimizer';
+import CodonOptimizerAdvanced from './CodonOptimizerAdvanced';
 import LibraryDesign from './LibraryDesign';
 
 type DNATab = 'assembly' | 'codon' | 'library';
@@ -461,7 +461,7 @@ export default function DNA() {
 
       {/* Codon Optimization Tab */}
       {activeTab === 'codon' && (
-        <CodonOptimizer />
+        <CodonOptimizerAdvanced />
       )}
 
       {/* Library Design Tab */}

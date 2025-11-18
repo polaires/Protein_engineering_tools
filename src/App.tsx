@@ -202,7 +202,7 @@ function AppContent() {
                         DNA
                       </h4>
                       <p className="text-sm text-slate-700 dark:text-slate-300">
-                        Golden Gate assembly calculator, E. coli codon optimization, and library design tools
+                        Golden Gate assembly calculator, advanced E. coli codon optimization (CAI-based with restriction site removal, terminator detection, and CAI visualization), and library design tools
                       </p>
                     </div>
 
@@ -239,6 +239,9 @@ function AppContent() {
                     </span>
                     <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
                       PubChem API
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Recharts
                     </span>
                   </div>
                 </section>

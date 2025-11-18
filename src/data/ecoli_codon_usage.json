@@ -1,0 +1,435 @@
+{
+  "organism": "Escherichia coli K-12",
+  "description": "Codon usage frequencies from highly expressed genes (top 1% by CAI)",
+  "reference": "Calculated using Carbone et al. (2003) algorithm from E. coli K-12 genome",
+  "codons": {
+    "TTT": {
+      "aa": "F",
+      "frequency": 0.0148,
+      "count": 148
+    },
+    "TTC": {
+      "aa": "F",
+      "frequency": 0.0184,
+      "count": 184
+    },
+    "TTA": {
+      "aa": "L",
+      "frequency": 0.0078,
+      "count": 78
+    },
+    "TTG": {
+      "aa": "L",
+      "frequency": 0.0092,
+      "count": 92
+    },
+    "CTT": {
+      "aa": "L",
+      "frequency": 0.0066,
+      "count": 66
+    },
+    "CTC": {
+      "aa": "L",
+      "frequency": 0.0068,
+      "count": 68
+    },
+    "CTA": {
+      "aa": "L",
+      "frequency": 0.0021,
+      "count": 21
+    },
+    "CTG": {
+      "aa": "L",
+      "frequency": 0.0602,
+      "count": 602
+    },
+    "ATT": {
+      "aa": "I",
+      "frequency": 0.0321,
+      "count": 321
+    },
+    "ATC": {
+      "aa": "I",
+      "frequency": 0.0286,
+      "count": 286
+    },
+    "ATA": {
+      "aa": "I",
+      "frequency": 0.0038,
+      "count": 38
+    },
+    "ATG": {
+      "aa": "M",
+      "frequency": 0.0261,
+      "count": 261
+    },
+    "GTT": {
+      "aa": "V",
+      "frequency": 0.0213,
+      "count": 213
+    },
+    "GTC": {
+      "aa": "V",
+      "frequency": 0.0127,
+      "count": 127
+    },
+    "GTA": {
+      "aa": "V",
+      "frequency": 0.0104,
+      "count": 104
+    },
+    "GTG": {
+      "aa": "V",
+      "frequency": 0.0241,
+      "count": 241
+    },
+    "TCT": {
+      "aa": "S",
+      "frequency": 0.0104,
+      "count": 104
+    },
+    "TCC": {
+      "aa": "S",
+      "frequency": 0.0089,
+      "count": 89
+    },
+    "TCA": {
+      "aa": "S",
+      "frequency": 0.0063,
+      "count": 63
+    },
+    "TCG": {
+      "aa": "S",
+      "frequency": 0.0082,
+      "count": 82
+    },
+    "CCT": {
+      "aa": "P",
+      "frequency": 0.0104,
+      "count": 104
+    },
+    "CCC": {
+      "aa": "P",
+      "frequency": 0.0039,
+      "count": 39
+    },
+    "CCA": {
+      "aa": "P",
+      "frequency": 0.0118,
+      "count": 118
+    },
+    "CCG": {
+      "aa": "P",
+      "frequency": 0.0267,
+      "count": 267
+    },
+    "ACT": {
+      "aa": "T",
+      "frequency": 0.0116,
+      "count": 116
+    },
+    "ACC": {
+      "aa": "T",
+      "frequency": 0.0244,
+      "count": 244
+    },
+    "ACA": {
+      "aa": "T",
+      "frequency": 0.0073,
+      "count": 73
+    },
+    "ACG": {
+      "aa": "T",
+      "frequency": 0.0134,
+      "count": 134
+    },
+    "GCT": {
+      "aa": "A",
+      "frequency": 0.0176,
+      "count": 176
+    },
+    "GCC": {
+      "aa": "A",
+      "frequency": 0.0244,
+      "count": 244
+    },
+    "GCA": {
+      "aa": "A",
+      "frequency": 0.0189,
+      "count": 189
+    },
+    "GCG": {
+      "aa": "A",
+      "frequency": 0.0331,
+      "count": 331
+    },
+    "TAT": {
+      "aa": "Y",
+      "frequency": 0.0121,
+      "count": 121
+    },
+    "TAC": {
+      "aa": "Y",
+      "frequency": 0.0142,
+      "count": 142
+    },
+    "TAA": {
+      "aa": "*",
+      "frequency": 0.0018,
+      "count": 18
+    },
+    "TAG": {
+      "aa": "*",
+      "frequency": 0.0003,
+      "count": 3
+    },
+    "CAT": {
+      "aa": "H",
+      "frequency": 0.0116,
+      "count": 116
+    },
+    "CAC": {
+      "aa": "H",
+      "frequency": 0.0109,
+      "count": 109
+    },
+    "CAA": {
+      "aa": "Q",
+      "frequency": 0.0152,
+      "count": 152
+    },
+    "CAG": {
+      "aa": "Q",
+      "frequency": 0.0302,
+      "count": 302
+    },
+    "AAT": {
+      "aa": "N",
+      "frequency": 0.0193,
+      "count": 193
+    },
+    "AAC": {
+      "aa": "N",
+      "frequency": 0.0281,
+      "count": 281
+    },
+    "AAA": {
+      "aa": "K",
+      "frequency": 0.0381,
+      "count": 381
+    },
+    "AAG": {
+      "aa": "K",
+      "frequency": 0.0123,
+      "count": 123
+    },
+    "GAT": {
+      "aa": "D",
+      "frequency": 0.0362,
+      "count": 362
+    },
+    "GAC": {
+      "aa": "D",
+      "frequency": 0.0213,
+      "count": 213
+    },
+    "GAA": {
+      "aa": "E",
+      "frequency": 0.0453,
+      "count": 453
+    },
+    "GAG": {
+      "aa": "E",
+      "frequency": 0.0194,
+      "count": 194
+    },
+    "TGT": {
+      "aa": "C",
+      "frequency": 0.0036,
+      "count": 36
+    },
+    "TGC": {
+      "aa": "C",
+      "frequency": 0.0067,
+      "count": 67
+    },
+    "TGA": {
+      "aa": "*",
+      "frequency": 0.0006,
+      "count": 6
+    },
+    "TGG": {
+      "aa": "W",
+      "frequency": 0.0152,
+      "count": 152
+    },
+    "CGT": {
+      "aa": "R",
+      "frequency": 0.0244,
+      "count": 244
+    },
+    "CGC": {
+      "aa": "R",
+      "frequency": 0.0241,
+      "count": 241
+    },
+    "CGA": {
+      "aa": "R",
+      "frequency": 0.0034,
+      "count": 34
+    },
+    "CGG": {
+      "aa": "R",
+      "frequency": 0.0036,
+      "count": 36
+    },
+    "AGT": {
+      "aa": "S",
+      "frequency": 0.0067,
+      "count": 67
+    },
+    "AGC": {
+      "aa": "S",
+      "frequency": 0.0176,
+      "count": 176
+    },
+    "AGA": {
+      "aa": "R",
+      "frequency": 0.0021,
+      "count": 21
+    },
+    "AGG": {
+      "aa": "R",
+      "frequency": 0.0011,
+      "count": 11
+    },
+    "GGT": {
+      "aa": "G",
+      "frequency": 0.0289,
+      "count": 289
+    },
+    "GGC": {
+      "aa": "G",
+      "frequency": 0.0324,
+      "count": 324
+    },
+    "GGA": {
+      "aa": "G",
+      "frequency": 0.0061,
+      "count": 61
+    },
+    "GGG": {
+      "aa": "G",
+      "frequency": 0.0089,
+      "count": 89
+    }
+  },
+  "amino_acid_groups": {
+    "F": [
+      "TTT",
+      "TTC"
+    ],
+    "L": [
+      "TTA",
+      "TTG",
+      "CTT",
+      "CTC",
+      "CTA",
+      "CTG"
+    ],
+    "I": [
+      "ATT",
+      "ATC",
+      "ATA"
+    ],
+    "M": [
+      "ATG"
+    ],
+    "V": [
+      "GTT",
+      "GTC",
+      "GTA",
+      "GTG"
+    ],
+    "S": [
+      "TCT",
+      "TCC",
+      "TCA",
+      "TCG",
+      "AGT",
+      "AGC"
+    ],
+    "P": [
+      "CCT",
+      "CCC",
+      "CCA",
+      "CCG"
+    ],
+    "T": [
+      "ACT",
+      "ACC",
+      "ACA",
+      "ACG"
+    ],
+    "A": [
+      "GCT",
+      "GCC",
+      "GCA",
+      "GCG"
+    ],
+    "Y": [
+      "TAT",
+      "TAC"
+    ],
+    "*": [
+      "TAA",
+      "TAG",
+      "TGA"
+    ],
+    "H": [
+      "CAT",
+      "CAC"
+    ],
+    "Q": [
+      "CAA",
+      "CAG"
+    ],
+    "N": [
+      "AAT",
+      "AAC"
+    ],
+    "K": [
+      "AAA",
+      "AAG"
+    ],
+    "D": [
+      "GAT",
+      "GAC"
+    ],
+    "E": [
+      "GAA",
+      "GAG"
+    ],
+    "C": [
+      "TGT",
+      "TGC"
+    ],
+    "W": [
+      "TGG"
+    ],
+    "R": [
+      "CGT",
+      "CGC",
+      "CGA",
+      "CGG",
+      "AGA",
+      "AGG"
+    ],
+    "G": [
+      "GGT",
+      "GGC",
+      "GGA",
+      "GGG"
+    ]
+  }
+}

@@ -1,0 +1,631 @@
+/**
+ * Advanced Codon Optimization Tool
+ * Integrates features from Condon_adapation_web with existing app
+ */
+
+import { useState } from 'react';
+import { Zap, ArrowRight, Copy, AlertCircle, Info, Download, Shield } from 'lucide-react';
+import { useApp } from '@/contexts/AppContext';
+import { OptimizationRequest, OptimizationResponse } from '@/types/codon';
+import { optimizeCodonSequence } from '@/utils/optimizationService';
+import { extractSequence } from '@/utils/fastaParser';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
+
+export default function CodonOptimizerAdvanced() {
+  const { showToast } = useApp();
+
+  // Input state
+  const [inputSequence, setInputSequence] = useState('');
+  const [inputMode, setInputMode] = useState<'dna' | 'protein'>('protein');
+
+  // Optimization options
+  const [removeRestrictionSites, setRemoveRestrictionSites] = useState(false);
+  const [removeTerminators, setRemoveTerminators] = useState(false);
+  const [optimizeEnds, setOptimizeEnds] = useState(false);
+  const [endLength, setEndLength] = useState(24);
+
+  // Enzyme selection (simplified - all common enzymes)
+  const [selectedEnzymes, setSelectedEnzymes] = useState<string[]>([]);
+
+  // Results
+  const [result, setResult] = useState<OptimizationResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Active tab
+  const [activeTab, setActiveTab] = useState<'summary' | 'chart' | 'comparison'>('summary');
+
+  const commonEnzymes = ['BsaI', 'BbsI', 'BsmBI', 'SapI', 'BtgZI', 'Esp3I'];
+
+  const handleOptimize = () => {
+    setError(null);
+    setResult(null);
+
+    try {
+      if (!inputSequence.trim()) {
+        setError('Please enter a sequence');
+        return;
+      }
+
+      setLoading(true);
+
+      // Extract sequence from FASTA if needed
+      const cleanedSequence = extractSequence(inputSequence);
+
+      if (!cleanedSequence) {
+        throw new Error('Invalid sequence');
+      }
+
+      const request: OptimizationRequest = {
+        sequence: cleanedSequence,
+        remove_restriction_sites: removeRestrictionSites,
+        remove_terminators: removeTerminators,
+        selected_enzymes: selectedEnzymes.length > 0 ? selectedEnzymes : undefined,
+        optimize_ends: optimizeEnds,
+        end_length: endLength,
+      };
+
+      // Perform optimization
+      const optimizationResult = optimizeCodonSequence(request);
+      setResult(optimizationResult);
+      setActiveTab('summary');
+
+      showToast('success', `Sequence optimized! CAI improved from ${optimizationResult.original_cai.toFixed(3)} to ${optimizationResult.final_cai.toFixed(3)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Optimization failed');
+      showToast('error', 'Optimization failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClear = () => {
+    setInputSequence('');
+    setResult(null);
+    setError(null);
+  };
+
+  const handleLoadExample = () => {
+    // GFP protein sequence
+    setInputSequence('MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK');
+    setInputMode('protein');
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('success', `${label} copied to clipboard`);
+    } catch (err) {
+      showToast('error', 'Failed to copy to clipboard');
+    }
+  };
+
+  const downloadFasta = (sequence: string, filename: string, header: string) => {
+    const fastaContent = `>${header}\n${sequence.match(/.{1,60}/g)?.join('\n') || sequence}`;
+    const blob = new Blob([fastaContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toggleEnzyme = (enzyme: string) => {
+    setSelectedEnzymes(prev =>
+      prev.includes(enzyme)
+        ? prev.filter(e => e !== enzyme)
+        : [...prev, enzyme]
+    );
+  };
+
+  // CAI Chart Component
+  const CAIChart = ({ w_i_values, codons, title }: { w_i_values: number[]; codons: string[]; title: string }) => {
+    if (!w_i_values || w_i_values.length === 0) {
+      return <div className="text-slate-500">No data to display</div>;
+    }
+
+    const mean = w_i_values.reduce((sum, val) => sum + val, 0) / w_i_values.length;
+    const variance = w_i_values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / w_i_values.length;
+    const stdDev = Math.sqrt(variance);
+    const maxWi = Math.max(...w_i_values);
+    const minWi = Math.min(...w_i_values);
+
+    const chartData = w_i_values.map((wi, index) => ({
+      position: index + 1,
+      w_i: wi,
+      codon: codons[index],
+      mean: mean,
+    }));
+
+    const CustomTooltip = ({ active, payload }: any) => {
+      if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+          <div className="bg-white dark:bg-slate-800 p-3 rounded shadow-lg border border-slate-200 dark:border-slate-700">
+            <p className="text-sm"><strong>Position:</strong> {data.position}</p>
+            <p className="text-sm"><strong>Codon:</strong> {data.codon}</p>
+            <p className="text-sm"><strong>w_i:</strong> {data.w_i.toFixed(3)}</p>
+          </div>
+        );
+      }
+      return null;
+    };
+
+    return (
+      <div className="space-y-4">
+        <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-200">{title}</h4>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded">
+            <div className="text-xs text-slate-600 dark:text-slate-400">Mean</div>
+            <div className="text-lg font-bold">{mean.toFixed(3)}</div>
+          </div>
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded">
+            <div className="text-xs text-slate-600 dark:text-slate-400">Std Dev</div>
+            <div className="text-lg font-bold">{stdDev.toFixed(3)}</div>
+          </div>
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded">
+            <div className="text-xs text-slate-600 dark:text-slate-400">Min</div>
+            <div className="text-lg font-bold">{minWi.toFixed(3)}</div>
+          </div>
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded">
+            <div className="text-xs text-slate-600 dark:text-slate-400">Max</div>
+            <div className="text-lg font-bold">{maxWi.toFixed(3)}</div>
+          </div>
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded">
+            <div className="text-xs text-slate-600 dark:text-slate-400">Codons</div>
+            <div className="text-lg font-bold">{w_i_values.length}</div>
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="position"
+              label={{ value: 'Codon Position', position: 'insideBottom', offset: -5 }}
+            />
+            <YAxis
+              label={{ value: 'Relative Adaptiveness (w_i)', angle: -90, position: 'insideLeft' }}
+              domain={[0, 1]}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+            <ReferenceLine
+              y={mean}
+              stroke="#666"
+              strokeDasharray="5 5"
+              label={{ value: 'Mean', position: 'right' }}
+            />
+            <ReferenceLine
+              y={mean + stdDev}
+              stroke="#999"
+              strokeDasharray="3 3"
+              label={{ value: '+1σ', position: 'right' }}
+            />
+            <ReferenceLine
+              y={mean - stdDev}
+              stroke="#999"
+              strokeDasharray="3 3"
+              label={{ value: '-1σ', position: 'right' }}
+            />
+            <Line
+              type="monotone"
+              dataKey="w_i"
+              stroke="#8884d8"
+              strokeWidth={2}
+              dot={false}
+              name="w_i"
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Info Card */}
+      <div className="card bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
+        <div className="flex items-start justify-between mb-3">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+            Advanced Codon Optimization for E. coli
+          </h3>
+        </div>
+
+        <div className="text-sm text-slate-700 dark:text-slate-300 space-y-2">
+          <p><strong>CAI-Based Optimization:</strong> Uses Codon Adaptation Index (Sharp & Li, 1987) with E. coli K-12 codon usage</p>
+          <p><strong>Features:</strong> Restriction site removal, terminator detection, terminal region optimization for PCR</p>
+        </div>
+      </div>
+
+      {/* Input Section */}
+      <div className="card">
+        <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
+          Sequence Input
+        </h3>
+
+        <div className="mb-4">
+          <label className="input-label">
+            {inputMode === 'dna' ? 'DNA Sequence (to optimize) *' : 'Protein Sequence (to reverse translate) *'}
+          </label>
+          <textarea
+            className="input-field font-mono text-sm h-40 resize-y"
+            placeholder={inputMode === 'dna'
+              ? "Enter DNA sequence (ATGC) or FASTA format\nExample: ATGAGTAAAGGAGAAGAACTTTTCACTGGAGTT..."
+              : "Enter protein sequence (single letter codes) or FASTA format\nExample: MSKGEELFTGVVPILVELDGDVNGHK..."
+            }
+            value={inputSequence}
+            onChange={(e) => setInputSequence(e.target.value)}
+          />
+          <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Length: {inputSequence.length} characters
+          </div>
+        </div>
+
+        {/* Optimization Options */}
+        <div className="space-y-4 mb-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+          <h4 className="font-semibold text-slate-800 dark:text-slate-200">Optimization Options</h4>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={removeRestrictionSites}
+              onChange={(e) => setRemoveRestrictionSites(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Remove Restriction Sites</span>
+          </label>
+
+          {removeRestrictionSites && (
+            <div className="ml-6 p-3 bg-white dark:bg-slate-700 rounded">
+              <div className="text-sm font-semibold mb-2">Select Enzymes to Avoid:</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {commonEnzymes.map(enzyme => (
+                  <label key={enzyme} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedEnzymes.includes(enzyme)}
+                      onChange={() => toggleEnzyme(enzyme)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">{enzyme}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="text-xs text-slate-500 mt-2">
+                {selectedEnzymes.length > 0 ? `${selectedEnzymes.length} selected` : 'All enzymes will be checked if none selected'}
+              </div>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={removeTerminators}
+              onChange={(e) => setRemoveTerminators(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Remove Rho-independent Terminators</span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={optimizeEnds}
+              onChange={(e) => setOptimizeEnds(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Optimize Terminal Regions for PCR</span>
+          </label>
+
+          {optimizeEnds && (
+            <div className="ml-6">
+              <label className="text-sm">
+                Terminal region length (bp):
+                <input
+                  type="number"
+                  value={endLength}
+                  onChange={(e) => setEndLength(parseInt(e.target.value) || 24)}
+                  min={12}
+                  max={60}
+                  className="input-field w-24 ml-2"
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleOptimize}
+            disabled={loading}
+            className="btn-primary flex-1"
+          >
+            <Zap className="w-5 h-5 mr-2" />
+            {loading ? 'Optimizing...' : 'Optimize for E. coli'}
+          </button>
+          <button onClick={handleLoadExample} className="btn-secondary">
+            Load Example
+          </button>
+          <button onClick={handleClear} className="btn-secondary">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="card bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-red-800 dark:text-red-200 mb-1">Error</h3>
+              <p className="text-red-700 dark:text-red-300">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Results Display */}
+      {result && (
+        <div className="space-y-6">
+          {/* Results Summary */}
+          <div className="card bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800">
+            <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Info className="w-5 h-5" />
+              Optimization Results
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">CAI Score</div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                    {result.original_cai.toFixed(3)}
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    {result.final_cai.toFixed(3)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">GC Content</div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                    {(result.gc_content_original * 100).toFixed(1)}%
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                    {(result.gc_content_final * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Codons Changed</div>
+                <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                  {result.changes.length}
+                  <span className="text-sm text-slate-600 dark:text-slate-400 ml-1">
+                    / {result.codons_final.length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">Sequence Length</div>
+                <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                  {result.final_sequence.length} bp
+                  <span className="text-sm text-slate-600 dark:text-slate-400 ml-1">
+                    ({result.protein_sequence.length} aa)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional metrics */}
+            {(result.restriction_sites_found > 0 || result.terminators_found > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                {result.restriction_sites_found > 0 && (
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <div className="font-semibold text-green-800 dark:text-green-200">
+                        Restriction Sites
+                      </div>
+                    </div>
+                    <div className="text-sm">
+                      Found: {result.restriction_sites_found}, Removed: {result.restriction_sites_removed}
+                    </div>
+                  </div>
+                )}
+
+                {result.terminators_found > 0 && (
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="font-semibold text-green-800 dark:text-green-200 mb-2">
+                      Terminators
+                    </div>
+                    <div className="text-sm">
+                      Found: {result.terminators_found}, Removed: {result.terminators_removed}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setActiveTab('summary')}
+                className={`px-4 py-2 font-semibold transition-colors ${
+                  activeTab === 'summary'
+                    ? 'text-green-700 dark:text-green-300 border-b-2 border-green-700 dark:border-green-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Sequences
+              </button>
+              <button
+                onClick={() => setActiveTab('chart')}
+                className={`px-4 py-2 font-semibold transition-colors ${
+                  activeTab === 'chart'
+                    ? 'text-green-700 dark:text-green-300 border-b-2 border-green-700 dark:border-green-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                CAI Analysis
+              </button>
+              <button
+                onClick={() => setActiveTab('comparison')}
+                className={`px-4 py-2 font-semibold transition-colors ${
+                  activeTab === 'comparison'
+                    ? 'text-green-700 dark:text-green-300 border-b-2 border-green-700 dark:border-green-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Comparison ({result.changes.length} changes)
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'summary' && (
+              <div className="space-y-4">
+                {/* Optimized Sequence */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-green-700 dark:text-green-300">
+                      Optimized DNA Sequence ({result.final_sequence.length} bp)
+                    </h4>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => copyToClipboard(result.final_sequence, 'Optimized sequence')}
+                        className="btn-icon"
+                        title="Copy optimized sequence"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => downloadFasta(
+                          result.final_sequence,
+                          'optimized_sequence.fasta',
+                          `Optimized DNA Sequence (CAI: ${result.final_cai.toFixed(4)})`
+                        )}
+                        className="btn-icon"
+                        title="Download FASTA"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border-2 border-green-200 dark:border-green-800">
+                    <div className="font-mono text-sm break-all leading-relaxed text-green-900 dark:text-green-100">
+                      {result.final_sequence}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Protein Sequence */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-slate-700 dark:text-slate-300">
+                      Protein Sequence ({result.protein_sequence.length} amino acids)
+                    </h4>
+                    <button
+                      onClick={() => copyToClipboard(result.protein_sequence, 'Protein sequence')}
+                      className="btn-icon"
+                      title="Copy protein sequence"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                    <div className="font-mono text-sm break-all leading-relaxed text-slate-700 dark:text-slate-300">
+                      {result.protein_sequence}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'chart' && (
+              <div className="space-y-6">
+                {result.w_i_values_original.length > 0 && (
+                  <CAIChart
+                    w_i_values={result.w_i_values_original}
+                    codons={result.codons_original}
+                    title="Original Sequence"
+                  />
+                )}
+                <CAIChart
+                  w_i_values={result.w_i_values_final}
+                  codons={result.codons_final}
+                  title="Optimized Sequence"
+                />
+              </div>
+            )}
+
+            {activeTab === 'comparison' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100 dark:bg-slate-800">
+                    <tr>
+                      <th className="p-2 text-left">Position</th>
+                      <th className="p-2 text-left">AA</th>
+                      <th className="p-2 text-left">Original Codon</th>
+                      <th className="p-2 text-left">Original w_i</th>
+                      <th className="p-2 text-left">Optimized Codon</th>
+                      <th className="p-2 text-left">Optimized w_i</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.changes.map((change, idx) => {
+                      const originalWi = result.w_i_values_original[change.position] || 0;
+                      const finalWi = result.w_i_values_final[change.position] || 0;
+
+                      return (
+                        <tr key={idx} className="border-b border-slate-200 dark:border-slate-700 bg-yellow-50 dark:bg-yellow-900/20">
+                          <td className="p-2">{change.position + 1}</td>
+                          <td className="p-2 font-bold">{change.amino_acid}</td>
+                          <td className="p-2 font-mono">{change.original}</td>
+                          <td className="p-2">{originalWi.toFixed(3)}</td>
+                          <td className="p-2 font-mono text-green-700 dark:text-green-300 font-bold">{change.optimized}</td>
+                          <td className="p-2 text-green-700 dark:text-green-300 font-bold">{finalWi.toFixed(3)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Usage Information */}
+          <div className="card bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800">
+            <h3 className="text-lg font-semibold mb-3 text-amber-800 dark:text-amber-200">
+              📋 Next Steps
+            </h3>
+            <div className="text-sm text-amber-700 dark:text-amber-300 space-y-2">
+              <p><strong>1.</strong> Copy the optimized DNA sequence above</p>
+              <p><strong>2.</strong> Order as a gene synthesis or gBlock from your preferred vendor</p>
+              <p><strong>3.</strong> Clone into your expression vector</p>
+              <p><strong>4.</strong> The sequence has been optimized using CAI algorithm for E. coli K-12</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

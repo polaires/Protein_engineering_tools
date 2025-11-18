@@ -1,0 +1,170 @@
+{
+  "description": "Restriction enzymes on pBluescript MCS",
+  "reference": "REBASE (Roberts et al. 2003, NAR 31:418-420)",
+  "enzymes": {
+    "ApaI": {
+      "recognition_site": "GGGCCC",
+      "cut_pattern": "GGGCC^C",
+      "overhang": "blunt"
+    },
+    "AccI": {
+      "recognition_site": "GT[AC][GT]AC",
+      "cut_pattern": "GT^[AC][GT]AC",
+      "overhang": "5'"
+    },
+    "BamHI": {
+      "recognition_site": "GGATCC",
+      "cut_pattern": "G^GATCC",
+      "overhang": "5'"
+    },
+    "BstXI": {
+      "recognition_site": "CCANNNNNNTGG",
+      "cut_pattern": "CCAN^NNNN_NTGG",
+      "overhang": "5'"
+    },
+    "ClaI": {
+      "recognition_site": "ATCGAT",
+      "cut_pattern": "AT^CGAT",
+      "overhang": "5'"
+    },
+    "DraII": {
+      "recognition_site": "RGGNCCY",
+      "cut_pattern": "RG^GNCCY",
+      "overhang": "5'"
+    },
+    "EcoO109I": {
+      "recognition_site": "RGGNCCY",
+      "cut_pattern": "RG^GNCCY",
+      "overhang": "5'"
+    },
+    "EcoRV": {
+      "recognition_site": "GATATC",
+      "cut_pattern": "GAT^ATC",
+      "overhang": "blunt"
+    },
+    "EcoRI": {
+      "recognition_site": "GAATTC",
+      "cut_pattern": "G^AATTC",
+      "overhang": "5'"
+    },
+    "EagI": {
+      "recognition_site": "CGGCCG",
+      "cut_pattern": "C^GGCCG",
+      "overhang": "5'"
+    },
+    "HincII": {
+      "recognition_site": "GTY[AG]AC",
+      "cut_pattern": "GTY^[AG]AC",
+      "overhang": "blunt"
+    },
+    "HindIII": {
+      "recognition_site": "AAGCTT",
+      "cut_pattern": "A^AGCTT",
+      "overhang": "5'"
+    },
+    "KpnI": {
+      "recognition_site": "GGTACC",
+      "cut_pattern": "GGTAC^C",
+      "overhang": "3'"
+    },
+    "NotI": {
+      "recognition_site": "GCGGCCGC",
+      "cut_pattern": "GC^GGCCGC",
+      "overhang": "5'"
+    },
+    "PstI": {
+      "recognition_site": "CTGCAG",
+      "cut_pattern": "CTGCA^G",
+      "overhang": "3'"
+    },
+    "SalI": {
+      "recognition_site": "GTCGAC",
+      "cut_pattern": "G^TCGAC",
+      "overhang": "5'"
+    },
+    "SmaI": {
+      "recognition_site": "CCCGGG",
+      "cut_pattern": "CCC^GGG",
+      "overhang": "blunt"
+    },
+    "SpeI": {
+      "recognition_site": "ACTAGT",
+      "cut_pattern": "A^CTAGT",
+      "overhang": "5'"
+    },
+    "SacII": {
+      "recognition_site": "CCGCGG",
+      "cut_pattern": "CCGC^GG",
+      "overhang": "3'"
+    },
+    "SacI": {
+      "recognition_site": "GAGCTC",
+      "cut_pattern": "GAGCT^C",
+      "overhang": "3'"
+    },
+    "XhoI": {
+      "recognition_site": "CTCGAG",
+      "cut_pattern": "C^TCGAG",
+      "overhang": "5'"
+    },
+    "XbaI": {
+      "recognition_site": "TCTAGA",
+      "cut_pattern": "T^CTAGA",
+      "overhang": "5'"
+    },
+    "BsaI": {
+      "recognition_site": "GGTCTC",
+      "cut_pattern": "GGTCTC(1/5)",
+      "overhang": "4bp 3'"
+    },
+    "BsmBI": {
+      "recognition_site": "CGTCTC",
+      "cut_pattern": "CGTCTC(1/5)",
+      "overhang": "4bp 3'"
+    },
+    "BbsI": {
+      "recognition_site": "GAAGAC",
+      "cut_pattern": "GAAGAC(2/6)",
+      "overhang": "4bp 3'"
+    },
+    "SapI": {
+      "recognition_site": "GCTCTTC",
+      "cut_pattern": "GCTCTTC(1/4)",
+      "overhang": "3bp 3'"
+    },
+    "BtgZI": {
+      "recognition_site": "GCGATG",
+      "cut_pattern": "GCGATG(10/14)",
+      "overhang": "4bp 3'"
+    },
+    "Esp3I": {
+      "recognition_site": "CGTCTC",
+      "cut_pattern": "CGTCTC(1/5)",
+      "overhang": "4bp 3'"
+    }
+  },
+  "simplified_sites": [
+    "GGGCCC",
+    "GGATCC",
+    "ATCGAT",
+    "GATATC",
+    "GAATTC",
+    "CGGCCG",
+    "AAGCTT",
+    "GGTACC",
+    "GCGGCCGC",
+    "CTGCAG",
+    "GTCGAC",
+    "CCCGGG",
+    "ACTAGT",
+    "CCGCGG",
+    "GAGCTC",
+    "CTCGAG",
+    "TCTAGA",
+    "GGTCTC",
+    "CGTCTC",
+    "GAAGAC",
+    "GCTCTTC",
+    "GCGATG"
+  ]
+}
