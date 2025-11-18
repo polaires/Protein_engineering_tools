@@ -205,6 +205,43 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ result, optimiza
         )}
       </div>
 
+      {/* Optimization Statistics Summary */}
+      <div className="optimization-stats">
+        <h4>Optimization Summary</h4>
+        <div className="stats-grid">
+          <div className="stat-box">
+            <span className="stat-label">CAI Improvement:</span>
+            <span className={`stat-value ${caiImprovement >= 0 ? 'positive' : 'negative'}`}>
+              {caiImprovement >= 0 ? '+' : ''}{caiImprovement.toFixed(1)}%
+            </span>
+          </div>
+          <div className="stat-box">
+            <span className="stat-label">Codons Changed:</span>
+            <span className="stat-value">
+              {result.changes.length} / {result.codons_final.length}
+            </span>
+          </div>
+          <div className="stat-box">
+            <span className="stat-label">Change Rate:</span>
+            <span className="stat-value">
+              {((result.changes.length / result.codons_final.length) * 100).toFixed(1)}%
+            </span>
+          </div>
+          {result.restriction_sites_removed > 0 && (
+            <div className="stat-box">
+              <span className="stat-label">Restriction Sites Removed:</span>
+              <span className="stat-value highlight-success">{result.restriction_sites_removed}</span>
+            </div>
+          )}
+          {result.terminators_removed > 0 && (
+            <div className="stat-box">
+              <span className="stat-label">Terminators Removed:</span>
+              <span className="stat-value highlight-success">{result.terminators_removed}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Expected Results Panel */}
       <div className="expected-results-panel">
         <h4>Result Interpretation</h4>

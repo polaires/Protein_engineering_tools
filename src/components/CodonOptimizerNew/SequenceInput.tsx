@@ -17,6 +17,35 @@ interface SequenceInputProps {
   onSequenceTypeChange?: (type: 'dna' | 'protein' | 'unknown') => void;
 }
 
+// Helper function to validate sequence length
+const validateSequenceLength = (seq: string): { valid: boolean; warning: string | null; type: 'error' | 'warning' | null } => {
+  const cleanSeq = extractSequence(seq);
+  const length = cleanSeq.length;
+
+  if (length === 0) {
+    return { valid: false, warning: null, type: null };
+  } else if (length < 30) {
+    return {
+      valid: false,
+      warning: 'Sequence too short (minimum 30bp recommended for reliable optimization)',
+      type: 'error'
+    };
+  } else if (length > 10000) {
+    return {
+      valid: true,
+      warning: 'Large sequence (>10kb) may take longer to optimize. Expected time: 5-10 seconds.',
+      type: 'warning'
+    };
+  } else if (length > 5000) {
+    return {
+      valid: true,
+      warning: 'Moderate size sequence (>5kb). Expected optimization time: 2-5 seconds.',
+      type: 'warning'
+    };
+  }
+  return { valid: true, warning: null, type: null };
+};
+
 export const SequenceInput: React.FC<SequenceInputProps> = ({
   value,
   onChange,
@@ -102,6 +131,7 @@ export const SequenceInput: React.FC<SequenceInputProps> = ({
   const sequenceType = detectSequenceType(extractSequence(value));
   const sequenceLength = getSequenceLength(extractSequence(value));
   const isFasta = isFastaFormat(value);
+  const validation = validateSequenceLength(value);
 
   return (
     <div className="sequence-input">
@@ -155,15 +185,26 @@ export const SequenceInput: React.FC<SequenceInputProps> = ({
       />
 
       {value && (
-        <div className="sequence-info-bar">
-          <span className={`info-badge type-${sequenceType}`}>
-            {sequenceType.toUpperCase()}{isFasta && ' (FASTA)'}
-          </span>
-          <span className="info-text">
-            {sequenceLength} {sequenceType === 'dna' ? 'bp' : 'aa'}
-            {sequenceType === 'dna' && ` · ${Math.floor(sequenceLength / 3)} codons`}
-          </span>
-        </div>
+        <>
+          <div className="sequence-info-bar">
+            <span className={`info-badge type-${sequenceType}`}>
+              {sequenceType.toUpperCase()}{isFasta && ' (FASTA)'}
+            </span>
+            <span className="info-text">
+              {sequenceLength} {sequenceType === 'dna' ? 'bp' : 'aa'}
+              {sequenceType === 'dna' && ` · ${Math.floor(sequenceLength / 3)} codons`}
+            </span>
+          </div>
+
+          {validation.warning && (
+            <div className={`sequence-validation ${validation.type}`}>
+              <span className="validation-icon">
+                {validation.type === 'error' ? '⚠️' : 'ℹ️'}
+              </span>
+              <span className="validation-message">{validation.warning}</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
