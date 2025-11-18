@@ -90,6 +90,7 @@ export enum ConcentrationUnit {
   UG_UL = 'μg/μL',
   G_L = 'g/L',
   NG_ML = 'ng/mL',
+  PPM = 'ppm',
 }
 
 export interface Recipe {
