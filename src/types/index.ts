@@ -39,7 +39,6 @@ export enum CalculationMode {
   MOLARITY_FROM_MASS = 'molarity_from_mass',        // Calculate concentration from mass
   VOLUME_FROM_MASS = 'volume_from_mass',            // Calculate volume from mass
   DILUTION = 'dilution',                             // Dilution calculations (C1V1 = C2V2)
-  PPM_CONVERTER = 'ppm_converter',                   // Convert between Molarity and PPM
 }
 
 export interface MolarityCalculation {
