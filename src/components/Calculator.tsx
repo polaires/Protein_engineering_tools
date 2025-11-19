@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle } from 'lucide-react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -15,7 +15,7 @@ import {
   Recipe,
   Chemical,
 } from '@/types';
-import { performCalculation, formatResult, convertToMolarity, convertToMilliliters, convertToGrams } from '@/utils/calculations';
+import { performCalculation, formatResult, convertToMolarity, convertToMilliliters, convertToGrams, convertPpmToMolarity, convertMolarityToPpm } from '@/utils/calculations';
 import { checkSolubilityAsync } from '@/data/solubility';
 import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
@@ -48,6 +48,12 @@ const CALCULATION_MODES = [
     label: 'Dilution (C₁V₁=C₂V₂)',
     icon: CalcIcon,
     description: 'Dilution calculations',
+  },
+  {
+    mode: CalculationMode.PPM_CONVERTER,
+    label: 'Molarity ↔ PPM',
+    icon: ArrowLeftRight,
+    description: 'Convert between Molarity and PPM',
   },
 ];
 
@@ -84,6 +90,12 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   const [solubilityCheck, setSolubilityCheck] = useState<Awaited<ReturnType<typeof checkSolubilityAsync>> | null>(null);
   const [pubchemCid, setPubchemCid] = useState<string | null>(null);
 
+  // PPM Converter state
+  const [ppmMolarity, setPpmMolarity] = useState<number | undefined>(undefined);
+  const [ppmValue, setPpmValue] = useState<number | undefined>(undefined);
+  const [ppmMolarityUnit, setPpmMolarityUnit] = useState<ConcentrationUnit>(ConcentrationUnit.MILLIMOLAR);
+  const [ppmMolecularWeight, setPpmMolecularWeight] = useState<number | undefined>(undefined);
+
   // Update calculation mode when changed
   useEffect(() => {
     setCalculation((prev) => ({ ...prev, mode: selectedMode }));
@@ -111,7 +123,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     const convertedCalculation: MolarityCalculation = {
       ...calculation,
       molarity: calculation.molarity !== undefined
-        ? convertToMolarity(calculation.molarity, molarityUnit, calculation.molecularWeight)
+        ? convertToMolarity(calculation.molarity, molarityUnit)
         : undefined,
       volume: calculation.volume !== undefined
         ? convertToMilliliters(calculation.volume, volumeUnit)
@@ -120,10 +132,10 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         ? convertToGrams(calculation.mass, massUnit)
         : undefined,
       initialMolarity: calculation.initialMolarity !== undefined
-        ? convertToMolarity(calculation.initialMolarity, initialMolarityUnit, calculation.molecularWeight)
+        ? convertToMolarity(calculation.initialMolarity, initialMolarityUnit)
         : undefined,
       finalMolarity: calculation.finalMolarity !== undefined
-        ? convertToMolarity(calculation.finalMolarity, finalMolarityUnit, calculation.molecularWeight)
+        ? convertToMolarity(calculation.finalMolarity, finalMolarityUnit)
         : undefined,
       initialVolume: calculation.initialVolume !== undefined
         ? convertToMilliliters(calculation.initialVolume, initialVolumeUnit)
@@ -236,7 +248,6 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                   <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                   <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
-                  <option value={ConcentrationUnit.PPM}>ppm</option>
                 </select>
               </div>
             </div>
@@ -424,7 +435,6 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                   <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                   <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
-                  <option value={ConcentrationUnit.PPM}>ppm</option>
                 </select>
               </div>
             </div>
@@ -485,7 +495,6 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                     <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                     <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
-                    <option value={ConcentrationUnit.PPM}>ppm</option>
                   </select>
                 </div>
               </div>
@@ -542,7 +551,6 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                     <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                     <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
-                    <option value={ConcentrationUnit.PPM}>ppm</option>
                   </select>
                 </div>
               </div>
@@ -578,6 +586,143 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                 </div>
               </div>
             </div>
+          </div>
+        );
+
+      case CalculationMode.PPM_CONVERTER:
+        return (
+          <div className="space-y-4">
+            <div className="text-sm text-slate-600 dark:text-slate-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+              <strong>PPM Conversion:</strong> Convert between Molarity and Parts Per Million (ppm).
+              <br />
+              Formula: ppm (mg/L) = M × MW × 1000
+            </div>
+
+            <div>
+              <label className="input-label">
+                Molecular Weight (g/mol) *
+              </label>
+              <ChemicalSearch
+                onSelect={(chemical) => {
+                  setPpmMolecularWeight(chemical.molecularWeight);
+                  setSelectedChemical(chemical);
+                }}
+                placeholder="Search chemical or enter MW manually"
+                allowCustom={true}
+              />
+              <input
+                type="number"
+                className="input-field mt-2"
+                placeholder="Or enter manually"
+                step="any"
+                value={ppmMolecularWeight ?? ''}
+                onChange={(e) => {
+                  const mw = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                  setPpmMolecularWeight(mw);
+                  // Recalculate when MW changes
+                  if (mw && ppmMolarity) {
+                    const molarityInM = convertToMolarity(ppmMolarity, ppmMolarityUnit);
+                    setPpmValue(convertMolarityToPpm(molarityInM, mw));
+                  }
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="input-label">
+                  Molarity
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    className="input-field flex-1"
+                    placeholder="e.g., 1"
+                    step="any"
+                    value={ppmMolarity ?? ''}
+                    onChange={(e) => {
+                      const molarity = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                      setPpmMolarity(molarity);
+                      // Auto-calculate PPM
+                      if (molarity && ppmMolecularWeight) {
+                        const molarityInM = convertToMolarity(molarity, ppmMolarityUnit);
+                        setPpmValue(convertMolarityToPpm(molarityInM, ppmMolecularWeight));
+                      } else {
+                        setPpmValue(undefined);
+                      }
+                    }}
+                  />
+                  <select
+                    className="select-field w-24"
+                    value={ppmMolarityUnit}
+                    onChange={(e) => {
+                      const newUnit = e.target.value as ConcentrationUnit;
+                      setPpmMolarityUnit(newUnit);
+                      // Recalculate PPM with new unit
+                      if (ppmMolarity && ppmMolecularWeight) {
+                        const molarityInM = convertToMolarity(ppmMolarity, newUnit);
+                        setPpmValue(convertMolarityToPpm(molarityInM, ppmMolecularWeight));
+                      }
+                    }}
+                  >
+                    <option value={ConcentrationUnit.MOLAR}>M</option>
+                    <option value={ConcentrationUnit.MILLIMOLAR}>mM</option>
+                    <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
+                    <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
+                    <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="input-label">
+                  PPM (mg/L)
+                </label>
+                <input
+                  type="number"
+                  className="input-field"
+                  placeholder="e.g., 1000"
+                  step="any"
+                  value={ppmValue ?? ''}
+                  onChange={(e) => {
+                    const ppm = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                    setPpmValue(ppm);
+                    // Auto-calculate Molarity
+                    if (ppm && ppmMolecularWeight) {
+                      const molarityInM = convertPpmToMolarity(ppm, ppmMolecularWeight);
+                      // Convert from M to the selected unit
+                      const molarityInSelectedUnit = molarityInM *
+                        (ppmMolarityUnit === ConcentrationUnit.MOLAR ? 1 :
+                         ppmMolarityUnit === ConcentrationUnit.MILLIMOLAR ? 1000 :
+                         ppmMolarityUnit === ConcentrationUnit.MICROMOLAR ? 1000000 :
+                         ppmMolarityUnit === ConcentrationUnit.NANOMOLAR ? 1000000000 :
+                         1000000000000);
+                      setPpmMolarity(molarityInSelectedUnit);
+                    } else {
+                      setPpmMolarity(undefined);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            {ppmMolarity && ppmValue && ppmMolecularWeight && (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <h3 className="font-semibold text-green-900 dark:text-green-100 mb-2">
+                  Conversion Result
+                </h3>
+                <div className="text-sm text-green-800 dark:text-green-200 space-y-1">
+                  <div>
+                    <strong>{ppmMolarity} {ppmMolarityUnit}</strong> = <strong>{ppmValue.toFixed(2)} ppm</strong>
+                  </div>
+                  <div className="text-xs text-green-700 dark:text-green-300 mt-2">
+                    Formula: ppm = M × MW × 1000
+                    <br />
+                    ppm = {convertToMolarity(ppmMolarity, ppmMolarityUnit).toExponential(3)} M × {ppmMolecularWeight} g/mol × 1000 = {ppmValue.toFixed(2)} mg/L
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
 
