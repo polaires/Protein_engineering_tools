@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle } from 'lucide-react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle, GitBranch } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -21,8 +21,9 @@ import { useApp } from '@/contexts/AppContext';
 import ChemicalSearch from './ChemicalSearch';
 import RecipeList from './RecipeList';
 import RecipeBuilder from './RecipeBuilder';
+import SerialDilution from './SerialDilution';
 
-type CalculatorTab = 'calculator' | 'recipes' | 'builder';
+type CalculatorTab = 'calculator' | 'recipes' | 'builder' | 'dilution';
 
 const CALCULATION_MODES = [
   {
@@ -600,7 +601,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         </p>
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2 mt-4 flex-wrap">
           <button
             onClick={() => setActiveTab('calculator')}
             className={`calc-mode-tab ${activeTab === 'calculator' ? 'active' : ''}`}
@@ -621,6 +622,13 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
           >
             <Sparkles className="w-4 h-4 inline mr-2" />
             Recipe Builder
+          </button>
+          <button
+            onClick={() => setActiveTab('dilution')}
+            className={`calc-mode-tab ${activeTab === 'dilution' ? 'active' : ''}`}
+          >
+            <GitBranch className="w-4 h-4 inline mr-2" />
+            Serial Dilution
           </button>
         </div>
       </div>
@@ -855,6 +863,11 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
       {/* Recipe Builder Tab */}
       {activeTab === 'builder' && (
         <RecipeBuilder />
+      )}
+
+      {/* Serial Dilution Tab */}
+      {activeTab === 'dilution' && (
+        <SerialDilution />
       )}
     </div>
   );
