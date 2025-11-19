@@ -53,8 +53,12 @@ export default function MetalSolubility() {
     const loadData = async () => {
       try {
         const response = await fetch('/crc_complete_solubility.csv');
-        const text = await response.text();
 
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const text = await response.text();
         const lines = text.split('\n').slice(1); // Skip header
         const records: SolubilityRecord[] = [];
         const anionsSet = new Set<string>();
@@ -66,27 +70,31 @@ export default function MetalSolubility() {
           if (parts.length < 10) continue;
 
           const record: SolubilityRecord = {
-            compound: parts[0],
-            element: parts[1],
-            anion: parts[2],
+            compound: parts[0].trim(),
+            element: parts[1].trim(),
+            anion: parts[2].trim(),
             mw: parseFloat(parts[3]),
             temp: parseFloat(parts[4]),
             massPercent: parseFloat(parts[5]),
             molarity: parseFloat(parts[6]),
             logS: parseFloat(parts[7]),
             gPer100mL: parseFloat(parts[8]),
-            source: parts[9]
+            source: parts[9].trim()
           };
 
           records.push(record);
           anionsSet.add(record.anion);
         }
 
+        console.log(`Loaded ${records.length} solubility records`);
+        console.log(`Available elements:`, [...new Set(records.map(r => r.element))].sort().join(', '));
+
         setSolubilityData(records);
         setAvailableAnions(['All', ...Array.from(anionsSet).sort()]);
         setLoading(false);
       } catch (err) {
-        setError('Failed to load solubility data');
+        console.error('Error loading solubility data:', err);
+        setError(`Failed to load solubility data: ${err instanceof Error ? err.message : 'Unknown error'}`);
         setLoading(false);
       }
     };
@@ -102,7 +110,9 @@ export default function MetalSolubility() {
       return matchesElement && matchesAnion;
     });
 
-    if (filtered.length === 0) return null;
+    if (filtered.length === 0) {
+      return null;
+    }
 
     // Find closest temperature match or interpolate
     const sortedByTemp = filtered.sort((a, b) => Math.abs(a.temp - temperature) - Math.abs(b.temp - temperature));
@@ -230,6 +240,11 @@ export default function MetalSolubility() {
         <p className="text-slate-600 dark:text-slate-400">
           Explore metal salt solubility data from the CRC Handbook. Select anions, adjust temperature, and view solubility in different units.
         </p>
+        {solubilityData.length > 0 && (
+          <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
+            Loaded {solubilityData.length} data points for {[...new Set(solubilityData.map(r => r.element))].length} elements
+          </p>
+        )}
       </div>
 
       {/* Control Panel */}
@@ -438,82 +453,97 @@ export default function MetalSolubility() {
       </div>
 
       {/* Detail Panel */}
-      {selectedElement && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-              Solubility Data for {selectedElement}
-            </h3>
-            <button
-              onClick={() => setSelectedElement(null)}
-              className="btn-secondary text-sm"
-            >
-              Close
-            </button>
-          </div>
+      {selectedElement && (() => {
+        const elementData = solubilityData
+          .filter(record => record.element === selectedElement)
+          .filter(record => selectedAnion === 'All' || record.anion === selectedAnion)
+          .sort((a, b) => a.temp - b.temp);
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-              <thead>
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Compound
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Anion
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Temp (°C)
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    g/100mL
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Molarity (M)
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Mass %
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    log S
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {solubilityData
-                  .filter(record => record.element === selectedElement)
-                  .filter(record => selectedAnion === 'All' || record.anion === selectedAnion)
-                  .sort((a, b) => a.temp - b.temp)
-                  .map((record, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.compound}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.anion}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.temp}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.gPer100mL.toFixed(3)}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.molarity.toFixed(3)}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.massPercent.toFixed(3)}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                        {record.logS.toFixed(3)}
-                      </td>
+        return (
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
+                Solubility Data for {selectedElement}
+                {elementData.length > 0 && (
+                  <span className="text-sm font-normal text-slate-600 dark:text-slate-400 ml-2">
+                    ({elementData.length} records)
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => setSelectedElement(null)}
+                className="btn-secondary text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            {elementData.length === 0 ? (
+              <div className="text-center py-8 text-slate-600 dark:text-slate-400">
+                <p className="text-lg mb-2">No data available for {selectedElement}</p>
+                <p className="text-sm">Try selecting "All" in the anion filter or choose a different element</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Compound
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Anion
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Temp (°C)
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        g/100mL
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Molarity (M)
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Mass %
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        log S
+                      </th>
                     </tr>
-                  ))}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {elementData.map((record, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.compound}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.anion}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.temp}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.gPer100mL.toFixed(3)}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.molarity.toFixed(3)}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.massPercent.toFixed(3)}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          {record.logS.toFixed(3)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
