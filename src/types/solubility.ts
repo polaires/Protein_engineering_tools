@@ -20,12 +20,15 @@ export type DataSource = 'CRC' | 'Wikipedia' | 'Curated Database' | 'PubChem';
 // Inorganic compound with temperature-dependent solubility
 export interface InorganicCompound {
   formula: string;
-  anion: string;
+  anion: string | null;
   molecularWeight: number | null;
   substanceName: string | null;
+  smiles: string | null;  // SMILES notation for organic compounds
+  dataQuality: DataQuality;  // Quality level (G1-G5)
+  sd: number | null;  // Standard deviation
+  measurements: number;  // Number of measurements
   temperatureData: Record<string, TemperatureDataPoint>;  // Key: temperature as string
-  sources: DataSource[];
-  quality: DataQuality;
+  source: DataSource;  // Primary data source
 }
 
 // Element solubility data
@@ -43,9 +46,14 @@ export interface SolubilityDatabase {
 export interface SolubilityStats {
   totalElements: number;
   totalCompounds: number;
+  totalEntries: number;
   elements: string[];
+  anions: string[];
+  sources: string[];
+  qualities: string[];
   temperatureRange: [number, number];
-  dataSource: string;
+  hasOrganic: boolean;
+  organicCount: number;
   lastUpdated: string;
 }
 
