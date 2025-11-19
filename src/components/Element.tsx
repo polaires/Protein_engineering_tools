@@ -4,11 +4,15 @@
  */
 
 import { useState } from 'react';
-import { Atom, X } from 'lucide-react';
+import { Atom, X, Beaker } from 'lucide-react';
 import { elements, categoryColors, categoryNames, Element as ElementType } from '@/data/elements';
+import MetalSolubility from './MetalSolubility';
+
+type ViewMode = 'standard' | 'solubility';
 
 export default function Element() {
   const [selectedElement, setSelectedElement] = useState<ElementType | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('standard');
 
   // Helper to get element by atomic number
   const getElement = (num: number): ElementType | null => {
@@ -45,14 +49,69 @@ export default function Element() {
     actinides.push(getElement(i));
   }
 
+  // If in solubility mode, render MetalSolubility component
+  if (viewMode === 'solubility') {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header with Mode Toggle */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title flex items-center gap-2">
+              <Beaker className="w-7 h-7" />
+              Periodic Table - Metal Solubility
+            </h2>
+            <div className="flex items-center gap-2 text-sm">
+              <button
+                onClick={() => setViewMode('standard')}
+                className="px-4 py-2 rounded-lg font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+              >
+                <Atom className="w-4 h-4 inline mr-2" />
+                Standard
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg font-medium transition-all bg-primary-600 text-white cursor-default"
+                disabled
+              >
+                <Beaker className="w-4 h-4 inline mr-2" />
+                Solubility
+              </button>
+            </div>
+          </div>
+          <p className="text-slate-600 dark:text-slate-400">
+            Explore metal salt solubility data from the CRC Handbook. Filter by anions, adjust temperature, and view in multiple units.
+          </p>
+        </div>
+        <MetalSolubility hideHeader={true} />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
+      {/* Header with Mode Toggle */}
       <div className="card">
-        <h2 className="section-title flex items-center gap-2">
-          <Atom className="w-7 h-7" />
-          Interactive Periodic Table of Elements
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title flex items-center gap-2">
+            <Atom className="w-7 h-7" />
+            Periodic Table - Standard View
+          </h2>
+          <div className="flex items-center gap-2 text-sm">
+            <button
+              className="px-4 py-2 rounded-lg font-medium transition-all bg-primary-600 text-white cursor-default"
+              disabled
+            >
+              <Atom className="w-4 h-4 inline mr-2" />
+              Standard
+            </button>
+            <button
+              onClick={() => setViewMode('solubility')}
+              className="px-4 py-2 rounded-lg font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+            >
+              <Beaker className="w-4 h-4 inline mr-2" />
+              Solubility
+            </button>
+          </div>
+        </div>
         <p className="text-slate-600 dark:text-slate-400">
           Complete table of all 118 elements. Click any element to view its properties, electron configuration, and detailed information.
         </p>

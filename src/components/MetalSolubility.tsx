@@ -34,7 +34,11 @@ const METAL_CATEGORIES = [
   'actinide'
 ];
 
-export default function MetalSolubility() {
+interface MetalSolubilityProps {
+  hideHeader?: boolean;
+}
+
+export default function MetalSolubility({ hideHeader = false }: MetalSolubilityProps = {}) {
   const [solubilityData, setSolubilityData] = useState<SolubilityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -238,22 +242,24 @@ export default function MetalSolubility() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="card">
-        <h2 className="section-title flex items-center gap-2">
-          <Beaker className="w-7 h-7" />
-          Metal Solubility - Interactive Periodic Table
-        </h2>
-        <p className="text-slate-600 dark:text-slate-400">
-          Explore metal salt solubility data from the CRC Handbook. Filter by specific anions, adjust temperature (0-100°C), and view solubility in different units. Colors dynamically update based on your filters - elements without data for the selected conditions appear gray.
-        </p>
-        {solubilityData.length > 0 && (
-          <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
-            Loaded {solubilityData.length} data points for {[...new Set(solubilityData.map(r => r.element))].length} elements • Default: All anions at 25°C in Molarity
+      {!hideHeader && (
+        <div className="card">
+          <h2 className="section-title flex items-center gap-2">
+            <Beaker className="w-7 h-7" />
+            Metal Solubility - Interactive Periodic Table
+          </h2>
+          <p className="text-slate-600 dark:text-slate-400">
+            Explore metal salt solubility data from the CRC Handbook. Filter by specific anions, adjust temperature (0-100°C), and view solubility in different units. Colors dynamically update based on your filters - elements without data for the selected conditions appear gray.
           </p>
-        )}
-      </div>
+          {solubilityData.length > 0 && (
+            <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
+              Loaded {solubilityData.length} data points for {[...new Set(solubilityData.map(r => r.element))].length} elements • Default: All anions at 25°C in Molarity
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Control Panel */}
       <div className="card">
