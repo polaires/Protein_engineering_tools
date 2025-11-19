@@ -42,6 +42,9 @@ export default function SerialDilution() {
   const [smartRangeMin, setSmartRangeMin] = useState<string>('0.5');
   const [smartRangeSpacing, setSmartRangeSpacing] = useState<'logarithmic' | 'linear'>('logarithmic');
 
+  // Hover state for tooltips
+  const [hoveredWell, setHoveredWell] = useState<{row: number; col: number} | null>(null);
+
   // Calculate dilution series
   const calculateDilutionSeries = (): DilutionStep[] => {
     const originalStock = parseFloat(originalStockConcentration);
@@ -268,6 +271,38 @@ export default function SerialDilution() {
     return `${(conc * 1000000).toFixed(1)} n${stockUnit}`;
   };
 
+  // Generate concentration legend
+  const generateConcentrationLegend = () => {
+    if (dilutionSteps.length === 0) return null;
+
+    const maxConc = dilutionStrategy === 'smart-range'
+      ? parseFloat(smartRangeMax)
+      : parseFloat(stockConcentration);
+    const minConc = dilutionSteps[dilutionSteps.length - 1]?.concentration || 0;
+
+    return (
+      <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+          Concentration:
+        </span>
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {formatConcentration(minConc)}
+          </span>
+          <div className="flex-1 h-6 rounded" style={{
+            background: `linear-gradient(to right, ${getConcentrationColor(minConc, maxConc)}, ${getConcentrationColor(maxConc, maxConc)})`
+          }}></div>
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {formatConcentration(maxConc)}
+          </span>
+        </div>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          (Darker = Higher)
+        </span>
+      </div>
+    );
+  };
+
   // Generate visual dilution workflow diagram
   const generateDilutionWorkflow = () => {
     if (dilutionSteps.length === 0) return null;
@@ -361,6 +396,19 @@ export default function SerialDilution() {
                   <text x="30" y="70" textAnchor="middle" fill="#fff" fontSize="8">
                     {volumeUnit}
                   </text>
+                  {/* Mixing indicator - swirl */}
+                  {step.diluentVolume > 0 && (
+                    <g opacity="0.7">
+                      <path
+                        d="M 25 45 Q 28 40, 30 45 T 35 45"
+                        stroke="#fff"
+                        strokeWidth="1.5"
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                      <circle cx="35" cy="45" r="1" fill="#fff" />
+                    </g>
+                  )}
                 </svg>
                 <div className="text-center">
                   <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
@@ -368,6 +416,7 @@ export default function SerialDilution() {
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     {step.dilutionFactor.toFixed(2)}x
+                    {step.diluentVolume > 0 && ' 🌀'}
                   </div>
                 </div>
               </div>
@@ -428,12 +477,28 @@ export default function SerialDilution() {
                     {dilutionSteps.map((step, colIdx) => (
                       <td
                         key={colIdx}
-                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center hover:ring-2 hover:ring-primary-500 transition-all"
+                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center hover:ring-2 hover:ring-primary-500 transition-all relative group cursor-pointer"
                         style={{ backgroundColor: getConcentrationColor(step.concentration, maxConc) }}
+                        onMouseEnter={() => setHoveredWell({row: rowIdx, col: colIdx})}
+                        onMouseLeave={() => setHoveredWell(null)}
                       >
                         <div className="px-3 py-3 min-w-[80px]">
                           <div className="font-bold text-sm">{formatConcentration(step.concentration)}</div>
                         </div>
+                        {/* Tooltip */}
+                        {hoveredWell?.row === rowIdx && hoveredWell?.col === colIdx && (
+                          <div className="absolute z-10 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-700 text-white text-xs rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
+                            <div className="font-semibold mb-1">Well {String.fromCharCode(65 + rowIdx)}{colIdx + 1}</div>
+                            <div>Concentration: {formatConcentration(step.concentration)}</div>
+                            <div>Sample: {sampleVolume} {volumeUnit}</div>
+                            <div>Assay: {getAssayVolume()} {volumeUnit}</div>
+                            <div className="border-t border-slate-600 mt-1 pt-1">Total: {totalWellVol} {volumeUnit}</div>
+                            {/* Arrow pointing down */}
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+                              <div className="border-4 border-transparent border-t-slate-900 dark:border-t-slate-700"></div>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     ))}
                     <td className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 text-xs text-center bg-slate-300 dark:bg-slate-600 font-semibold">
@@ -454,12 +519,28 @@ export default function SerialDilution() {
                     {Array.from({ length: numReps }, (_, colIdx) => (
                       <td
                         key={colIdx}
-                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center hover:ring-2 hover:ring-primary-500 transition-all"
+                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center hover:ring-2 hover:ring-primary-500 transition-all relative group cursor-pointer"
                         style={{ backgroundColor: getConcentrationColor(step.concentration, maxConc) }}
+                        onMouseEnter={() => setHoveredWell({row: rowIdx, col: colIdx})}
+                        onMouseLeave={() => setHoveredWell(null)}
                       >
                         <div className="px-3 py-3 min-w-[80px]">
                           <div className="font-bold text-sm">{formatConcentration(step.concentration)}</div>
                         </div>
+                        {/* Tooltip */}
+                        {hoveredWell?.row === rowIdx && hoveredWell?.col === colIdx && (
+                          <div className="absolute z-10 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 dark:bg-slate-700 text-white text-xs rounded-lg shadow-lg whitespace-nowrap pointer-events-none">
+                            <div className="font-semibold mb-1">Well {String.fromCharCode(65 + rowIdx)}{colIdx + 1}</div>
+                            <div>Concentration: {formatConcentration(step.concentration)}</div>
+                            <div>Sample: {sampleVolume} {volumeUnit}</div>
+                            <div>Assay: {getAssayVolume()} {volumeUnit}</div>
+                            <div className="border-t border-slate-600 mt-1 pt-1">Total: {totalWellVol} {volumeUnit}</div>
+                            {/* Arrow pointing down */}
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+                              <div className="border-4 border-transparent border-t-slate-900 dark:border-t-slate-700"></div>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -883,9 +964,13 @@ export default function SerialDilution() {
               <li><span className="font-medium">{finalVolume} {volumeUnit}</span> total well volume</li>
             </ul>
           </div>
+          {/* Color Legend */}
+          <div className="mb-4">
+            {generateConcentrationLegend()}
+          </div>
           {generatePlateLayout()}
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
-            💡 Color intensity indicates concentration (darker = higher). Refer to Well Composition above for volume details.
+            💡 Hover over wells to see detailed composition. Click and drag to plan custom well arrangements.
           </p>
         </div>
       )}
