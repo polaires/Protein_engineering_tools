@@ -40,6 +40,7 @@ export default function SerialDilution() {
   // Smart range mode
   const [smartRangeMax, setSmartRangeMax] = useState<string>('20');
   const [smartRangeMin, setSmartRangeMin] = useState<string>('0.5');
+  const [smartRangeSpacing, setSmartRangeSpacing] = useState<'logarithmic' | 'linear'>('logarithmic');
 
   // Calculate dilution series
   const calculateDilutionSeries = (): DilutionStep[] => {
@@ -58,7 +59,7 @@ export default function SerialDilution() {
     const totalVolumeNeeded = volPerWell * numReplicates * excess;
 
     if (dilutionStrategy === 'smart-range') {
-      // Smart range mode: auto-calculate dilution factor from concentration range
+      // Smart range mode: auto-calculate concentrations from concentration range
       const maxConc = parseFloat(smartRangeMax);
       const minConc = parseFloat(smartRangeMin);
 
@@ -70,16 +71,29 @@ export default function SerialDilution() {
         return [];
       }
 
-      // Calculate optimal dilution factor: (max/min)^(1/(n-1))
-      const dilutionFactor = Math.pow(maxConc / minConc, 1 / (numDilutions - 1));
+      // Generate concentration array based on spacing mode
+      const concentrations: number[] = [];
 
-      for (let i = 0; i < numDilutions; i++) {
-        const conc = maxConc / Math.pow(dilutionFactor, i);
+      if (smartRangeSpacing === 'linear') {
+        // Linear spacing: evenly spaced concentrations
+        const step = (maxConc - minConc) / (numDilutions - 1);
+        for (let i = 0; i < numDilutions; i++) {
+          concentrations.push(maxConc - (step * i));
+        }
+      } else {
+        // Logarithmic spacing: evenly spaced in log scale (geometric progression)
+        const dilutionFactor = Math.pow(maxConc / minConc, 1 / (numDilutions - 1));
+        for (let i = 0; i < numDilutions; i++) {
+          concentrations.push(maxConc / Math.pow(dilutionFactor, i));
+        }
+      }
 
-        if (i === 0) {
+      // Calculate volumes for each concentration
+      concentrations.forEach((conc, index) => {
+        if (index === 0) {
           // First dilution - check if we need to dilute from original stock
-          if (maxConc < originalStock) {
-            const dilFactorFromStock = originalStock / maxConc;
+          if (conc < originalStock) {
+            const dilFactorFromStock = originalStock / conc;
             const stockVol = totalVolumeNeeded / dilFactorFromStock;
             const diluentVol = totalVolumeNeeded - stockVol;
 
@@ -105,8 +119,10 @@ export default function SerialDilution() {
             });
           }
         } else {
-          // Serial dilution from previous
-          const prevStepVol = totalVolumeNeeded / dilutionFactor;
+          // Dilute from previous step
+          const prevConc = concentrations[index - 1];
+          const dilFactorFromPrev = prevConc / conc;
+          const prevStepVol = totalVolumeNeeded / dilFactorFromPrev;
           const diluentVol = totalVolumeNeeded - prevStepVol;
 
           steps.push({
@@ -115,11 +131,11 @@ export default function SerialDilution() {
             stockVolume: prevStepVol,
             diluentVolume: diluentVol,
             totalVolume: totalVolumeNeeded,
-            dilutionFactor: dilutionFactor,
-            sourceStep: i - 1
+            dilutionFactor: dilFactorFromPrev,
+            sourceStep: index - 1
           });
         }
-      }
+      });
     } else if (dilutionStrategy === 'specific') {
       // Parse specific concentrations
       const concentrations = specificConcentrations
@@ -362,6 +378,7 @@ export default function SerialDilution() {
     setSpecificConcentrations('20, 10, 5, 2.5, 1, 0.5');
     setSmartRangeMax('20');
     setSmartRangeMin('0.5');
+    setSmartRangeSpacing('logarithmic');
   };
 
   // Calculate assay volume (total - sample)
@@ -532,14 +549,19 @@ export default function SerialDilution() {
             <select
               value={dilutionStrategy}
               onChange={(e) => setDilutionStrategy(e.target.value as DilutionStrategy)}
-              className="input-field"
+              className={`input-field ${dilutionStrategy === 'smart-range' ? 'ring-2 ring-primary-500 dark:ring-primary-400' : ''}`}
             >
               <option value="serial-2">Serial 2-fold</option>
               <option value="serial-10">Serial 10-fold</option>
               <option value="custom">Custom Factor</option>
-              <option value="smart-range">Smart Range Design</option>
+              <option value="smart-range">✨ Smart Range Design</option>
               <option value="specific">Specific Concentrations</option>
             </select>
+            {dilutionStrategy === 'smart-range' && (
+              <p className="text-xs text-primary-600 dark:text-primary-400 mt-1 font-medium">
+                🎯 Automatically calculates optimal dilution series
+              </p>
+            )}
           </div>
 
           {/* Custom Factor (if custom) */}
@@ -562,6 +584,24 @@ export default function SerialDilution() {
           {/* Smart Range Inputs */}
           {dilutionStrategy === 'smart-range' && (
             <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Spacing Mode
+                </label>
+                <select
+                  value={smartRangeSpacing}
+                  onChange={(e) => setSmartRangeSpacing(e.target.value as 'logarithmic' | 'linear')}
+                  className="input-field"
+                >
+                  <option value="logarithmic">Logarithmic (recommended)</option>
+                  <option value="linear">Linear</option>
+                </select>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {smartRangeSpacing === 'logarithmic'
+                    ? '📊 Evenly spaced in log scale (ideal for dose-response)'
+                    : '📏 Evenly spaced concentrations (constant intervals)'}
+                </p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Max Concentration
@@ -610,18 +650,25 @@ export default function SerialDilution() {
                 max="12"
               />
               {dilutionStrategy === 'smart-range' && (
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Auto-calculated factor: {(() => {
-                    const max = parseFloat(smartRangeMax);
-                    const min = parseFloat(smartRangeMin);
-                    const num = parseInt(numberOfDilutions);
-                    if (!isNaN(max) && !isNaN(min) && !isNaN(num) && num >= 2 && max > min) {
-                      const factor = Math.pow(max / min, 1 / (num - 1));
-                      return `${factor.toFixed(2)}x`;
-                    }
-                    return 'N/A';
-                  })()}
-                </p>
+                <div className="mt-2 p-2 bg-primary-50 dark:bg-primary-900/20 rounded">
+                  <p className="text-xs text-primary-700 dark:text-primary-300 font-medium">
+                    {(() => {
+                      const max = parseFloat(smartRangeMax);
+                      const min = parseFloat(smartRangeMin);
+                      const num = parseInt(numberOfDilutions);
+                      if (!isNaN(max) && !isNaN(min) && !isNaN(num) && num >= 2 && max > min) {
+                        if (smartRangeSpacing === 'logarithmic') {
+                          const factor = Math.pow(max / min, 1 / (num - 1));
+                          return `📐 Dilution factor: ${factor.toFixed(2)}x (geometric progression)`;
+                        } else {
+                          const step = (max - min) / (num - 1);
+                          return `📐 Concentration step: ${step.toFixed(2)} ${stockUnit} (linear progression)`;
+                        }
+                      }
+                      return 'Enter valid range to see calculation';
+                    })()}
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -657,6 +704,28 @@ export default function SerialDilution() {
             />
           </div>
         </div>
+
+        {/* Smart Range Design Info Banner */}
+        {dilutionStrategy === 'smart-range' && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/30 dark:to-blue-900/30 border-2 border-primary-200 dark:border-primary-700 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">✨</div>
+              <div>
+                <h4 className="text-sm font-semibold text-primary-900 dark:text-primary-100 mb-1">
+                  Smart Range Design Active
+                </h4>
+                <p className="text-xs text-primary-700 dark:text-primary-300">
+                  {smartRangeSpacing === 'logarithmic'
+                    ? 'Using logarithmic spacing: concentrations are evenly distributed in log scale, ideal for dose-response curves and typical dilution experiments.'
+                    : 'Using linear spacing: concentrations are evenly distributed with constant intervals, useful for testing specific concentration ranges.'}
+                </p>
+                <p className="text-xs text-primary-600 dark:text-primary-400 mt-2">
+                  💡 The calculator will automatically determine the optimal dilution volumes to achieve your desired concentration range.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Specific Concentrations Input */}
         {dilutionStrategy === 'specific' && (
