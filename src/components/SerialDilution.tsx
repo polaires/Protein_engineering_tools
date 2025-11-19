@@ -21,9 +21,11 @@ interface DilutionStep {
 
 export default function SerialDilution() {
   // Input states
+  const [originalStockConcentration, setOriginalStockConcentration] = useState<string>('100');
   const [stockConcentration, setStockConcentration] = useState<string>('20');
   const [stockUnit, setStockUnit] = useState<string>('mM');
   const [finalVolume, setFinalVolume] = useState<string>('200');
+  const [sampleVolume, setSampleVolume] = useState<string>('20');
   const [volumeUnit, setVolumeUnit] = useState<string>('μL');
   const [dilutionStrategy, setDilutionStrategy] = useState<DilutionStrategy>('serial-2');
   const [customFactor, setCustomFactor] = useState<string>('2');
@@ -37,13 +39,14 @@ export default function SerialDilution() {
 
   // Calculate dilution series
   const calculateDilutionSeries = (): DilutionStep[] => {
+    const originalStock = parseFloat(originalStockConcentration);
     const stock = parseFloat(stockConcentration);
-    const volPerWell = parseFloat(finalVolume);
+    const volPerWell = parseFloat(sampleVolume); // Volume of sample (not total well volume)
     const excess = parseFloat(excessFactor);
     const numDilutions = parseInt(numberOfDilutions);
     const numReplicates = parseInt(replicates);
 
-    if (isNaN(stock) || isNaN(volPerWell) || isNaN(excess) || isNaN(numReplicates)) {
+    if (isNaN(originalStock) || isNaN(stock) || isNaN(volPerWell) || isNaN(excess) || isNaN(numReplicates)) {
       return [];
     }
 
@@ -60,20 +63,33 @@ export default function SerialDilution() {
 
       concentrations.forEach((conc, index) => {
         if (index === 0) {
-          // First dilution from stock
-          const dilutionFactor = stock / conc;
-          const stockVol = totalVolumeNeeded / dilutionFactor;
-          const diluentVol = totalVolumeNeeded - stockVol;
+          // First dilution - check if we need to dilute from original stock
+          if (conc < originalStock) {
+            const dilutionFactor = originalStock / conc;
+            const stockVol = totalVolumeNeeded / dilutionFactor;
+            const diluentVol = totalVolumeNeeded - stockVol;
 
-          steps.push({
-            concentration: conc,
-            unit: stockUnit,
-            stockVolume: stockVol,
-            diluentVolume: diluentVol,
-            totalVolume: totalVolumeNeeded,
-            dilutionFactor: dilutionFactor,
-            sourceStep: null
-          });
+            steps.push({
+              concentration: conc,
+              unit: stockUnit,
+              stockVolume: stockVol,
+              diluentVolume: diluentVol,
+              totalVolume: totalVolumeNeeded,
+              dilutionFactor: dilutionFactor,
+              sourceStep: null
+            });
+          } else {
+            // Concentration equals or exceeds stock
+            steps.push({
+              concentration: conc,
+              unit: stockUnit,
+              stockVolume: totalVolumeNeeded,
+              diluentVolume: 0,
+              totalVolume: totalVolumeNeeded,
+              dilutionFactor: 1,
+              sourceStep: null
+            });
+          }
         } else {
           // Dilute from previous step
           const prevConc = concentrations[index - 1];
@@ -102,19 +118,33 @@ export default function SerialDilution() {
         const conc = stock / Math.pow(factor, i);
 
         if (i === 0) {
-          // First dilution from stock
-          const stockVol = totalVolumeNeeded / factor;
-          const diluentVol = totalVolumeNeeded - stockVol;
+          // First dilution - check if we need to dilute from original stock
+          if (stock < originalStock) {
+            const dilutionFactor = originalStock / stock;
+            const stockVol = totalVolumeNeeded / dilutionFactor;
+            const diluentVol = totalVolumeNeeded - stockVol;
 
-          steps.push({
-            concentration: conc,
-            unit: stockUnit,
-            stockVolume: stockVol,
-            diluentVolume: diluentVol,
-            totalVolume: totalVolumeNeeded,
-            dilutionFactor: factor,
-            sourceStep: null
-          });
+            steps.push({
+              concentration: conc,
+              unit: stockUnit,
+              stockVolume: stockVol,
+              diluentVolume: diluentVol,
+              totalVolume: totalVolumeNeeded,
+              dilutionFactor: dilutionFactor,
+              sourceStep: null
+            });
+          } else {
+            // First concentration equals stock
+            steps.push({
+              concentration: conc,
+              unit: stockUnit,
+              stockVolume: totalVolumeNeeded,
+              diluentVolume: 0,
+              totalVolume: totalVolumeNeeded,
+              dilutionFactor: 1,
+              sourceStep: null
+            });
+          }
         } else {
           // Serial dilution from previous
           const prevStepVol = totalVolumeNeeded / factor;
@@ -161,29 +191,32 @@ export default function SerialDilution() {
     if (isNaN(numReps) || dilutionSteps.length === 0) return null;
 
     const maxConc = parseFloat(stockConcentration);
+    const totalWellVol = parseFloat(finalVolume);
+    const sampleVol = parseFloat(sampleVolume);
+    const assayVol = getAssayVolume();
 
     return (
       <div className="overflow-x-auto">
         <div className="inline-block min-w-full">
-          <table className="border-collapse">
+          <table className="border-collapse border-2 border-slate-400 dark:border-slate-500">
             <thead>
               <tr>
-                <th className="border border-slate-300 dark:border-slate-600 px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs"></th>
+                <th className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 bg-slate-200 dark:bg-slate-700 text-sm font-bold"></th>
                 {layoutOrientation === 'horizontal' ? (
                   <>
                     {dilutionSteps.map((_, idx) => (
-                      <th key={idx} className="border border-slate-300 dark:border-slate-600 px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs">
+                      <th key={idx} className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 bg-slate-200 dark:bg-slate-700 text-sm font-bold">
                         {idx + 1}
                       </th>
                     ))}
-                    <th className="border border-slate-300 dark:border-slate-600 px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs">
+                    <th className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 bg-slate-200 dark:bg-slate-700 text-sm font-bold">
                       Blank
                     </th>
                   </>
                 ) : (
                   <>
                     {Array.from({ length: numReps }, (_, idx) => (
-                      <th key={idx} className="border border-slate-300 dark:border-slate-600 px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs">
+                      <th key={idx} className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 bg-slate-200 dark:bg-slate-700 text-sm font-bold">
                         {idx + 1}
                       </th>
                     ))}
@@ -196,21 +229,30 @@ export default function SerialDilution() {
                 // Horizontal layout: concentrations across columns
                 Array.from({ length: numReps }, (_, rowIdx) => (
                   <tr key={rowIdx}>
-                    <td className="border border-slate-300 dark:border-slate-600 px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
+                    <td className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 bg-slate-200 dark:bg-slate-700 text-sm font-bold">
                       {String.fromCharCode(65 + rowIdx)}
                     </td>
                     {dilutionSteps.map((step, colIdx) => (
                       <td
                         key={colIdx}
-                        className="border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-center cursor-pointer hover:ring-2 hover:ring-primary-500"
+                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center cursor-pointer hover:ring-4 hover:ring-primary-500 transition-all"
                         style={{ backgroundColor: getConcentrationColor(step.concentration, maxConc) }}
-                        title={`${formatConcentration(step.concentration)}\n${finalVolume} ${volumeUnit}`}
+                        title={`Concentration: ${formatConcentration(step.concentration)}\nSample: ${sampleVol} ${volumeUnit}\nAssay: ${assayVol} ${volumeUnit}\nTotal: ${totalWellVol} ${volumeUnit}`}
                       >
-                        {formatConcentration(step.concentration)}
+                        <div className="px-3 py-2 min-w-[100px]">
+                          <div className="font-bold text-sm mb-1">{formatConcentration(step.concentration)}</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-900 space-y-0.5">
+                            <div>{sampleVol} {volumeUnit} sample</div>
+                            <div>{assayVol} {volumeUnit} assay</div>
+                          </div>
+                        </div>
                       </td>
                     ))}
-                    <td className="border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-center bg-slate-200 dark:bg-slate-700">
-                      Blank
+                    <td className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 text-xs text-center bg-slate-300 dark:bg-slate-600 font-semibold">
+                      <div className="min-w-[80px]">
+                        <div className="font-bold text-sm mb-1">Blank</div>
+                        <div className="text-xs">{totalWellVol} {volumeUnit}</div>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -218,17 +260,23 @@ export default function SerialDilution() {
                 // Vertical layout: concentrations down rows
                 dilutionSteps.map((step, rowIdx) => (
                   <tr key={rowIdx}>
-                    <td className="border border-slate-300 dark:border-slate-600 px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
+                    <td className="border-2 border-slate-400 dark:border-slate-500 px-3 py-2 bg-slate-200 dark:bg-slate-700 text-sm font-bold">
                       {String.fromCharCode(65 + rowIdx)}
                     </td>
                     {Array.from({ length: numReps }, (_, colIdx) => (
                       <td
                         key={colIdx}
-                        className="border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs text-center cursor-pointer hover:ring-2 hover:ring-primary-500"
+                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center cursor-pointer hover:ring-4 hover:ring-primary-500 transition-all"
                         style={{ backgroundColor: getConcentrationColor(step.concentration, maxConc) }}
-                        title={`${formatConcentration(step.concentration)}\n${finalVolume} ${volumeUnit}`}
+                        title={`Concentration: ${formatConcentration(step.concentration)}\nSample: ${sampleVol} ${volumeUnit}\nAssay: ${assayVol} ${volumeUnit}\nTotal: ${totalWellVol} ${volumeUnit}`}
                       >
-                        {formatConcentration(step.concentration)}
+                        <div className="px-3 py-2 min-w-[100px]">
+                          <div className="font-bold text-sm mb-1">{formatConcentration(step.concentration)}</div>
+                          <div className="text-xs text-slate-700 dark:text-slate-900 space-y-0.5">
+                            <div>{sampleVol} {volumeUnit} sample</div>
+                            <div>{assayVol} {volumeUnit} assay</div>
+                          </div>
+                        </div>
                       </td>
                     ))}
                   </tr>
@@ -243,9 +291,11 @@ export default function SerialDilution() {
 
   // Reset all inputs
   const resetInputs = () => {
+    setOriginalStockConcentration('100');
     setStockConcentration('20');
     setStockUnit('mM');
     setFinalVolume('200');
+    setSampleVolume('20');
     setVolumeUnit('μL');
     setDilutionStrategy('serial-2');
     setNumberOfDilutions('6');
@@ -253,6 +303,14 @@ export default function SerialDilution() {
     setLayoutOrientation('horizontal');
     setExcessFactor('1.2');
     setSpecificConcentrations('20, 10, 5, 2.5, 1, 0.5');
+  };
+
+  // Calculate assay volume (total - sample)
+  const getAssayVolume = (): number => {
+    const total = parseFloat(finalVolume);
+    const sample = parseFloat(sampleVolume);
+    if (isNaN(total) || isNaN(sample)) return 0;
+    return total - sample;
   };
 
   return (
@@ -281,16 +339,16 @@ export default function SerialDilution() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Stock Concentration */}
+          {/* Original Stock Concentration */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Stock Concentration
+              Original Stock Concentration
             </label>
             <div className="flex gap-2">
               <input
                 type="number"
-                value={stockConcentration}
-                onChange={(e) => setStockConcentration(e.target.value)}
+                value={originalStockConcentration}
+                onChange={(e) => setOriginalStockConcentration(e.target.value)}
                 className="input-field flex-1"
                 step="0.1"
               />
@@ -307,12 +365,32 @@ export default function SerialDilution() {
                 <option value="μg/mL">μg/mL</option>
               </select>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Concentration of your stock solution
+            </p>
           </div>
 
-          {/* Final Volume per Well */}
+          {/* Starting Dilution Concentration */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Volume per Well
+              Highest Plate Concentration
+            </label>
+            <input
+              type="number"
+              value={stockConcentration}
+              onChange={(e) => setStockConcentration(e.target.value)}
+              className="input-field"
+              step="0.1"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              First concentration in dilution series
+            </p>
+          </div>
+
+          {/* Total Well Volume */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Total Well Volume
             </label>
             <div className="flex gap-2">
               <input
@@ -332,6 +410,42 @@ export default function SerialDilution() {
                 <option value="L">L</option>
               </select>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Total volume in each well
+            </p>
+          </div>
+
+          {/* Sample Volume */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Sample Volume
+            </label>
+            <input
+              type="number"
+              value={sampleVolume}
+              onChange={(e) => setSampleVolume(e.target.value)}
+              className="input-field"
+              step="1"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Volume of diluted sample per well
+            </p>
+          </div>
+
+          {/* Assay Volume (calculated) */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Assay/Buffer Volume
+            </label>
+            <input
+              type="number"
+              value={getAssayVolume()}
+              className="input-field bg-slate-100 dark:bg-slate-800"
+              disabled
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Auto-calculated: {finalVolume} - {sampleVolume} {volumeUnit}
+            </p>
           </div>
 
           {/* Number of Replicates */}
@@ -455,9 +569,19 @@ export default function SerialDilution() {
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
             Plate Layout
           </h3>
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">
+              <span className="font-semibold">Well Composition:</span>
+            </p>
+            <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside">
+              <li><span className="font-medium">{sampleVolume} {volumeUnit}</span> diluted sample (colored by concentration)</li>
+              <li><span className="font-medium">{getAssayVolume()} {volumeUnit}</span> assay reagent/buffer</li>
+              <li><span className="font-medium">{finalVolume} {volumeUnit}</span> total well volume</li>
+            </ul>
+          </div>
           {generatePlateLayout()}
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            Click on any well to see concentration details. Color intensity indicates concentration (darker = higher).
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+            💡 Hover over wells to see detailed volume breakdown. Color intensity indicates concentration (darker = higher).
           </p>
         </div>
       )}
@@ -557,55 +681,90 @@ export default function SerialDilution() {
       )}
 
       {/* Step-by-Step Workflow */}
-      {dilutionSteps.length > 0 && (
-        <div className="card">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
-            Step-by-Step Protocol
-          </h3>
-          <div className="space-y-3">
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-              <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
-                1. Prepare Stock Solution
-              </p>
-              <p className="text-sm text-slate-700 dark:text-slate-300">
-                Ensure you have at least {dilutionSteps[0]?.stockVolume.toFixed(1)} {volumeUnit} of {stockConcentration} {stockUnit} stock solution.
-              </p>
-            </div>
+      {dilutionSteps.length > 0 && (() => {
+        const needsInitialDilution = parseFloat(stockConcentration) < parseFloat(originalStockConcentration);
+        let stepNum = 1;
 
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-              <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
-                2. Prepare Diluent
-              </p>
-              <p className="text-sm text-slate-700 dark:text-slate-300">
-                Have {dilutionSteps.reduce((sum, step) => sum + step.diluentVolume, 0).toFixed(1)} {volumeUnit} of buffer/water ready.
-              </p>
-            </div>
-
-            {dilutionSteps.map((step, idx) => (
-              <div key={idx} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        return (
+          <div className="card">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
+              Step-by-Step Protocol
+            </h3>
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                 <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
-                  {idx + 3}. Prepare {formatConcentration(step.concentration)}
+                  {stepNum++}. Prepare Original Stock Solution
+                </p>
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Ensure you have {originalStockConcentration} {stockUnit} stock solution ready.
+                  {needsInitialDilution && (
+                    <span className="block mt-1 font-medium text-primary-600 dark:text-primary-400">
+                      ⚠️ You will need to dilute this to {stockConcentration} {stockUnit} for the first plate concentration.
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                  {stepNum++}. Prepare Dilution Buffer
+                </p>
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Have at least {dilutionSteps.reduce((sum, step) => sum + step.diluentVolume, 0).toFixed(1)} {volumeUnit} of buffer/diluent ready for serial dilutions.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                  {stepNum++}. Prepare Assay Reagent
+                </p>
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Prepare {(getAssayVolume() * dilutionSteps.length * parseInt(replicates) * parseFloat(excessFactor)).toFixed(1)} {volumeUnit} of assay reagent/buffer.
+                  This will be added to each well ({getAssayVolume()} {volumeUnit} per well).
+                </p>
+              </div>
+
+              {dilutionSteps.map((step, idx) => (
+                <div key={idx} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                    {stepNum++}. Prepare {formatConcentration(step.concentration)} Dilution
+                  </p>
+                  <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside">
+                    {step.diluentVolume > 0 && (
+                      <li>Add {step.diluentVolume.toFixed(1)} {volumeUnit} diluent to tube/well</li>
+                    )}
+                    <li>Add {step.stockVolume.toFixed(1)} {volumeUnit} from {step.sourceStep === null ? `${originalStockConcentration} ${stockUnit} stock` : `previous dilution (${formatConcentration(dilutionSteps[step.sourceStep].concentration)})`}</li>
+                    <li>Mix thoroughly (vortex or pipette mixing)</li>
+                    <li>Total volume prepared: {step.totalVolume.toFixed(1)} {volumeUnit}</li>
+                  </ul>
+                </div>
+              ))}
+
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                  {stepNum++}. Add Samples to Plate
                 </p>
                 <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-1 list-disc list-inside">
-                  <li>Add {step.diluentVolume.toFixed(1)} {volumeUnit} diluent to container</li>
-                  <li>Add {step.stockVolume.toFixed(1)} {volumeUnit} from {step.sourceStep === null ? 'stock solution' : `previous dilution (${formatConcentration(dilutionSteps[step.sourceStep].concentration)})`}</li>
-                  <li>Mix thoroughly (vortex or pipette mix)</li>
-                  <li>Dispense {finalVolume} {volumeUnit} into {replicates} wells</li>
+                  <li>Add {getAssayVolume()} {volumeUnit} assay reagent to all wells first</li>
+                  <li>Add {sampleVolume} {volumeUnit} of each diluted sample to appropriate wells</li>
+                  <li>Use multi-channel pipette if available for replicates</li>
+                  <li>Remember to include blank wells ({finalVolume} {volumeUnit} assay reagent only)</li>
                 </ul>
               </div>
-            ))}
 
-            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-              <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
-                {dilutionSteps.length + 3}. Quality Check
-              </p>
-              <p className="text-sm text-slate-700 dark:text-slate-300">
-                Verify plate layout matches design. Add blank controls if needed.
-              </p>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">
+                  {stepNum++}. Final Check
+                </p>
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Verify plate layout matches your design. Each well should contain {finalVolume} {volumeUnit} total ({sampleVolume} {volumeUnit} sample + {getAssayVolume()} {volumeUnit} assay).
+                  Mix gently if needed and proceed with your assay.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
