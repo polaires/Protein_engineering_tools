@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Beaker, RotateCcw } from 'lucide-react';
 
-type DilutionStrategy = 'serial-2' | 'serial-10' | 'custom' | 'specific';
+type DilutionStrategy = 'serial-2' | 'serial-10' | 'custom' | 'specific' | 'smart-range';
 type LayoutOrientation = 'horizontal' | 'vertical';
 
 interface DilutionStep {
@@ -37,6 +37,10 @@ export default function SerialDilution() {
   // Specific concentrations mode
   const [specificConcentrations, setSpecificConcentrations] = useState<string>('20, 10, 5, 2.5, 1, 0.5');
 
+  // Smart range mode
+  const [smartRangeMax, setSmartRangeMax] = useState<string>('20');
+  const [smartRangeMin, setSmartRangeMin] = useState<string>('0.5');
+
   // Calculate dilution series
   const calculateDilutionSeries = (): DilutionStep[] => {
     const originalStock = parseFloat(originalStockConcentration);
@@ -53,7 +57,70 @@ export default function SerialDilution() {
     const steps: DilutionStep[] = [];
     const totalVolumeNeeded = volPerWell * numReplicates * excess;
 
-    if (dilutionStrategy === 'specific') {
+    if (dilutionStrategy === 'smart-range') {
+      // Smart range mode: auto-calculate dilution factor from concentration range
+      const maxConc = parseFloat(smartRangeMax);
+      const minConc = parseFloat(smartRangeMin);
+
+      if (isNaN(maxConc) || isNaN(minConc) || isNaN(numDilutions) || numDilutions < 2) {
+        return [];
+      }
+
+      if (maxConc <= minConc) {
+        return [];
+      }
+
+      // Calculate optimal dilution factor: (max/min)^(1/(n-1))
+      const dilutionFactor = Math.pow(maxConc / minConc, 1 / (numDilutions - 1));
+
+      for (let i = 0; i < numDilutions; i++) {
+        const conc = maxConc / Math.pow(dilutionFactor, i);
+
+        if (i === 0) {
+          // First dilution - check if we need to dilute from original stock
+          if (maxConc < originalStock) {
+            const dilFactorFromStock = originalStock / maxConc;
+            const stockVol = totalVolumeNeeded / dilFactorFromStock;
+            const diluentVol = totalVolumeNeeded - stockVol;
+
+            steps.push({
+              concentration: conc,
+              unit: stockUnit,
+              stockVolume: stockVol,
+              diluentVolume: diluentVol,
+              totalVolume: totalVolumeNeeded,
+              dilutionFactor: dilFactorFromStock,
+              sourceStep: null
+            });
+          } else {
+            // First concentration equals or exceeds stock
+            steps.push({
+              concentration: conc,
+              unit: stockUnit,
+              stockVolume: totalVolumeNeeded,
+              diluentVolume: 0,
+              totalVolume: totalVolumeNeeded,
+              dilutionFactor: 1,
+              sourceStep: null
+            });
+          }
+        } else {
+          // Serial dilution from previous
+          const prevStepVol = totalVolumeNeeded / dilutionFactor;
+          const diluentVol = totalVolumeNeeded - prevStepVol;
+
+          steps.push({
+            concentration: conc,
+            unit: stockUnit,
+            stockVolume: prevStepVol,
+            diluentVolume: diluentVol,
+            totalVolume: totalVolumeNeeded,
+            dilutionFactor: dilutionFactor,
+            sourceStep: i - 1
+          });
+        }
+      }
+    } else if (dilutionStrategy === 'specific') {
       // Parse specific concentrations
       const concentrations = specificConcentrations
         .split(',')
@@ -190,10 +257,10 @@ export default function SerialDilution() {
     const numReps = parseInt(replicates);
     if (isNaN(numReps) || dilutionSteps.length === 0) return null;
 
-    const maxConc = parseFloat(stockConcentration);
+    const maxConc = dilutionStrategy === 'smart-range'
+      ? parseFloat(smartRangeMax)
+      : parseFloat(stockConcentration);
     const totalWellVol = parseFloat(finalVolume);
-    const sampleVol = parseFloat(sampleVolume);
-    const assayVol = getAssayVolume();
 
     return (
       <div className="overflow-x-auto">
@@ -235,16 +302,11 @@ export default function SerialDilution() {
                     {dilutionSteps.map((step, colIdx) => (
                       <td
                         key={colIdx}
-                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center cursor-pointer hover:ring-4 hover:ring-primary-500 transition-all"
+                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center hover:ring-2 hover:ring-primary-500 transition-all"
                         style={{ backgroundColor: getConcentrationColor(step.concentration, maxConc) }}
-                        title={`Concentration: ${formatConcentration(step.concentration)}\nSample: ${sampleVol} ${volumeUnit}\nAssay: ${assayVol} ${volumeUnit}\nTotal: ${totalWellVol} ${volumeUnit}`}
                       >
-                        <div className="px-3 py-2 min-w-[100px]">
-                          <div className="font-bold text-sm mb-1">{formatConcentration(step.concentration)}</div>
-                          <div className="text-xs text-slate-700 dark:text-slate-900 space-y-0.5">
-                            <div>{sampleVol} {volumeUnit} sample</div>
-                            <div>{assayVol} {volumeUnit} assay</div>
-                          </div>
+                        <div className="px-3 py-3 min-w-[80px]">
+                          <div className="font-bold text-sm">{formatConcentration(step.concentration)}</div>
                         </div>
                       </td>
                     ))}
@@ -266,16 +328,11 @@ export default function SerialDilution() {
                     {Array.from({ length: numReps }, (_, colIdx) => (
                       <td
                         key={colIdx}
-                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center cursor-pointer hover:ring-4 hover:ring-primary-500 transition-all"
+                        className="border-2 border-slate-400 dark:border-slate-500 p-0 text-xs text-center hover:ring-2 hover:ring-primary-500 transition-all"
                         style={{ backgroundColor: getConcentrationColor(step.concentration, maxConc) }}
-                        title={`Concentration: ${formatConcentration(step.concentration)}\nSample: ${sampleVol} ${volumeUnit}\nAssay: ${assayVol} ${volumeUnit}\nTotal: ${totalWellVol} ${volumeUnit}`}
                       >
-                        <div className="px-3 py-2 min-w-[100px]">
-                          <div className="font-bold text-sm mb-1">{formatConcentration(step.concentration)}</div>
-                          <div className="text-xs text-slate-700 dark:text-slate-900 space-y-0.5">
-                            <div>{sampleVol} {volumeUnit} sample</div>
-                            <div>{assayVol} {volumeUnit} assay</div>
-                          </div>
+                        <div className="px-3 py-3 min-w-[80px]">
+                          <div className="font-bold text-sm">{formatConcentration(step.concentration)}</div>
                         </div>
                       </td>
                     ))}
@@ -303,6 +360,8 @@ export default function SerialDilution() {
     setLayoutOrientation('horizontal');
     setExcessFactor('1.2');
     setSpecificConcentrations('20, 10, 5, 2.5, 1, 0.5');
+    setSmartRangeMax('20');
+    setSmartRangeMin('0.5');
   };
 
   // Calculate assay volume (total - sample)
@@ -371,21 +430,23 @@ export default function SerialDilution() {
           </div>
 
           {/* Starting Dilution Concentration */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Highest Plate Concentration
-            </label>
-            <input
-              type="number"
-              value={stockConcentration}
-              onChange={(e) => setStockConcentration(e.target.value)}
-              className="input-field"
-              step="0.1"
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              First concentration in dilution series
-            </p>
-          </div>
+          {dilutionStrategy !== 'smart-range' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Highest Plate Concentration
+              </label>
+              <input
+                type="number"
+                value={stockConcentration}
+                onChange={(e) => setStockConcentration(e.target.value)}
+                className="input-field"
+                step="0.1"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                First concentration in dilution series
+              </p>
+            </div>
+          )}
 
           {/* Total Well Volume */}
           <div>
@@ -476,6 +537,7 @@ export default function SerialDilution() {
               <option value="serial-2">Serial 2-fold</option>
               <option value="serial-10">Serial 10-fold</option>
               <option value="custom">Custom Factor</option>
+              <option value="smart-range">Smart Range Design</option>
               <option value="specific">Specific Concentrations</option>
             </select>
           </div>
@@ -497,6 +559,42 @@ export default function SerialDilution() {
             </div>
           )}
 
+          {/* Smart Range Inputs */}
+          {dilutionStrategy === 'smart-range' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Max Concentration
+                </label>
+                <input
+                  type="number"
+                  value={smartRangeMax}
+                  onChange={(e) => setSmartRangeMax(e.target.value)}
+                  className="input-field"
+                  step="0.1"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Highest concentration to test
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Min Concentration
+                </label>
+                <input
+                  type="number"
+                  value={smartRangeMin}
+                  onChange={(e) => setSmartRangeMin(e.target.value)}
+                  className="input-field"
+                  step="0.1"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Lowest concentration to test
+                </p>
+              </div>
+            </>
+          )}
+
           {/* Number of Dilutions (if not specific) */}
           {dilutionStrategy !== 'specific' && (
             <div>
@@ -511,6 +609,20 @@ export default function SerialDilution() {
                 min="2"
                 max="12"
               />
+              {dilutionStrategy === 'smart-range' && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Auto-calculated factor: {(() => {
+                    const max = parseFloat(smartRangeMax);
+                    const min = parseFloat(smartRangeMin);
+                    const num = parseInt(numberOfDilutions);
+                    if (!isNaN(max) && !isNaN(min) && !isNaN(num) && num >= 2 && max > min) {
+                      const factor = Math.pow(max / min, 1 / (num - 1));
+                      return `${factor.toFixed(2)}x`;
+                    }
+                    return 'N/A';
+                  })()}
+                </p>
+              )}
             </div>
           )}
 
@@ -581,7 +693,7 @@ export default function SerialDilution() {
           </div>
           {generatePlateLayout()}
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
-            💡 Hover over wells to see detailed volume breakdown. Color intensity indicates concentration (darker = higher).
+            💡 Color intensity indicates concentration (darker = higher). Refer to Well Composition above for volume details.
           </p>
         </div>
       )}
