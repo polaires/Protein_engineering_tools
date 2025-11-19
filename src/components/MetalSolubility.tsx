@@ -42,8 +42,15 @@ export default function MetalSolubility() {
   // Filter states
   const [selectedAnion, setSelectedAnion] = useState<string>('All');
   const [temperature, setTemperature] = useState<number>(25);
-  const [unit, setUnit] = useState<Unit>('g/100mL');
+  const [unit, setUnit] = useState<Unit>('Molarity');
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
+
+  // Reset filters to default
+  const resetFilters = () => {
+    setSelectedAnion('All');
+    setTemperature(25);
+    setUnit('Molarity');
+  };
 
   // Available anions from the data
   const [availableAnions, setAvailableAnions] = useState<string[]>([]);
@@ -135,7 +142,8 @@ export default function MetalSolubility() {
 
   // Get color intensity based on solubility value
   const getColorIntensity = (value: number | null, unitType: Unit): string => {
-    if (value === null) return 'bg-slate-200 dark:bg-slate-700';
+    // Return gray for no data
+    if (value === null) return 'rgb(203, 213, 225)'; // slate-300
 
     let normalized = 0;
 
@@ -238,17 +246,29 @@ export default function MetalSolubility() {
           Metal Solubility - Interactive Periodic Table
         </h2>
         <p className="text-slate-600 dark:text-slate-400">
-          Explore metal salt solubility data from the CRC Handbook. Select anions, adjust temperature, and view solubility in different units.
+          Explore metal salt solubility data from the CRC Handbook. Filter by specific anions, adjust temperature (0-100°C), and view solubility in different units. Colors dynamically update based on your filters - elements without data for the selected conditions appear gray.
         </p>
         {solubilityData.length > 0 && (
           <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
-            Loaded {solubilityData.length} data points for {[...new Set(solubilityData.map(r => r.element))].length} elements
+            Loaded {solubilityData.length} data points for {[...new Set(solubilityData.map(r => r.element))].length} elements • Default: All anions at 25°C in Molarity
           </p>
         )}
       </div>
 
       {/* Control Panel */}
       <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+            Filters
+          </h3>
+          <button
+            onClick={resetFilters}
+            className="btn-secondary text-sm"
+          >
+            Reset Filters
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Anion Filter */}
           <div>
@@ -296,10 +316,10 @@ export default function MetalSolubility() {
               onChange={(e) => setUnit(e.target.value as Unit)}
               className="input-field w-full"
             >
-              <option value="g/100mL">g/100mL H₂O</option>
               <option value="Molarity">Molarity (M)</option>
-              <option value="logS">log S</option>
+              <option value="g/100mL">g/100mL H₂O</option>
               <option value="Mass%">Mass %</option>
+              <option value="logS">log S</option>
             </select>
           </div>
 
@@ -308,23 +328,28 @@ export default function MetalSolubility() {
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Solubility Legend
             </label>
-            <div className="flex items-center gap-2 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(255, 0, 0)' }}></div>
-                <span className="text-slate-600 dark:text-slate-400">Low</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs flex-wrap">
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded border border-slate-300" style={{ backgroundColor: 'rgb(255, 0, 0)' }}></div>
+                  <span className="text-slate-600 dark:text-slate-400">Low</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded border border-slate-300" style={{ backgroundColor: 'rgb(255, 255, 0)' }}></div>
+                  <span className="text-slate-600 dark:text-slate-400">Med</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded border border-slate-300" style={{ backgroundColor: 'rgb(0, 255, 0)' }}></div>
+                  <span className="text-slate-600 dark:text-slate-400">High</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-4 h-4 rounded border border-slate-300" style={{ backgroundColor: 'rgb(203, 213, 225)' }}></div>
+                  <span className="text-slate-600 dark:text-slate-400">No data</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(255, 255, 0)' }}></div>
-                <span className="text-slate-600 dark:text-slate-400">Med</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgb(0, 255, 0)' }}></div>
-                <span className="text-slate-600 dark:text-slate-400">High</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded bg-slate-200 dark:bg-slate-700"></div>
-                <span className="text-slate-600 dark:text-slate-400">No data</span>
-              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-500 italic">
+                Colors update based on selected filters
+              </p>
             </div>
           </div>
         </div>
