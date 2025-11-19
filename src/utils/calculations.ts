@@ -161,12 +161,16 @@ function calculateMassFromMolarity(
 
   const mass = calculateMass(molarity, volume, molecularWeight);
   const massInMg = mass * 1000;
+  const ppm = convertMolarityToPpm(molarity, molecularWeight);
 
   const steps = [
     `Formula: mass (g) = Molarity (M) × Volume (L) × Molecular Weight (g/mol)`,
     `Volume in L = ${volume} mL ÷ 1000 = ${(volume / 1000).toFixed(4)} L`,
     `mass = ${molarity} M × ${(volume / 1000).toFixed(4)} L × ${molecularWeight} g/mol`,
     `mass = ${mass.toFixed(4)} g = ${massInMg.toFixed(2)} mg`,
+    ``,
+    `PPM conversion: ppm = M × MW × 1000`,
+    `ppm = ${molarity} M × ${molecularWeight} g/mol × 1000 = ${ppm.toFixed(2)} ppm (mg/L)`,
   ];
 
   // Return in grams if >= 1g, otherwise in milligrams
@@ -209,6 +213,7 @@ function calculateMolarityFromMass(
   }
 
   const molarity = calculateMolarity(mass, volume, molecularWeight);
+  const ppm = convertMolarityToPpm(molarity, molecularWeight);
 
   const steps = [
     `Formula: Molarity (M) = (mass (g) / MW (g/mol)) / Volume (L)`,
@@ -220,6 +225,9 @@ function calculateMolarityFromMass(
       volume / 1000
     ).toFixed(4)} L`,
     `Molarity = ${molarity.toFixed(4)} M`,
+    ``,
+    `PPM conversion: ppm = M × MW × 1000`,
+    `ppm = ${molarity.toExponential(3)} M × ${molecularWeight} g/mol × 1000 = ${ppm.toFixed(2)} ppm (mg/L)`,
   ];
 
   return {
@@ -273,7 +281,7 @@ function calculateVolumeFromMass(
 function calculateDilutionResult(
   calc: MolarityCalculation
 ): CalculationResult {
-  const { initialMolarity, initialVolume, finalMolarity, finalVolume } = calc;
+  const { initialMolarity, initialVolume, finalMolarity, finalVolume, molecularWeight } = calc;
 
   try {
     const result = calculateDilution({
@@ -309,6 +317,20 @@ function calculateDilutionResult(
         variableUnits[result.variable]
       }`,
     ].filter(Boolean) as string[];
+
+    // Add PPM conversions if molecular weight is available
+    if (molecularWeight) {
+      steps.push('');
+      steps.push('PPM conversions: ppm = M × MW × 1000');
+      if (initialMolarity !== undefined) {
+        const c1ppm = convertMolarityToPpm(initialMolarity, molecularWeight);
+        steps.push(`  C₁ = ${initialMolarity} M × ${molecularWeight} g/mol × 1000 = ${c1ppm.toFixed(2)} ppm`);
+      }
+      if (finalMolarity !== undefined) {
+        const c2ppm = convertMolarityToPpm(finalMolarity, molecularWeight);
+        steps.push(`  C₂ = ${finalMolarity} M × ${molecularWeight} g/mol × 1000 = ${c2ppm.toFixed(2)} ppm`);
+      }
+    }
 
     return {
       success: true,
