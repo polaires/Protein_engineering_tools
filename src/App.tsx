@@ -3,16 +3,17 @@
  */
 
 import { useState } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom, Beaker } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
 import Element from '@/components/Element';
+import MetalSolubility from '@/components/MetalSolubility';
 import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 
-type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'about';
+type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'solubility' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
@@ -121,6 +122,13 @@ function AppContent() {
               Element
             </button>
             <button
+              onClick={() => setActiveTab('solubility')}
+              className={`calc-mode-tab ${activeTab === 'solubility' ? 'active' : ''}`}
+            >
+              <Beaker className="w-4 h-4 inline mr-2" />
+              Solubility
+            </button>
+            <button
               onClick={() => setActiveTab('about')}
               className={`calc-mode-tab ${activeTab === 'about' ? 'active' : ''}`}
             >
@@ -154,6 +162,12 @@ function AppContent() {
         {activeTab === 'element' && (
           <div className="animate-in">
             <Element />
+          </div>
+        )}
+
+        {activeTab === 'solubility' && (
+          <div className="animate-in">
+            <MetalSolubility />
           </div>
         )}
 
@@ -213,6 +227,16 @@ function AppContent() {
                       </h4>
                       <p className="text-sm text-slate-700 dark:text-slate-300">
                         Interactive periodic table with detailed element information from PubChem
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                        <Beaker className="w-5 h-5" />
+                        Solubility
+                      </h4>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Metal-focused periodic table with solubility data from CRC Handbook. Filter by anion, temperature, and view in multiple units
                       </p>
                     </div>
                   </div>
