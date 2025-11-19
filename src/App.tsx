@@ -8,7 +8,7 @@ import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
-import Element from '@/components/Element';
+import SolubilityPeriodicTable from '@/components/SolubilityPeriodicTable';
 import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 
@@ -153,7 +153,7 @@ function AppContent() {
 
         {activeTab === 'element' && (
           <div className="animate-in">
-            <Element />
+            <SolubilityPeriodicTable />
           </div>
         )}
 

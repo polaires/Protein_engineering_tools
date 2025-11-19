@@ -1,0 +1,34 @@
+{
+  "totalElements": 22,
+  "totalCompounds": 87,
+  "elements": [
+    "NH4",
+    "Ag",
+    "Al",
+    "As",
+    "Ba",
+    "Ca",
+    "Cd",
+    "Co",
+    "Cu",
+    "Fe",
+    "Hg",
+    "K",
+    "Li",
+    "Mg",
+    "Mn",
+    "N",
+    "Na",
+    "Ni",
+    "Pb",
+    "Rb",
+    "Sr",
+    "Zn"
+  ],
+  "temperatureRange": [
+    0,
+    100
+  ],
+  "dataSource": "Curated Database",
+  "lastUpdated": "2025-11-19"
+}
