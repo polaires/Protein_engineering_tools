@@ -333,12 +333,10 @@ function calculateDilutionResult(
  * Convert concentration to molarity (M)
  * @param value - The concentration value
  * @param unit - The unit of the concentration
- * @param molecularWeight - Optional molecular weight (g/mol), required for PPM conversion
  */
 export function convertToMolarity(
   value: number,
-  unit: ConcentrationUnit,
-  molecularWeight?: number
+  unit: ConcentrationUnit
 ): number {
   switch (unit) {
     case ConcentrationUnit.MOLAR:
@@ -351,12 +349,6 @@ export function convertToMolarity(
       return value / 1000000000;
     case ConcentrationUnit.PICOMOLAR:
       return value / 1000000000000;
-    case ConcentrationUnit.PPM:
-      // ppm (mg/L) to Molarity: M = (ppm / MW) / 1000
-      if (!molecularWeight) {
-        throw new Error('Molecular weight is required to convert ppm to Molarity');
-      }
-      return (value / molecularWeight) / 1000;
     default:
       throw new Error(`Cannot convert ${unit} to Molarity without additional information`);
   }
@@ -398,12 +390,10 @@ export function convertToGrams(value: number, unit: MassUnit): number {
  * Convert molarity from base unit
  * @param value - The molarity value (M)
  * @param targetUnit - The target concentration unit
- * @param molecularWeight - Optional molecular weight (g/mol), required for PPM conversion
  */
 export function convertFromMolarity(
   value: number,
-  targetUnit: ConcentrationUnit,
-  molecularWeight?: number
+  targetUnit: ConcentrationUnit
 ): number {
   switch (targetUnit) {
     case ConcentrationUnit.MOLAR:
@@ -416,15 +406,35 @@ export function convertFromMolarity(
       return value * 1000000000;
     case ConcentrationUnit.PICOMOLAR:
       return value * 1000000000000;
-    case ConcentrationUnit.PPM:
-      // Molarity to ppm (mg/L): ppm = M × MW × 1000
-      if (!molecularWeight) {
-        throw new Error('Molecular weight is required to convert Molarity to ppm');
-      }
-      return value * molecularWeight * 1000;
     default:
       throw new Error(`Cannot convert to ${targetUnit}`);
   }
+}
+
+// ============================================================================
+// PPM Conversion Functions (for dedicated PPM converter)
+// ============================================================================
+
+/**
+ * Convert PPM to Molarity
+ * Formula: M = (ppm / MW) / 1000
+ * @param ppm - Concentration in parts per million (mg/L)
+ * @param molecularWeight - Molecular weight in g/mol
+ * @returns Molarity in M (mol/L)
+ */
+export function convertPpmToMolarity(ppm: number, molecularWeight: number): number {
+  return (ppm / molecularWeight) / 1000;
+}
+
+/**
+ * Convert Molarity to PPM
+ * Formula: ppm = M × MW × 1000
+ * @param molarity - Concentration in M (mol/L)
+ * @param molecularWeight - Molecular weight in g/mol
+ * @returns Concentration in ppm (mg/L)
+ */
+export function convertMolarityToPpm(molarity: number, molecularWeight: number): number {
+  return molarity * molecularWeight * 1000;
 }
 
 // ============================================================================
