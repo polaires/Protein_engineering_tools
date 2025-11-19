@@ -268,6 +268,116 @@ export default function SerialDilution() {
     return `${(conc * 1000000).toFixed(1)} n${stockUnit}`;
   };
 
+  // Generate visual dilution workflow diagram
+  const generateDilutionWorkflow = () => {
+    if (dilutionSteps.length === 0) return null;
+
+    const maxConc = dilutionSteps[0]?.concentration || 1;
+
+    return (
+      <div className="overflow-x-auto pb-4">
+        <div className="flex items-center gap-4 min-w-max px-4">
+          {/* Original Stock */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+              Stock
+            </div>
+            <svg width="60" height="100" viewBox="0 0 60 100" className="drop-shadow-md">
+              {/* Tube outline */}
+              <rect x="15" y="10" width="30" height="70" rx="3" fill="#e2e8f0" stroke="#64748b" strokeWidth="2"/>
+              {/* Liquid */}
+              <rect x="15" y="30" width="30" height="50" fill="#3b82f6" opacity="0.8"/>
+              {/* Cap */}
+              <rect x="12" y="5" width="36" height="8" rx="2" fill="#475569"/>
+            </svg>
+            <div className="text-center">
+              <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                {originalStockConcentration} {stockUnit}
+              </div>
+            </div>
+          </div>
+
+          {/* Dilution Steps */}
+          {dilutionSteps.map((step, index) => (
+            <div key={index} className="flex items-center gap-4">
+              {/* Arrow */}
+              <div className="flex flex-col items-center gap-1">
+                <svg width="60" height="40" viewBox="0 0 60 40" className="text-primary-500 dark:text-primary-400">
+                  <defs>
+                    <marker
+                      id={`arrowhead-${index}`}
+                      markerWidth="10"
+                      markerHeight="10"
+                      refX="9"
+                      refY="3"
+                      orient="auto"
+                    >
+                      <polygon points="0 0, 10 3, 0 6" fill="currentColor" />
+                    </marker>
+                  </defs>
+                  <line
+                    x1="5"
+                    y1="20"
+                    x2="50"
+                    y2="20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    markerEnd={`url(#arrowhead-${index})`}
+                  />
+                </svg>
+                <div className="text-xs text-center text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                  {step.stockVolume.toFixed(1)} {volumeUnit}
+                  {step.diluentVolume > 0 && (
+                    <>
+                      <br />+ {step.diluentVolume.toFixed(1)} {volumeUnit} buffer
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Dilution Tube */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Step {index + 1}
+                </div>
+                <svg width="60" height="100" viewBox="0 0 60 100" className="drop-shadow-md">
+                  {/* Tube outline */}
+                  <rect x="15" y="10" width="30" height="70" rx="3" fill="#e2e8f0" stroke="#64748b" strokeWidth="2"/>
+                  {/* Liquid - color based on concentration */}
+                  <rect
+                    x="15"
+                    y="30"
+                    width="30"
+                    height="50"
+                    fill={getConcentrationColor(step.concentration, maxConc)}
+                    opacity="0.9"
+                  />
+                  {/* Cap */}
+                  <rect x="12" y="5" width="36" height="8" rx="2" fill="#475569"/>
+                  {/* Volume label inside tube */}
+                  <text x="30" y="60" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="bold">
+                    {step.totalVolume.toFixed(0)}
+                  </text>
+                  <text x="30" y="70" textAnchor="middle" fill="#fff" fontSize="8">
+                    {volumeUnit}
+                  </text>
+                </svg>
+                <div className="text-center">
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    {formatConcentration(step.concentration)}
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {step.dilutionFactor.toFixed(2)}x
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // Generate plate layout
   const generatePlateLayout = () => {
     const numReps = parseInt(replicates);
@@ -743,6 +853,19 @@ export default function SerialDilution() {
           </div>
         )}
       </div>
+
+      {/* Dilution Workflow Visualization */}
+      {dilutionSteps.length > 0 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
+            🧪 Dilution Workflow
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            Visual representation of the serial dilution process. Each tube shows the concentration and dilution factor.
+          </p>
+          {generateDilutionWorkflow()}
+        </div>
+      )}
 
       {/* Plate Layout Visualization */}
       {dilutionSteps.length > 0 && (
