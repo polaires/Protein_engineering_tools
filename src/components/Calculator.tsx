@@ -690,48 +690,25 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
 
           {/* PPM Conversion Display */}
           {calculation.molecularWeight && calculation.molarity && selectedMode === CalculationMode.MASS_FROM_MOLARITY && (
-            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                <strong>Concentration in PPM:</strong> {convertMolarityToPpm(calculation.molarity, calculation.molecularWeight).toFixed(2)} ppm (mg/L)
-              </div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                {calculation.molarity} M × {calculation.molecularWeight} g/mol × 1000 = {convertMolarityToPpm(calculation.molarity, calculation.molecularWeight).toFixed(2)} ppm
-              </div>
+            <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+              = {convertMolarityToPpm(calculation.molarity, calculation.molecularWeight).toFixed(2)} ppm (mg/L)
             </div>
           )}
 
           {result.value !== undefined && calculation.molecularWeight && selectedMode === CalculationMode.MOLARITY_FROM_MASS && (
-            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                <strong>Concentration in PPM:</strong> {convertMolarityToPpm(result.value, calculation.molecularWeight).toFixed(2)} ppm (mg/L)
-              </div>
-              <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                {result.value.toExponential(3)} M × {calculation.molecularWeight} g/mol × 1000 = {convertMolarityToPpm(result.value, calculation.molecularWeight).toFixed(2)} ppm
-              </div>
+            <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+              = {convertMolarityToPpm(result.value, calculation.molecularWeight).toFixed(2)} ppm (mg/L)
             </div>
           )}
 
-          {selectedMode === CalculationMode.DILUTION && calculation.molecularWeight && (
-            <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                <strong>Concentrations in PPM:</strong>
-                {calculation.initialMolarity && (
-                  <div className="mt-1">
-                    C₁ = {convertMolarityToPpm(calculation.initialMolarity, calculation.molecularWeight).toFixed(2)} ppm
-                  </div>
-                )}
-                {calculation.finalMolarity && (
-                  <div className="mt-1">
-                    C₂ = {convertMolarityToPpm(calculation.finalMolarity, calculation.molecularWeight).toFixed(2)} ppm
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {result.formula && (
-            <div className="text-sm text-slate-600 dark:text-slate-400 font-mono">
-              Formula: {result.formula}
+          {selectedMode === CalculationMode.DILUTION && calculation.molecularWeight && (calculation.initialMolarity || calculation.finalMolarity) && (
+            <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+              {calculation.initialMolarity && (
+                <div>C₁ = {convertMolarityToPpm(calculation.initialMolarity, calculation.molecularWeight).toFixed(2)} ppm</div>
+              )}
+              {calculation.finalMolarity && (
+                <div>C₂ = {convertMolarityToPpm(calculation.finalMolarity, calculation.molecularWeight).toFixed(2)} ppm</div>
+              )}
             </div>
           )}
 
