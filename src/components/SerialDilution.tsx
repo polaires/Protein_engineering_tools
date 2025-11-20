@@ -190,21 +190,40 @@ export default function SerialDilution() {
         }
       }
 
+      // Calculate volumes needed for each step (working backwards)
+      const volumesNeeded: number[] = new Array(concentrations.length);
+
+      // Last step only needs volume for plate wells
+      volumesNeeded[concentrations.length - 1] = totalVolumeNeeded;
+
+      // Work backwards to calculate intermediate volumes
+      for (let i = concentrations.length - 2; i >= 0; i--) {
+        const nextConc = concentrations[i + 1];
+        const currentConc = concentrations[i];
+        const dilFactorFromPrev = currentConc / nextConc;
+        const volumeForNextStep = volumesNeeded[i + 1] / dilFactorFromPrev;
+
+        // Need volume for plate + volume for next dilution
+        volumesNeeded[i] = totalVolumeNeeded + volumeForNextStep;
+      }
+
       // Calculate volumes for each concentration
       concentrations.forEach((conc, index) => {
+        const volumeToMake = volumesNeeded[index];
+
         if (index === 0) {
           // First dilution - check if we need to dilute from original stock
           if (conc < originalStock) {
             const dilFactorFromStock = originalStock / conc;
-            const stockVol = totalVolumeNeeded / dilFactorFromStock;
-            const diluentVol = totalVolumeNeeded - stockVol;
+            const stockVol = volumeToMake / dilFactorFromStock;
+            const diluentVol = volumeToMake - stockVol;
 
             steps.push({
               concentration: conc,
               unit: stockUnit,
               stockVolume: stockVol,
               diluentVolume: diluentVol,
-              totalVolume: totalVolumeNeeded,
+              totalVolume: volumeToMake,
               dilutionFactor: dilFactorFromStock,
               sourceStep: null
             });
@@ -213,9 +232,9 @@ export default function SerialDilution() {
             steps.push({
               concentration: conc,
               unit: stockUnit,
-              stockVolume: totalVolumeNeeded,
+              stockVolume: volumeToMake,
               diluentVolume: 0,
-              totalVolume: totalVolumeNeeded,
+              totalVolume: volumeToMake,
               dilutionFactor: 1,
               sourceStep: null
             });
@@ -224,15 +243,15 @@ export default function SerialDilution() {
           // Dilute from previous step
           const prevConc = concentrations[index - 1];
           const dilFactorFromPrev = prevConc / conc;
-          const prevStepVol = totalVolumeNeeded / dilFactorFromPrev;
-          const diluentVol = totalVolumeNeeded - prevStepVol;
+          const prevStepVol = volumeToMake / dilFactorFromPrev;
+          const diluentVol = volumeToMake - prevStepVol;
 
           steps.push({
             concentration: conc,
             unit: stockUnit,
             stockVolume: prevStepVol,
             diluentVolume: diluentVol,
-            totalVolume: totalVolumeNeeded,
+            totalVolume: volumeToMake,
             dilutionFactor: dilFactorFromPrev,
             sourceStep: index - 1
           });
@@ -246,20 +265,39 @@ export default function SerialDilution() {
         .filter(c => !isNaN(c))
         .sort((a, b) => b - a); // Sort descending
 
+      // Calculate volumes needed for each step (working backwards)
+      const volumesNeeded: number[] = new Array(concentrations.length);
+
+      // Last step only needs volume for plate wells
+      volumesNeeded[concentrations.length - 1] = totalVolumeNeeded;
+
+      // Work backwards to calculate intermediate volumes
+      for (let i = concentrations.length - 2; i >= 0; i--) {
+        const nextConc = concentrations[i + 1];
+        const currentConc = concentrations[i];
+        const dilutionFactor = currentConc / nextConc;
+        const volumeForNextStep = volumesNeeded[i + 1] / dilutionFactor;
+
+        // Need volume for plate + volume for next dilution
+        volumesNeeded[i] = totalVolumeNeeded + volumeForNextStep;
+      }
+
       concentrations.forEach((conc, index) => {
+        const volumeToMake = volumesNeeded[index];
+
         if (index === 0) {
           // First dilution - check if we need to dilute from original stock
           if (conc < originalStock) {
             const dilutionFactor = originalStock / conc;
-            const stockVol = totalVolumeNeeded / dilutionFactor;
-            const diluentVol = totalVolumeNeeded - stockVol;
+            const stockVol = volumeToMake / dilutionFactor;
+            const diluentVol = volumeToMake - stockVol;
 
             steps.push({
               concentration: conc,
               unit: stockUnit,
               stockVolume: stockVol,
               diluentVolume: diluentVol,
-              totalVolume: totalVolumeNeeded,
+              totalVolume: volumeToMake,
               dilutionFactor: dilutionFactor,
               sourceStep: null
             });
@@ -268,9 +306,9 @@ export default function SerialDilution() {
             steps.push({
               concentration: conc,
               unit: stockUnit,
-              stockVolume: totalVolumeNeeded,
+              stockVolume: volumeToMake,
               diluentVolume: 0,
-              totalVolume: totalVolumeNeeded,
+              totalVolume: volumeToMake,
               dilutionFactor: 1,
               sourceStep: null
             });
@@ -279,15 +317,15 @@ export default function SerialDilution() {
           // Dilute from previous step
           const prevConc = concentrations[index - 1];
           const dilutionFactor = prevConc / conc;
-          const prevStepVol = totalVolumeNeeded / dilutionFactor;
-          const diluentVol = totalVolumeNeeded - prevStepVol;
+          const prevStepVol = volumeToMake / dilutionFactor;
+          const diluentVol = volumeToMake - prevStepVol;
 
           steps.push({
             concentration: conc,
             unit: stockUnit,
             stockVolume: prevStepVol,
             diluentVolume: diluentVol,
-            totalVolume: totalVolumeNeeded,
+            totalVolume: volumeToMake,
             dilutionFactor: dilutionFactor,
             sourceStep: index - 1
           });
@@ -299,22 +337,44 @@ export default function SerialDilution() {
       if (dilutionStrategy === 'serial-10') factor = 10;
       else if (dilutionStrategy === 'custom') factor = parseFloat(customFactor);
 
+      // First, calculate all concentrations
+      const concentrations: number[] = [];
       for (let i = 0; i < numDilutions; i++) {
-        const conc = stock / Math.pow(factor, i);
+        concentrations.push(stock / Math.pow(factor, i));
+      }
+
+      // Calculate volumes needed for each step (working backwards)
+      const volumesNeeded: number[] = new Array(concentrations.length);
+
+      // Last step only needs volume for plate wells
+      volumesNeeded[concentrations.length - 1] = totalVolumeNeeded;
+
+      // Work backwards to calculate intermediate volumes
+      for (let i = concentrations.length - 2; i >= 0; i--) {
+        const volumeForNextStep = volumesNeeded[i + 1] / factor;
+
+        // Need volume for plate + volume for next dilution
+        volumesNeeded[i] = totalVolumeNeeded + volumeForNextStep;
+      }
+
+      // Create dilution steps with calculated volumes
+      for (let i = 0; i < numDilutions; i++) {
+        const conc = concentrations[i];
+        const volumeToMake = volumesNeeded[i];
 
         if (i === 0) {
           // First dilution - check if we need to dilute from original stock
           if (stock < originalStock) {
             const dilutionFactor = originalStock / stock;
-            const stockVol = totalVolumeNeeded / dilutionFactor;
-            const diluentVol = totalVolumeNeeded - stockVol;
+            const stockVol = volumeToMake / dilutionFactor;
+            const diluentVol = volumeToMake - stockVol;
 
             steps.push({
               concentration: conc,
               unit: stockUnit,
               stockVolume: stockVol,
               diluentVolume: diluentVol,
-              totalVolume: totalVolumeNeeded,
+              totalVolume: volumeToMake,
               dilutionFactor: dilutionFactor,
               sourceStep: null
             });
@@ -323,24 +383,24 @@ export default function SerialDilution() {
             steps.push({
               concentration: conc,
               unit: stockUnit,
-              stockVolume: totalVolumeNeeded,
+              stockVolume: volumeToMake,
               diluentVolume: 0,
-              totalVolume: totalVolumeNeeded,
+              totalVolume: volumeToMake,
               dilutionFactor: 1,
               sourceStep: null
             });
           }
         } else {
           // Serial dilution from previous
-          const prevStepVol = totalVolumeNeeded / factor;
-          const diluentVol = totalVolumeNeeded - prevStepVol;
+          const prevStepVol = volumeToMake / factor;
+          const diluentVol = volumeToMake - prevStepVol;
 
           steps.push({
             concentration: conc,
             unit: stockUnit,
             stockVolume: prevStepVol,
             diluentVolume: diluentVol,
-            totalVolume: totalVolumeNeeded,
+            totalVolume: volumeToMake,
             dilutionFactor: factor,
             sourceStep: i - 1
           });
