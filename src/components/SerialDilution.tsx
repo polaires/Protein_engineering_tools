@@ -40,6 +40,7 @@ export default function SerialDilution() {
   // Wizard state
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Input states
   const [originalStockConcentration, setOriginalStockConcentration] = useState<string>('100');
@@ -62,6 +63,10 @@ export default function SerialDilution() {
   const [smartRangeMax, setSmartRangeMax] = useState<string>('20');
   const [smartRangeMin, setSmartRangeMin] = useState<string>('0.5');
   const [smartRangeSpacing, setSmartRangeSpacing] = useState<'logarithmic' | 'linear'>('logarithmic');
+
+  // IC50/EC50 mode
+  const [expectedIC50, setExpectedIC50] = useState<string>('');
+  const [ic50Known, setIc50Known] = useState<boolean>(false);
 
   // Hover state for tooltips
   const [hoveredWell, setHoveredWell] = useState<{row: number; col: number} | null>(null);
@@ -349,7 +354,14 @@ export default function SerialDilution() {
 
   // Apply template preset
   const _applyTemplate = (template: TemplatePreset) => {
+    setSelectedTemplateId(template.id);
     setDilutionStrategy(template.strategy);
+
+    // Reset IC50 mode when switching templates
+    if (template.id === 'ic50-standard') {
+      setIc50Known(false);
+      setExpectedIC50('');
+    }
 
     if (template.params.concentrations) {
       setSpecificConcentrations(template.params.concentrations);
@@ -759,6 +771,11 @@ export default function SerialDilution() {
     setSmartRangeMax('20');
     setSmartRangeMin('0.5');
     setSmartRangeSpacing('logarithmic');
+    setExpectedIC50('');
+    setIc50Known(false);
+    setSelectedTemplateId(null);
+    setCurrentStep(1);
+    setCompletedSteps(new Set());
   };
 
   // Calculate assay volume (total - sample)
@@ -845,7 +862,7 @@ export default function SerialDilution() {
                 key={template.id}
                 onClick={() => applyTemplate(template)}
                 className={`p-6 rounded-lg border-2 transition-all hover:shadow-lg hover:scale-105 text-left ${
-                  dilutionStrategy === template.strategy
+                  selectedTemplateId === template.id
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                     : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
                 }`}
@@ -939,6 +956,89 @@ export default function SerialDilution() {
                 min="1.1"
               />
             </div>
+          )}
+
+          {/* IC50/EC50 Inputs */}
+          {selectedTemplateId === 'ic50-standard' && (
+            <>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                  Expected IC50/EC50 Value
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!ic50Known}
+                      onChange={() => {
+                        setIc50Known(false);
+                        setExpectedIC50('');
+                        // Use default wide range
+                        setSpecificConcentrations('100, 30, 10, 3, 1, 0.3, 0.1, 0.03, 0.01, 0');
+                      }}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Unknown - Use wide range</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={ic50Known}
+                      onChange={() => setIc50Known(true)}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Known - Enter expected value</span>
+                  </label>
+                </div>
+              </div>
+
+              {ic50Known && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Expected IC50/EC50 Concentration
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={expectedIC50}
+                      onChange={(e) => {
+                        const ic50Val = e.target.value;
+                        setExpectedIC50(ic50Val);
+
+                        // Auto-generate concentrations around IC50
+                        if (ic50Val && parseFloat(ic50Val) > 0) {
+                          const ic50 = parseFloat(ic50Val);
+                          // Generate 10-point curve: 100x, 30x, 10x, 3x, 1x, 0.3x, 0.1x, 0.03x, 0.01x, 0x IC50
+                          const concentrations = [
+                            ic50 * 100,
+                            ic50 * 30,
+                            ic50 * 10,
+                            ic50 * 3,
+                            ic50,
+                            ic50 * 0.3,
+                            ic50 * 0.1,
+                            ic50 * 0.03,
+                            ic50 * 0.01,
+                            0
+                          ].map(c => c.toFixed(4).replace(/\.?0+$/, '')).join(', ');
+                          setSpecificConcentrations(concentrations);
+                        }
+                      }}
+                      className="input-field flex-1"
+                      step="0.001"
+                      min="0.001"
+                      placeholder="e.g., 1.5"
+                    />
+                    <span className="flex items-center px-3 text-sm text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-md">
+                      {stockUnit}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Concentrations will auto-generate from 100× to 0.01× IC50
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {/* Smart Range Inputs */}
