@@ -228,7 +228,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   onChange={(e) => handleInputChange('molarity', e.target.value)}
                 />
                 <select
-                  className="select-field w-24"
+                  className="select-field w-32"
                   value={molarityUnit}
                   onChange={(e) => setMolarityUnit(e.target.value as ConcentrationUnit)}
                 >
@@ -237,6 +237,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                   <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                   <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                  <option value={ConcentrationUnit.PERCENT_W_V}>% w/v</option>
+                  <option value={ConcentrationUnit.MG_ML}>mg/mL</option>
+                  <option value={ConcentrationUnit.UG_ML}>μg/mL</option>
                 </select>
               </div>
             </div>
@@ -415,7 +418,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   onChange={(e) => handleInputChange('molarity', e.target.value)}
                 />
                 <select
-                  className="select-field w-24"
+                  className="select-field w-32"
                   value={molarityUnit}
                   onChange={(e) => setMolarityUnit(e.target.value as ConcentrationUnit)}
                 >
@@ -424,6 +427,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                   <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                   <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                  <option value={ConcentrationUnit.PERCENT_W_V}>% w/v</option>
+                  <option value={ConcentrationUnit.MG_ML}>mg/mL</option>
+                  <option value={ConcentrationUnit.UG_ML}>μg/mL</option>
                 </select>
               </div>
             </div>
@@ -475,7 +481,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     }
                   />
                   <select
-                    className="select-field w-20"
+                    className="select-field w-28"
                     value={initialMolarityUnit}
                     onChange={(e) => setInitialMolarityUnit(e.target.value as ConcentrationUnit)}
                   >
@@ -484,6 +490,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                     <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                     <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                    <option value={ConcentrationUnit.PERCENT_W_V}>% w/v</option>
+                    <option value={ConcentrationUnit.MG_ML}>mg/mL</option>
+                    <option value={ConcentrationUnit.UG_ML}>μg/mL</option>
                   </select>
                 </div>
               </div>
@@ -531,7 +540,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     }
                   />
                   <select
-                    className="select-field w-20"
+                    className="select-field w-28"
                     value={finalMolarityUnit}
                     onChange={(e) => setFinalMolarityUnit(e.target.value as ConcentrationUnit)}
                   >
@@ -540,6 +549,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     <option value={ConcentrationUnit.MICROMOLAR}>μM</option>
                     <option value={ConcentrationUnit.NANOMOLAR}>nM</option>
                     <option value={ConcentrationUnit.PICOMOLAR}>pM</option>
+                    <option value={ConcentrationUnit.PERCENT_W_V}>% w/v</option>
+                    <option value={ConcentrationUnit.MG_ML}>mg/mL</option>
+                    <option value={ConcentrationUnit.UG_ML}>μg/mL</option>
                   </select>
                 </div>
               </div>
