@@ -42,7 +42,7 @@ function AppContent() {
               <FlaskConical className="w-8 h-8 text-primary-600 dark:text-primary-400" />
               <div>
                 <h1 className="text-2xl font-bold gradient-text">
-                  Protein Engineering Tools
+                  Biochem Space
                 </h1>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Professional tools for molecular biology and biochemistry
@@ -160,7 +160,7 @@ function AppContent() {
         {activeTab === 'about' && (
           <div className="animate-in max-w-4xl mx-auto">
             <div className="card">
-              <h2 className="section-title">About Protein Engineering Tools</h2>
+              <h2 className="section-title">About Biochem Space</h2>
 
               <div className="space-y-6">
                 <section>
