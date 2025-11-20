@@ -355,10 +355,12 @@ function calculateDilutionResult(
  * Convert concentration to molarity (M)
  * @param value - The concentration value
  * @param unit - The unit of the concentration
+ * @param molecularWeight - Optional molecular weight (g/mol), required for %w/v, mg/mL, μg/mL
  */
 export function convertToMolarity(
   value: number,
-  unit: ConcentrationUnit
+  unit: ConcentrationUnit,
+  molecularWeight?: number
 ): number {
   switch (unit) {
     case ConcentrationUnit.MOLAR:
@@ -371,6 +373,27 @@ export function convertToMolarity(
       return value / 1000000000;
     case ConcentrationUnit.PICOMOLAR:
       return value / 1000000000000;
+    case ConcentrationUnit.PERCENT_W_V:
+      // %w/v means g/100mL = 10 g/L
+      // Molarity = (g/L) / MW
+      if (!molecularWeight || molecularWeight <= 0) {
+        throw new Error('Molecular weight is required to convert %w/v to Molarity');
+      }
+      return (value * 10) / molecularWeight;
+    case ConcentrationUnit.MG_ML:
+      // mg/mL = g/L
+      // Molarity = (g/L) / MW
+      if (!molecularWeight || molecularWeight <= 0) {
+        throw new Error('Molecular weight is required to convert mg/mL to Molarity');
+      }
+      return value / molecularWeight;
+    case ConcentrationUnit.UG_ML:
+      // μg/mL = 0.001 g/L
+      // Molarity = (g/L) / MW
+      if (!molecularWeight || molecularWeight <= 0) {
+        throw new Error('Molecular weight is required to convert μg/mL to Molarity');
+      }
+      return (value * 0.001) / molecularWeight;
     default:
       throw new Error(`Cannot convert ${unit} to Molarity without additional information`);
   }
@@ -412,10 +435,12 @@ export function convertToGrams(value: number, unit: MassUnit): number {
  * Convert molarity from base unit
  * @param value - The molarity value (M)
  * @param targetUnit - The target concentration unit
+ * @param molecularWeight - Optional molecular weight (g/mol), required for %w/v, mg/mL, μg/mL
  */
 export function convertFromMolarity(
   value: number,
-  targetUnit: ConcentrationUnit
+  targetUnit: ConcentrationUnit,
+  molecularWeight?: number
 ): number {
   switch (targetUnit) {
     case ConcentrationUnit.MOLAR:
@@ -428,6 +453,24 @@ export function convertFromMolarity(
       return value * 1000000000;
     case ConcentrationUnit.PICOMOLAR:
       return value * 1000000000000;
+    case ConcentrationUnit.PERCENT_W_V:
+      // %w/v = (Molarity × MW) / 10
+      if (!molecularWeight || molecularWeight <= 0) {
+        throw new Error('Molecular weight is required to convert Molarity to %w/v');
+      }
+      return (value * molecularWeight) / 10;
+    case ConcentrationUnit.MG_ML:
+      // mg/mL = Molarity × MW
+      if (!molecularWeight || molecularWeight <= 0) {
+        throw new Error('Molecular weight is required to convert Molarity to mg/mL');
+      }
+      return value * molecularWeight;
+    case ConcentrationUnit.UG_ML:
+      // μg/mL = Molarity × MW × 1000
+      if (!molecularWeight || molecularWeight <= 0) {
+        throw new Error('Molecular weight is required to convert Molarity to μg/mL');
+      }
+      return value * molecularWeight * 1000;
     default:
       throw new Error(`Cannot convert to ${targetUnit}`);
   }
