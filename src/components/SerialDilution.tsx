@@ -67,6 +67,7 @@ export default function SerialDilution() {
   // IC50/EC50 mode
   const [expectedIC50, setExpectedIC50] = useState<string>('');
   const [ic50Known, setIc50Known] = useState<boolean>(false);
+  const [ic50Unit, setIc50Unit] = useState<string>('μM');
 
   // Hover state for tooltips
   const [hoveredWell, setHoveredWell] = useState<{row: number; col: number} | null>(null);
@@ -773,6 +774,7 @@ export default function SerialDilution() {
     setSmartRangeSpacing('logarithmic');
     setExpectedIC50('');
     setIc50Known(false);
+    setIc50Unit('μM');
     setSelectedTemplateId(null);
     setCurrentStep(1);
     setCompletedSteps(new Set());
@@ -1008,19 +1010,31 @@ export default function SerialDilution() {
                         // Auto-generate concentrations around IC50
                         if (ic50Val && parseFloat(ic50Val) > 0) {
                           const ic50 = parseFloat(ic50Val);
+
+                          // Convert IC50 to stock unit if different
+                          const unitConversionFactor = (() => {
+                            // Simple conversion for common concentration units
+                            const unitOrder = { 'M': 1, 'mM': 0.001, 'μM': 0.000001, 'nM': 0.000000001, 'mg/mL': 1, 'μg/mL': 0.001 };
+                            const ic50UnitValue = unitOrder[ic50Unit as keyof typeof unitOrder] || 1;
+                            const stockUnitValue = unitOrder[stockUnit as keyof typeof unitOrder] || 1;
+                            return ic50UnitValue / stockUnitValue;
+                          })();
+
+                          const ic50InStockUnits = ic50 * unitConversionFactor;
+
                           // Generate 10-point curve: 100x, 30x, 10x, 3x, 1x, 0.3x, 0.1x, 0.03x, 0.01x, 0x IC50
                           const concentrations = [
-                            ic50 * 100,
-                            ic50 * 30,
-                            ic50 * 10,
-                            ic50 * 3,
-                            ic50,
-                            ic50 * 0.3,
-                            ic50 * 0.1,
-                            ic50 * 0.03,
-                            ic50 * 0.01,
+                            ic50InStockUnits * 100,
+                            ic50InStockUnits * 30,
+                            ic50InStockUnits * 10,
+                            ic50InStockUnits * 3,
+                            ic50InStockUnits,
+                            ic50InStockUnits * 0.3,
+                            ic50InStockUnits * 0.1,
+                            ic50InStockUnits * 0.03,
+                            ic50InStockUnits * 0.01,
                             0
-                          ].map(c => c.toFixed(4).replace(/\.?0+$/, '')).join(', ');
+                          ].map(c => c.toFixed(6).replace(/\.?0+$/, '')).join(', ');
                           setSpecificConcentrations(concentrations);
                         }
                       }}
@@ -1029,12 +1043,53 @@ export default function SerialDilution() {
                       min="0.001"
                       placeholder="e.g., 1.5"
                     />
-                    <span className="flex items-center px-3 text-sm text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-md">
-                      {stockUnit}
-                    </span>
+                    <select
+                      value={ic50Unit}
+                      onChange={(e) => {
+                        const newUnit = e.target.value;
+                        setIc50Unit(newUnit);
+
+                        // Re-calculate concentrations if IC50 value exists
+                        if (expectedIC50 && parseFloat(expectedIC50) > 0) {
+                          const ic50 = parseFloat(expectedIC50);
+
+                          // Convert IC50 to stock unit
+                          const unitConversionFactor = (() => {
+                            const unitOrder = { 'M': 1, 'mM': 0.001, 'μM': 0.000001, 'nM': 0.000000001, 'mg/mL': 1, 'μg/mL': 0.001 };
+                            const ic50UnitValue = unitOrder[newUnit as keyof typeof unitOrder] || 1;
+                            const stockUnitValue = unitOrder[stockUnit as keyof typeof unitOrder] || 1;
+                            return ic50UnitValue / stockUnitValue;
+                          })();
+
+                          const ic50InStockUnits = ic50 * unitConversionFactor;
+
+                          const concentrations = [
+                            ic50InStockUnits * 100,
+                            ic50InStockUnits * 30,
+                            ic50InStockUnits * 10,
+                            ic50InStockUnits * 3,
+                            ic50InStockUnits,
+                            ic50InStockUnits * 0.3,
+                            ic50InStockUnits * 0.1,
+                            ic50InStockUnits * 0.03,
+                            ic50InStockUnits * 0.01,
+                            0
+                          ].map(c => c.toFixed(6).replace(/\.?0+$/, '')).join(', ');
+                          setSpecificConcentrations(concentrations);
+                        }
+                      }}
+                      className="input-field w-24"
+                    >
+                      <option value="M">M</option>
+                      <option value="mM">mM</option>
+                      <option value="μM">μM</option>
+                      <option value="nM">nM</option>
+                      <option value="mg/mL">mg/mL</option>
+                      <option value="μg/mL">μg/mL</option>
+                    </select>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Concentrations will auto-generate from 100× to 0.01× IC50
+                    Concentrations will auto-generate from 100× to 0.01× IC50 (converted to {stockUnit})
                   </p>
                 </div>
               )}
@@ -1444,28 +1499,35 @@ export default function SerialDilution() {
               {(() => {
                 const suggestions = [];
 
-                // Check for large dilution factors
-                const maxFactor = Math.max(...dilutionSteps.map(s => s.dilutionFactor));
-                if (maxFactor > 10) {
-                  suggestions.push(
-                    <div key="large-factor" className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                        ⚠️ <strong>Large dilution factor detected ({maxFactor.toFixed(1)}x).</strong> Consider preparing an intermediate stock to improve accuracy.
-                      </p>
-                    </div>
-                  );
+                // Filter out blank/control wells (concentration = 0) from validation
+                const actualDilutionSteps = dilutionSteps.filter(s => s.concentration > 0);
+
+                // Check for large dilution factors (exclude blanks)
+                if (actualDilutionSteps.length > 0) {
+                  const maxFactor = Math.max(...actualDilutionSteps.map(s => s.dilutionFactor));
+                  if (maxFactor > 10 && isFinite(maxFactor)) {
+                    suggestions.push(
+                      <div key="large-factor" className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          ⚠️ <strong>Large dilution factor detected ({maxFactor.toFixed(1)}x).</strong> Consider preparing an intermediate stock to improve accuracy.
+                        </p>
+                      </div>
+                    );
+                  }
                 }
 
-                // Check for very small volumes
-                const minVolume = Math.min(...dilutionSteps.map(s => s.stockVolume));
-                if (minVolume < 2) {
-                  suggestions.push(
-                    <div key="small-volume" className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
-                      <p className="text-sm text-orange-800 dark:text-orange-200">
-                        ⚠️ <strong>Very small transfer volume ({minVolume.toFixed(1)} {volumeUnit}).</strong> This may be difficult to pipette accurately. Consider increasing total volumes or excess factor.
-                      </p>
-                    </div>
-                  );
+                // Check for very small volumes (exclude blanks)
+                if (actualDilutionSteps.length > 0) {
+                  const minVolume = Math.min(...actualDilutionSteps.map(s => s.stockVolume));
+                  if (minVolume < 2 && minVolume > 0) {
+                    suggestions.push(
+                      <div key="small-volume" className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                        <p className="text-sm text-orange-800 dark:text-orange-200">
+                          ⚠️ <strong>Very small transfer volume ({minVolume.toFixed(1)} {volumeUnit}).</strong> This may be difficult to pipette accurately. Consider increasing total volumes or excess factor.
+                        </p>
+                      </div>
+                    );
+                  }
                 }
 
                 // All looks good
