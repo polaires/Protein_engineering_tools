@@ -8,6 +8,7 @@ import { Beaker, RotateCcw } from 'lucide-react';
 
 type DilutionStrategy = 'serial-2' | 'serial-10' | 'custom' | 'specific' | 'smart-range';
 type LayoutOrientation = 'horizontal' | 'vertical';
+type WizardStep = 1 | 2 | 3 | 4 | 5;
 
 interface DilutionStep {
   concentration: number;
@@ -19,7 +20,27 @@ interface DilutionStep {
   sourceStep: number | null; // null for first step (from stock)
 }
 
+interface TemplatePreset {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  strategy: DilutionStrategy;
+  params: {
+    concentrations?: string;
+    factor?: string;
+    numPoints?: string;
+    rangeMax?: string;
+    rangeMin?: string;
+    spacing?: 'logarithmic' | 'linear';
+  };
+}
+
 export default function SerialDilution() {
+  // Wizard state
+  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+
   // Input states
   const [originalStockConcentration, setOriginalStockConcentration] = useState<string>('100');
   const [stockConcentration, setStockConcentration] = useState<string>('20');
@@ -27,10 +48,10 @@ export default function SerialDilution() {
   const [finalVolume, setFinalVolume] = useState<string>('200');
   const [sampleVolume, setSampleVolume] = useState<string>('20');
   const [volumeUnit, setVolumeUnit] = useState<string>('μL');
-  const [dilutionStrategy, setDilutionStrategy] = useState<DilutionStrategy>('serial-2');
+  const [dilutionStrategy, setDilutionStrategy] = useState<DilutionStrategy | null>(null);
   const [customFactor, setCustomFactor] = useState<string>('2');
-  const [numberOfDilutions, setNumberOfDilutions] = useState<string>('6');
-  const [replicates, setReplicates] = useState<string>('4');
+  const [numberOfDilutions, setNumberOfDilutions] = useState<string>('8');
+  const [replicates, setReplicates] = useState<string>('3');
   const [layoutOrientation, setLayoutOrientation] = useState<LayoutOrientation>('horizontal');
   const [excessFactor, setExcessFactor] = useState<string>('1.2');
 
@@ -44,6 +65,78 @@ export default function SerialDilution() {
 
   // Hover state for tooltips
   const [hoveredWell, setHoveredWell] = useState<{row: number; col: number} | null>(null);
+
+  // Template presets
+  const templates: TemplatePreset[] = [
+    {
+      id: 'ic50-standard',
+      name: 'IC50/EC50 Curve',
+      description: '10-point dose-response with half-log spacing',
+      icon: '📊',
+      strategy: 'specific',
+      params: {
+        concentrations: '100, 30, 10, 3, 1, 0.3, 0.1, 0.03, 0.01, 0',
+        numPoints: '10'
+      }
+    },
+    {
+      id: 'serial-2fold',
+      name: '2-Fold Serial',
+      description: 'Classic doubling dilution series',
+      icon: '🔢',
+      strategy: 'serial-2',
+      params: {
+        factor: '2',
+        numPoints: '8'
+      }
+    },
+    {
+      id: 'serial-10fold',
+      name: '10-Fold Serial',
+      description: 'Log scale serial dilution',
+      icon: '📐',
+      strategy: 'serial-10',
+      params: {
+        factor: '10',
+        numPoints: '7'
+      }
+    },
+    {
+      id: 'mictesting',
+      name: 'MIC Testing',
+      description: '2-fold dilution for minimal inhibitory concentration',
+      icon: '🦠',
+      strategy: 'serial-2',
+      params: {
+        factor: '2',
+        numPoints: '12'
+      }
+    },
+    {
+      id: 'antibody-titration',
+      name: 'Antibody Titration',
+      description: '3-fold dilution series for antibody optimization',
+      icon: '🧬',
+      strategy: 'custom',
+      params: {
+        factor: '3',
+        numPoints: '8'
+      }
+    },
+    {
+      id: 'smart-range',
+      name: 'Smart Range Design',
+      description: 'Auto-calculate from concentration range',
+      icon: '✨',
+      strategy: 'smart-range',
+      params: {
+        rangeMax: '20',
+        rangeMin: '0.5',
+        spacing: 'logarithmic',
+        numPoints: '8'
+      }
+    }
+  ];
 
   // Calculate dilution series
   const calculateDilutionSeries = (): DilutionStep[] => {
@@ -253,6 +346,102 @@ export default function SerialDilution() {
   };
 
   const dilutionSteps = calculateDilutionSeries();
+
+  // Apply template preset
+  const applyTemplate = (template: TemplatePreset) => {
+    setDilutionStrategy(template.strategy);
+
+    if (template.params.concentrations) {
+      setSpecificConcentrations(template.params.concentrations);
+    }
+    if (template.params.factor) {
+      setCustomFactor(template.params.factor);
+    }
+    if (template.params.numPoints) {
+      setNumberOfDilutions(template.params.numPoints);
+    }
+    if (template.params.rangeMax) {
+      setSmartRangeMax(template.params.rangeMax);
+    }
+    if (template.params.rangeMin) {
+      setSmartRangeMin(template.params.rangeMin);
+    }
+    if (template.params.spacing) {
+      setSmartRangeSpacing(template.params.spacing);
+    }
+
+    // Mark step 1 as complete and move to step 2
+    setCompletedSteps(new Set([1]));
+    setCurrentStep(2);
+  };
+
+  // Validate current step
+  const validateStep = (step: WizardStep): boolean => {
+    switch (step) {
+      case 1:
+        return dilutionStrategy !== null;
+      case 2:
+        const stock = parseFloat(originalStockConcentration);
+        if (isNaN(stock) || stock <= 0) return false;
+
+        if (dilutionStrategy === 'smart-range') {
+          const max = parseFloat(smartRangeMax);
+          const min = parseFloat(smartRangeMin);
+          return !isNaN(max) && !isNaN(min) && max > min;
+        } else if (dilutionStrategy === 'specific') {
+          return specificConcentrations.length > 0;
+        } else if (dilutionStrategy === 'custom') {
+          const factor = parseFloat(customFactor);
+          return !isNaN(factor) && factor > 1;
+        }
+        return true;
+      case 3:
+        const reps = parseInt(replicates);
+        return !isNaN(reps) && reps > 0 && reps <= 12;
+      case 4:
+        const finalVol = parseFloat(finalVolume);
+        const sampleVol = parseFloat(sampleVolume);
+        return !isNaN(finalVol) && !isNaN(sampleVol) && finalVol > sampleVol && sampleVol > 0;
+      case 5:
+        return dilutionSteps.length > 0;
+      default:
+        return false;
+    }
+  };
+
+  // Step navigation
+  const goToNextStep = () => {
+    if (validateStep(currentStep) && currentStep < 5) {
+      setCompletedSteps(prev => new Set([...prev, currentStep]));
+      setCurrentStep((curr) => Math.min(5, curr + 1) as WizardStep);
+    }
+  };
+
+  const goToPreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep((curr) => Math.max(1, curr - 1) as WizardStep);
+    }
+  };
+
+  const goToStep = (step: WizardStep) => {
+    // Allow going to any completed step or the next step after last completed
+    const maxAccessibleStep = Math.max(...Array.from(completedSteps), 0) + 1;
+    if (step <= maxAccessibleStep && step <= 5) {
+      setCurrentStep(step);
+    }
+  };
+
+  // Get step title
+  const getStepTitle = (step: WizardStep): string => {
+    const titles = {
+      1: 'Choose Strategy',
+      2: 'Configure Parameters',
+      3: 'Design Plate Layout',
+      4: 'Set Volumes',
+      5: 'Review & Optimize'
+    };
+    return titles[step];
+  };
 
   // Get color for concentration (heat map)
   const getConcentrationColor = (concentration: number, maxConc: number): string => {
