@@ -797,6 +797,96 @@ export default function SerialDilution() {
   const goToStep = _goToStep;
   const getStepTitle = _getStepTitle;
 
+  // Export protocol to CSV
+  const exportToCSV = () => {
+    if (dilutionSteps.length === 0) {
+      alert('No dilution plan to export. Please complete the wizard first.');
+      return;
+    }
+
+    // Create CSV content
+    let csvContent = 'Serial Dilution Protocol\n\n';
+    csvContent += `Strategy,${templates.find(t => t.strategy === dilutionStrategy)?.name || dilutionStrategy}\n`;
+    csvContent += `Stock Concentration,${originalStockConcentration} ${stockUnit}\n`;
+    csvContent += `Number of Dilutions,${dilutionSteps.length}\n`;
+    csvContent += `Replicates,${replicates}\n`;
+    csvContent += `Well Volume,${finalVolume} ${volumeUnit}\n`;
+    csvContent += `Sample Volume,${sampleVolume} ${volumeUnit}\n`;
+    csvContent += `Excess Factor,${excessFactor}x\n\n`;
+
+    csvContent += 'Dilution Steps\n';
+    csvContent += 'Step,Concentration,Source,Dilution Factor,Stock/Source Volume,Diluent Volume,Total Volume\n';
+
+    dilutionSteps.forEach((step, idx) => {
+      csvContent += `${idx + 1},`;
+      csvContent += `${formatConcentration(step.concentration)},`;
+      csvContent += `${step.sourceStep === null ? 'Stock' : `Step ${step.sourceStep + 1}`},`;
+      csvContent += `${step.concentration === 0 ? '—' : isFinite(step.dilutionFactor) ? `${step.dilutionFactor.toFixed(2)}x` : '—'},`;
+      csvContent += `${step.stockVolume.toFixed(1)} ${volumeUnit},`;
+      csvContent += `${step.diluentVolume.toFixed(1)} ${volumeUnit},`;
+      csvContent += `${step.totalVolume.toFixed(1)} ${volumeUnit}\n`;
+    });
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `dilution_protocol_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Save configuration to JSON
+  const saveConfiguration = () => {
+    const config = {
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      selectedTemplate: selectedTemplateId,
+      parameters: {
+        originalStockConcentration,
+        stockConcentration,
+        stockUnit,
+        finalVolume,
+        sampleVolume,
+        volumeUnit,
+        dilutionStrategy,
+        customFactor,
+        numberOfDilutions,
+        replicates,
+        layoutOrientation,
+        excessFactor,
+        specificConcentrations,
+        smartRangeMax,
+        smartRangeMin,
+        smartRangeSpacing,
+        expectedIC50,
+        ic50Known,
+        ic50Unit
+      },
+      dilutionSteps: dilutionSteps.map(step => ({
+        concentration: step.concentration,
+        stockVolume: step.stockVolume,
+        diluentVolume: step.diluentVolume,
+        totalVolume: step.totalVolume,
+        dilutionFactor: step.dilutionFactor
+      }))
+    };
+
+    const jsonString = JSON.stringify(config, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `dilution_config_${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1589,22 +1679,16 @@ export default function SerialDilution() {
           {/* Action Buttons */}
           <div className="flex gap-3 mb-6">
             <button
-              onClick={() => {
-                // TODO: Implement export functionality
-                alert('Export functionality coming soon!');
-              }}
+              onClick={exportToCSV}
               className="btn-secondary flex-1"
             >
-              📄 Export Protocol
+              📄 Export Protocol (CSV)
             </button>
             <button
-              onClick={() => {
-                // TODO: Implement save functionality
-                alert('Save functionality coming soon!');
-              }}
+              onClick={saveConfiguration}
               className="btn-secondary flex-1"
             >
-              💾 Save Plan
+              💾 Save Configuration (JSON)
             </button>
           </div>
 
@@ -1716,7 +1800,7 @@ export default function SerialDilution() {
                       {step.sourceStep === null ? 'Stock' : `Step ${step.sourceStep + 1}`}
                     </td>
                     <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                      {step.dilutionFactor.toFixed(2)}x
+                      {step.concentration === 0 ? '—' : isFinite(step.dilutionFactor) ? `${step.dilutionFactor.toFixed(2)}x` : '—'}
                     </td>
                     <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
                       {step.stockVolume.toFixed(1)} {volumeUnit}
