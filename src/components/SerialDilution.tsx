@@ -66,8 +66,7 @@ export default function SerialDilution() {
   // Hover state for tooltips
   const [hoveredWell, setHoveredWell] = useState<{row: number; col: number} | null>(null);
 
-  // Template presets (for future wizard implementation)
-  // @ts-expect-error - Prepared for wizard UI implementation
+  // Template presets
   const _templates: TemplatePreset[] = [
     {
       id: 'ic50-standard',
@@ -348,8 +347,7 @@ export default function SerialDilution() {
 
   const dilutionSteps = calculateDilutionSeries();
 
-  // Apply template preset (for future wizard implementation)
-  // @ts-expect-error - Prepared for wizard UI implementation
+  // Apply template preset
   const _applyTemplate = (template: TemplatePreset) => {
     setDilutionStrategy(template.strategy);
 
@@ -377,7 +375,7 @@ export default function SerialDilution() {
     setCurrentStep(2);
   };
 
-  // Validate current step (for future wizard implementation)
+  // Validate current step
   const _validateStep = (step: WizardStep): boolean => {
     switch (step) {
       case 1:
@@ -411,8 +409,7 @@ export default function SerialDilution() {
     }
   };
 
-  // Step navigation (for future wizard implementation)
-  // @ts-expect-error - Prepared for wizard UI implementation
+  // Step navigation
   const _goToNextStep = () => {
     if (_validateStep(currentStep) && currentStep < 5) {
       setCompletedSteps(prev => new Set([...prev, currentStep]));
@@ -420,14 +417,12 @@ export default function SerialDilution() {
     }
   };
 
-  // @ts-expect-error - Prepared for wizard UI implementation
   const _goToPreviousStep = () => {
     if (currentStep > 1) {
       setCurrentStep((curr) => Math.max(1, curr - 1) as WizardStep);
     }
   };
 
-  // @ts-expect-error - Prepared for wizard UI implementation
   const _goToStep = (step: WizardStep) => {
     // Allow going to any completed step or the next step after last completed
     const maxAccessibleStep = Math.max(...Array.from(completedSteps), 0) + 1;
@@ -436,8 +431,7 @@ export default function SerialDilution() {
     }
   };
 
-  // Get step title (for future wizard implementation)
-  // @ts-expect-error - Prepared for wizard UI implementation
+  // Get step title
   const _getStepTitle = (step: WizardStep): string => {
     const titles = {
       1: 'Choose Strategy',
@@ -775,6 +769,15 @@ export default function SerialDilution() {
     return total - sample;
   };
 
+  // Remove underscore prefix - these are now being used
+  const templates = _templates;
+  const applyTemplate = _applyTemplate;
+  const validateStep = _validateStep;
+  const goToNextStep = _goToNextStep;
+  const goToPreviousStep = _goToPreviousStep;
+  const goToStep = _goToStep;
+  const getStepTitle = _getStepTitle;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -784,23 +787,93 @@ export default function SerialDilution() {
           Serial Dilution Calculator & Planner
         </h2>
         <p className="text-slate-600 dark:text-slate-400">
-          Design and visualize serial dilution experiments with plate layout, calculate volumes, and generate step-by-step protocols
+          Guided workflow for designing serial dilution experiments with intelligent templates and optimization
         </p>
       </div>
 
-      {/* Input Section */}
+      {/* Step Indicator */}
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-            Input Parameters
-          </h3>
-          <button onClick={resetInputs} className="btn-secondary text-sm">
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset
-          </button>
-        </div>
+        <div className="flex items-center justify-between">
+          {[1, 2, 3, 4, 5].map((step) => {
+            const stepNum = step as WizardStep;
+            const isCompleted = completedSteps.has(step);
+            const isCurrent = currentStep === step;
+            const isAccessible = step <= Math.max(...Array.from(completedSteps), 0) + 1;
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            return (
+              <div key={step} className="flex items-center flex-1">
+                <button
+                  onClick={() => isAccessible ? goToStep(stepNum) : null}
+                  disabled={!isAccessible}
+                  className={`flex flex-col items-center gap-2 w-full ${isAccessible ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                >
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                    isCurrent
+                      ? 'bg-primary-500 text-white ring-4 ring-primary-200 dark:ring-primary-800'
+                      : isCompleted
+                        ? 'bg-green-500 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {isCompleted ? '✓' : step}
+                  </div>
+                  <div className={`text-xs text-center ${isCurrent ? 'font-semibold text-primary-600 dark:text-primary-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                    {getStepTitle(stepNum)}
+                  </div>
+                </button>
+                {step < 5 && (
+                  <div className={`h-0.5 flex-1 mx-2 ${isCompleted ? 'bg-green-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Wizard Content */}
+      {currentStep === 1 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
+            Choose Your Dilution Strategy
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+            Select a template to get started quickly, or choose a strategy and customize it yourself
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {templates.map((template) => (
+              <button
+                key={template.id}
+                onClick={() => applyTemplate(template)}
+                className={`p-6 rounded-lg border-2 transition-all hover:shadow-lg hover:scale-105 text-left ${
+                  dilutionStrategy === template.strategy
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+                }`}
+              >
+                <div className="text-4xl mb-3">{template.icon}</div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                  {template.name}
+                </h4>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {template.description}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Configure Parameters */}
+      {currentStep === 2 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">
+            Configure Parameters
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+            Set your stock concentration and {dilutionStrategy === 'smart-range' ? 'desired concentration range' : dilutionStrategy === 'specific' ? 'specific concentrations' : 'dilution series parameters'}
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Original Stock Concentration */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -832,7 +905,7 @@ export default function SerialDilution() {
             </p>
           </div>
 
-          {/* Starting Dilution Concentration */}
+          {/* Starting Dilution Concentration (not for smart-range) */}
           {dilutionStrategy !== 'smart-range' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -850,105 +923,6 @@ export default function SerialDilution() {
               </p>
             </div>
           )}
-
-          {/* Total Well Volume */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Total Well Volume
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={finalVolume}
-                onChange={(e) => setFinalVolume(e.target.value)}
-                className="input-field flex-1"
-                step="10"
-              />
-              <select
-                value={volumeUnit}
-                onChange={(e) => setVolumeUnit(e.target.value)}
-                className="input-field w-20"
-              >
-                <option value="μL">μL</option>
-                <option value="mL">mL</option>
-                <option value="L">L</option>
-              </select>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Total volume in each well
-            </p>
-          </div>
-
-          {/* Sample Volume */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Sample Volume
-            </label>
-            <input
-              type="number"
-              value={sampleVolume}
-              onChange={(e) => setSampleVolume(e.target.value)}
-              className="input-field"
-              step="1"
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Volume of diluted sample per well
-            </p>
-          </div>
-
-          {/* Assay Volume (calculated) */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Assay/Buffer Volume
-            </label>
-            <input
-              type="number"
-              value={getAssayVolume()}
-              className="input-field bg-slate-100 dark:bg-slate-800"
-              disabled
-            />
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Auto-calculated: {finalVolume} - {sampleVolume} {volumeUnit}
-            </p>
-          </div>
-
-          {/* Number of Replicates */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Number of Replicates
-            </label>
-            <input
-              type="number"
-              value={replicates}
-              onChange={(e) => setReplicates(e.target.value)}
-              className="input-field"
-              min="1"
-              max="12"
-            />
-          </div>
-
-          {/* Dilution Strategy */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Dilution Strategy
-            </label>
-            <select
-              value={dilutionStrategy}
-              onChange={(e) => setDilutionStrategy(e.target.value as DilutionStrategy)}
-              className={`input-field ${dilutionStrategy === 'smart-range' ? 'ring-2 ring-primary-500 dark:ring-primary-400' : ''}`}
-            >
-              <option value="serial-2">Serial 2-fold</option>
-              <option value="serial-10">Serial 10-fold</option>
-              <option value="custom">Custom Factor</option>
-              <option value="smart-range">✨ Smart Range Design</option>
-              <option value="specific">Specific Concentrations</option>
-            </select>
-            {dilutionStrategy === 'smart-range' && (
-              <p className="text-xs text-primary-600 dark:text-primary-400 mt-1 font-medium">
-                🎯 Automatically calculates optimal dilution series
-              </p>
-            )}
-          </div>
 
           {/* Custom Factor (if custom) */}
           {dilutionStrategy === 'custom' && (
@@ -1058,37 +1032,6 @@ export default function SerialDilution() {
               )}
             </div>
           )}
-
-          {/* Layout Orientation */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Layout Orientation
-            </label>
-            <select
-              value={layoutOrientation}
-              onChange={(e) => setLayoutOrientation(e.target.value as LayoutOrientation)}
-              className="input-field"
-            >
-              <option value="horizontal">Horizontal (across columns)</option>
-              <option value="vertical">Vertical (down rows)</option>
-            </select>
-          </div>
-
-          {/* Excess Factor */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Excess Factor
-            </label>
-            <input
-              type="number"
-              value={excessFactor}
-              onChange={(e) => setExcessFactor(e.target.value)}
-              className="input-field"
-              step="0.1"
-              min="1"
-              max="2"
-            />
-          </div>
         </div>
 
         {/* Smart Range Design Info Banner */}
@@ -1128,8 +1071,403 @@ export default function SerialDilution() {
             />
           </div>
         )}
-      </div>
 
+        {/* Navigation Buttons */}
+        <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+          <button
+            onClick={goToPreviousStep}
+            className="btn-secondary"
+          >
+            ← Previous
+          </button>
+          <button
+            onClick={goToNextStep}
+            disabled={!validateStep(2)}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next: Design Plate Layout →
+          </button>
+        </div>
+      </div>
+      )}
+
+      {/* Step 3: Design Plate Layout */}
+      {currentStep === 3 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">
+            Design Plate Layout
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+            Configure how your dilution series will be arranged on the plate
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Number of Replicates */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Number of Replicates
+              </label>
+              <input
+                type="number"
+                value={replicates}
+                onChange={(e) => setReplicates(e.target.value)}
+                className="input-field"
+                min="1"
+                max="12"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                How many times to repeat each concentration (1-12)
+              </p>
+            </div>
+
+            {/* Layout Orientation */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Layout Orientation
+              </label>
+              <select
+                value={layoutOrientation}
+                onChange={(e) => setLayoutOrientation(e.target.value as LayoutOrientation)}
+                className="input-field"
+              >
+                <option value="horizontal">Horizontal (concentrations across columns)</option>
+                <option value="vertical">Vertical (concentrations down rows)</option>
+              </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                How dilutions are arranged on the plate
+              </p>
+            </div>
+          </div>
+
+          {/* Preview Info */}
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+              📋 Layout Preview
+            </h4>
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              Your experiment will use <strong>{dilutionSteps.length * parseInt(replicates)}</strong> wells
+              ({dilutionSteps.length} concentrations × {replicates} replicates) arranged in a{' '}
+              <strong>{layoutOrientation}</strong> pattern.
+            </p>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <button
+              onClick={goToPreviousStep}
+              className="btn-secondary"
+            >
+              ← Previous
+            </button>
+            <button
+              onClick={goToNextStep}
+              disabled={!validateStep(3)}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next: Set Volumes →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Set Volumes */}
+      {currentStep === 4 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">
+            Set Volumes
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+            Define well volumes and preparation strategy
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Total Well Volume */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Total Well Volume
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={finalVolume}
+                  onChange={(e) => setFinalVolume(e.target.value)}
+                  className="input-field flex-1"
+                  step="10"
+                />
+                <select
+                  value={volumeUnit}
+                  onChange={(e) => setVolumeUnit(e.target.value)}
+                  className="input-field w-20"
+                >
+                  <option value="μL">μL</option>
+                  <option value="mL">mL</option>
+                  <option value="L">L</option>
+                </select>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Total volume in each well
+              </p>
+            </div>
+
+            {/* Sample Volume */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Sample Volume
+              </label>
+              <input
+                type="number"
+                value={sampleVolume}
+                onChange={(e) => setSampleVolume(e.target.value)}
+                className="input-field"
+                step="1"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Volume of diluted sample per well
+              </p>
+            </div>
+
+            {/* Assay Volume (calculated) */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Assay/Buffer Volume
+              </label>
+              <input
+                type="number"
+                value={getAssayVolume()}
+                className="input-field bg-slate-100 dark:bg-slate-800"
+                disabled
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Auto-calculated: {finalVolume} - {sampleVolume} {volumeUnit}
+              </p>
+            </div>
+
+            {/* Excess Factor */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Excess Factor
+              </label>
+              <select
+                value={excessFactor}
+                onChange={(e) => setExcessFactor(e.target.value)}
+                className="input-field"
+              >
+                <option value="1.0">Minimal (1.0x - exact volumes)</option>
+                <option value="1.2">Standard (1.2x - 20% extra)</option>
+                <option value="1.5">Conservative (1.5x - 50% extra)</option>
+                <option value="2.0">Safe (2.0x - 100% extra)</option>
+              </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Extra volume to prepare for pipetting losses
+              </p>
+            </div>
+          </div>
+
+          {/* Volume Calculation Summary */}
+          <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+            <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-2">
+              📊 Volume Summary
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-green-700 dark:text-green-300">
+              <div>
+                <p className="font-medium">Per Well:</p>
+                <p>{sampleVolume} {volumeUnit} sample + {getAssayVolume()} {volumeUnit} assay</p>
+              </div>
+              <div>
+                <p className="font-medium">Total Wells:</p>
+                <p>{dilutionSteps.length * parseInt(replicates)} wells</p>
+              </div>
+              <div>
+                <p className="font-medium">Excess Factor:</p>
+                <p>{excessFactor}x ({parseFloat(excessFactor) > 1 ? `${((parseFloat(excessFactor) - 1) * 100).toFixed(0)}% extra` : 'exact'})</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <button
+              onClick={goToPreviousStep}
+              className="btn-secondary"
+            >
+              ← Previous
+            </button>
+            <button
+              onClick={goToNextStep}
+              disabled={!validateStep(4)}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next: Review & Optimize →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 5: Review & Optimize */}
+      {currentStep === 5 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">
+            Review & Optimize
+          </h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+            Final review of your dilution plan with optimization suggestions
+          </p>
+
+          {/* Quick Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Strategy</p>
+              <p className="text-lg font-bold text-primary-700 dark:text-primary-300">
+                {templates.find(t => t.strategy === dilutionStrategy)?.name || dilutionStrategy}
+              </p>
+            </div>
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Concentrations</p>
+              <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                {dilutionSteps.length} points
+              </p>
+            </div>
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Wells</p>
+              <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                {dilutionSteps.length * parseInt(replicates)}
+              </p>
+            </div>
+          </div>
+
+          {/* Optimization Suggestions */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">
+              💡 Optimization Suggestions
+            </h4>
+            <div className="space-y-2">
+              {(() => {
+                const suggestions = [];
+
+                // Check for large dilution factors
+                const maxFactor = Math.max(...dilutionSteps.map(s => s.dilutionFactor));
+                if (maxFactor > 10) {
+                  suggestions.push(
+                    <div key="large-factor" className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        ⚠️ <strong>Large dilution factor detected ({maxFactor.toFixed(1)}x).</strong> Consider preparing an intermediate stock to improve accuracy.
+                      </p>
+                    </div>
+                  );
+                }
+
+                // Check for very small volumes
+                const minVolume = Math.min(...dilutionSteps.map(s => s.stockVolume));
+                if (minVolume < 2) {
+                  suggestions.push(
+                    <div key="small-volume" className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                      <p className="text-sm text-orange-800 dark:text-orange-200">
+                        ⚠️ <strong>Very small transfer volume ({minVolume.toFixed(1)} {volumeUnit}).</strong> This may be difficult to pipette accurately. Consider increasing total volumes or excess factor.
+                      </p>
+                    </div>
+                  );
+                }
+
+                // All looks good
+                if (suggestions.length === 0) {
+                  suggestions.push(
+                    <div key="all-good" className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                      <p className="text-sm text-green-800 dark:text-green-200">
+                        ✅ <strong>Your dilution plan looks optimized!</strong> All volumes are within practical pipetting ranges.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return suggestions;
+              })()}
+            </div>
+          </div>
+
+          {/* Pipetting Requirements */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">
+              🧪 Recommended Pipettes
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(() => {
+                const allVolumes = dilutionSteps.flatMap(s => [s.stockVolume, s.diluentVolume]);
+                const pipettes = [];
+
+                if (allVolumes.some(v => v > 0 && v <= 20)) {
+                  pipettes.push(
+                    <div key="p20" className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-center">
+                      <p className="text-xs text-slate-600 dark:text-slate-400">P20</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">0.5-20 {volumeUnit}</p>
+                    </div>
+                  );
+                }
+                if (allVolumes.some(v => v > 20 && v <= 200)) {
+                  pipettes.push(
+                    <div key="p200" className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-center">
+                      <p className="text-xs text-slate-600 dark:text-slate-400">P200</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">20-200 {volumeUnit}</p>
+                    </div>
+                  );
+                }
+                if (allVolumes.some(v => v > 200)) {
+                  pipettes.push(
+                    <div key="p1000" className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-center">
+                      <p className="text-xs text-slate-600 dark:text-slate-400">P1000</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">200-1000 {volumeUnit}</p>
+                    </div>
+                  );
+                }
+
+                return pipettes.length > 0 ? pipettes : <p className="text-sm text-slate-600 dark:text-slate-400 col-span-3">No pipette recommendations available</p>;
+              })()}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 mb-6">
+            <button
+              onClick={() => {
+                // TODO: Implement export functionality
+                alert('Export functionality coming soon!');
+              }}
+              className="btn-secondary flex-1"
+            >
+              📄 Export Protocol
+            </button>
+            <button
+              onClick={() => {
+                // TODO: Implement save functionality
+                alert('Save functionality coming soon!');
+              }}
+              className="btn-secondary flex-1"
+            >
+              💾 Save Plan
+            </button>
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between items-center pt-6 border-t border-slate-200 dark:border-slate-700">
+            <button
+              onClick={goToPreviousStep}
+              className="btn-secondary"
+            >
+              ← Previous
+            </button>
+            <button
+              onClick={resetInputs}
+              className="btn-secondary"
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Start New Plan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Visualizations - Show from Step 3 onwards */}
+      {currentStep >= 3 && dilutionSteps.length > 0 && (
+        <>
       {/* Dilution Workflow Visualization */}
       {dilutionSteps.length > 0 && (
         <div className="card">
@@ -1349,6 +1687,8 @@ export default function SerialDilution() {
           </div>
         );
       })()}
+        </>
+      )}
     </div>
   );
 }
