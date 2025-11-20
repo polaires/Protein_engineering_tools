@@ -887,6 +887,222 @@ export default function SerialDilution() {
     document.body.removeChild(link);
   };
 
+  // Print protocol function
+  const printProtocol = () => {
+    if (dilutionSteps.length === 0) {
+      alert('No dilution plan to print. Please complete the wizard first.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to print the protocol.');
+      return;
+    }
+
+    const templateName = templates.find(t => t.strategy === dilutionStrategy)?.name || dilutionStrategy;
+    const date = new Date().toLocaleDateString();
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Serial Dilution Protocol - ${date}</title>
+        <style>
+          @media print {
+            @page { margin: 0.5in; }
+            body { margin: 0; }
+          }
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.3;
+            color: #000;
+            max-width: 8.5in;
+            margin: 0 auto;
+            padding: 0.5in;
+          }
+          h1 {
+            font-size: 16pt;
+            margin: 0 0 8px 0;
+            border-bottom: 2px solid #333;
+            padding-bottom: 4px;
+          }
+          h2 {
+            font-size: 12pt;
+            margin: 12px 0 6px 0;
+            background: #f0f0f0;
+            padding: 4px 8px;
+          }
+          .header-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 9pt;
+          }
+          .info-row {
+            display: flex;
+            gap: 4px;
+          }
+          .info-label {
+            font-weight: bold;
+            min-width: 120px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0;
+            font-size: 9pt;
+          }
+          th, td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: left;
+          }
+          th {
+            background: #e0e0e0;
+            font-weight: bold;
+          }
+          .section {
+            margin: 12px 0;
+            page-break-inside: avoid;
+          }
+          .footer {
+            margin-top: 16px;
+            padding-top: 8px;
+            border-top: 1px solid #999;
+            font-size: 8pt;
+            color: #666;
+            text-align: center;
+          }
+          .checklist {
+            list-style: none;
+            padding: 0;
+            font-size: 9pt;
+          }
+          .checklist li {
+            margin: 4px 0;
+            padding-left: 20px;
+            position: relative;
+          }
+          .checklist li:before {
+            content: "☐";
+            position: absolute;
+            left: 0;
+            font-size: 12pt;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Serial Dilution Protocol</h1>
+
+        <div class="header-info">
+          <div class="info-row">
+            <span class="info-label">Strategy:</span>
+            <span>${templateName}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Date:</span>
+            <span>${date}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Stock:</span>
+            <span>${originalStockConcentration} ${stockUnit}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Replicates:</span>
+            <span>${replicates}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Well Volume:</span>
+            <span>${finalVolume} ${volumeUnit} (${sampleVolume} ${volumeUnit} sample + ${getAssayVolume()} ${volumeUnit} buffer)</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Total Wells:</span>
+            <span>${dilutionSteps.length * parseInt(replicates)}</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Materials Needed</h2>
+          <ul class="checklist">
+            <li>Stock solution: ${originalStockConcentration} ${stockUnit}</li>
+            <li>Dilution buffer: ${dilutionSteps.reduce((sum, step) => sum + step.diluentVolume, 0).toFixed(1)} ${volumeUnit}</li>
+            <li>Assay reagent: ${(getAssayVolume() * dilutionSteps.length * parseInt(replicates) * parseFloat(excessFactor)).toFixed(1)} ${volumeUnit}</li>
+            <li>${dilutionSteps.length} dilution tubes/wells</li>
+            <li>Pipettes: ${(() => {
+              const allVolumes = dilutionSteps.flatMap(s => [s.stockVolume, s.diluentVolume]);
+              const pipettes = [];
+              if (allVolumes.some(v => v > 0 && v <= 20)) pipettes.push('P20');
+              if (allVolumes.some(v => v > 20 && v <= 200)) pipettes.push('P200');
+              if (allVolumes.some(v => v > 200)) pipettes.push('P1000');
+              return pipettes.join(', ');
+            })()}</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2>Dilution Steps</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Concentration</th>
+                <th>Source</th>
+                <th>Factor</th>
+                <th>Stock Vol</th>
+                <th>Diluent Vol</th>
+                <th>Total Vol</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dilutionSteps.map((step, idx) => `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td>${formatConcentration(step.concentration)}</td>
+                  <td>${step.sourceStep === null ? 'Stock' : `Step ${step.sourceStep + 1}`}</td>
+                  <td>${step.concentration === 0 ? '—' : isFinite(step.dilutionFactor) ? `${step.dilutionFactor.toFixed(2)}x` : '—'}</td>
+                  <td>${step.stockVolume.toFixed(1)} ${volumeUnit}</td>
+                  <td>${step.diluentVolume.toFixed(1)} ${volumeUnit}</td>
+                  <td>${step.totalVolume.toFixed(1)} ${volumeUnit}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>Protocol Steps</h2>
+          <ul class="checklist">
+            ${dilutionSteps.map((step, idx) => {
+              if (step.diluentVolume > 0) {
+                return `<li><strong>Step ${idx + 1}:</strong> Add ${step.diluentVolume.toFixed(1)} ${volumeUnit} buffer + ${step.stockVolume.toFixed(1)} ${volumeUnit} ${step.sourceStep === null ? 'stock' : `from step ${step.sourceStep + 1}`} → mix well (${formatConcentration(step.concentration)})</li>`;
+              } else {
+                return `<li><strong>Step ${idx + 1}:</strong> Transfer ${step.stockVolume.toFixed(1)} ${volumeUnit} ${step.sourceStep === null ? 'stock' : `from step ${step.sourceStep + 1}`} (${formatConcentration(step.concentration)})</li>`;
+              }
+            }).join('')}
+            <li><strong>Plate Setup:</strong> Add ${getAssayVolume()} ${volumeUnit} assay buffer to all wells, then ${sampleVolume} ${volumeUnit} of each dilution (${replicates} replicates per concentration)</li>
+          </ul>
+        </div>
+
+        <div class="footer">
+          Generated by Biochem Space • https://biochem.space/ • Serial Dilution Calculator
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1677,18 +1893,24 @@ export default function SerialDilution() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 mb-6">
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+            <button
+              onClick={printProtocol}
+              className="btn-primary flex-1"
+            >
+              🖨️ Print Protocol
+            </button>
             <button
               onClick={exportToCSV}
               className="btn-secondary flex-1"
             >
-              📄 Export Protocol (CSV)
+              📄 Export CSV
             </button>
             <button
               onClick={saveConfiguration}
               className="btn-secondary flex-1"
             >
-              💾 Save Configuration (JSON)
+              💾 Save JSON
             </button>
           </div>
 
