@@ -4,11 +4,12 @@
  */
 
 import { useState } from 'react';
-import { Atom, X, Beaker } from 'lucide-react';
+import { Atom, X, Beaker, TestTube2 } from 'lucide-react';
 import { elements, categoryColors, categoryNames, Element as ElementType } from '@/data/elements';
 import MetalSolubility from './MetalSolubility';
+import StabilityConstant from './StabilityConstant';
 
-type ViewMode = 'standard' | 'solubility';
+type ViewMode = 'standard' | 'solubility' | 'stability';
 
 export default function Element() {
   const [selectedElement, setSelectedElement] = useState<ElementType | null>(null);
@@ -75,6 +76,13 @@ export default function Element() {
                 <Beaker className="w-4 h-4 inline mr-2" />
                 Solubility
               </button>
+              <button
+                onClick={() => setViewMode('stability')}
+                className="px-4 py-2 rounded-lg font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+              >
+                <TestTube2 className="w-4 h-4 inline mr-2" />
+                Stability
+              </button>
             </div>
           </div>
           <p className="text-slate-600 dark:text-slate-400">
@@ -82,6 +90,50 @@ export default function Element() {
           </p>
         </div>
         <MetalSolubility hideHeader={true} />
+      </div>
+    );
+  }
+
+  // If in stability mode, render StabilityConstant component
+  if (viewMode === 'stability') {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header with Mode Toggle */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title flex items-center gap-2">
+              <TestTube2 className="w-7 h-7" />
+              Periodic Table - Stability Constants
+            </h2>
+            <div className="flex items-center gap-2 text-sm">
+              <button
+                onClick={() => setViewMode('standard')}
+                className="px-4 py-2 rounded-lg font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+              >
+                <Atom className="w-4 h-4 inline mr-2" />
+                Standard
+              </button>
+              <button
+                onClick={() => setViewMode('solubility')}
+                className="px-4 py-2 rounded-lg font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+              >
+                <Beaker className="w-4 h-4 inline mr-2" />
+                Solubility
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg font-medium transition-all bg-primary-600 text-white cursor-default"
+                disabled
+              >
+                <TestTube2 className="w-4 h-4 inline mr-2" />
+                Stability
+              </button>
+            </div>
+          </div>
+          <p className="text-slate-600 dark:text-slate-400">
+            Explore metal-ligand stability constants from the NIST SRD 46 database. Filter by ligands, temperature, and constant types.
+          </p>
+        </div>
+        <StabilityConstant hideHeader={true} />
       </div>
     );
   }
@@ -109,6 +161,13 @@ export default function Element() {
             >
               <Beaker className="w-4 h-4 inline mr-2" />
               Solubility
+            </button>
+            <button
+              onClick={() => setViewMode('stability')}
+              className="px-4 py-2 rounded-lg font-medium transition-all bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+            >
+              <TestTube2 className="w-4 h-4 inline mr-2" />
+              Stability
             </button>
           </div>
         </div>
