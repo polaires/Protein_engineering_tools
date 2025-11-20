@@ -199,6 +199,38 @@ describe('Unit Conversions', () => {
     it('should convert nM to M', () => {
       expect(convertToMolarity(1000000000, ConcentrationUnit.NANOMOLAR)).toBe(1);
     });
+
+    it('should convert %w/v to M', () => {
+      // 10% w/v of NaCl (MW = 58.44 g/mol)
+      // 10% w/v = 100 g/L
+      // M = 100 / 58.44 = 1.711 M
+      const result = convertToMolarity(10, ConcentrationUnit.PERCENT_W_V, 58.44);
+      expect(result).toBeCloseTo(1.711, 2);
+    });
+
+    it('should convert mg/mL to M', () => {
+      // 100 mg/mL of glucose (MW = 180.16 g/mol)
+      // 100 mg/mL = 100 g/L
+      // M = 100 / 180.16 = 0.555 M
+      const result = convertToMolarity(100, ConcentrationUnit.MG_ML, 180.16);
+      expect(result).toBeCloseTo(0.555, 2);
+    });
+
+    it('should convert μg/mL to M', () => {
+      // 1000 μg/mL of glucose (MW = 180.16 g/mol)
+      // 1000 μg/mL = 1 g/L
+      // M = 1 / 180.16 = 0.00555 M
+      const result = convertToMolarity(1000, ConcentrationUnit.UG_ML, 180.16);
+      expect(result).toBeCloseTo(0.00555, 4);
+    });
+
+    it('should throw error when converting %w/v without MW', () => {
+      expect(() => convertToMolarity(10, ConcentrationUnit.PERCENT_W_V)).toThrow();
+    });
+
+    it('should throw error when converting mg/mL without MW', () => {
+      expect(() => convertToMolarity(100, ConcentrationUnit.MG_ML)).toThrow();
+    });
   });
 
   describe('convertToMilliliters', () => {

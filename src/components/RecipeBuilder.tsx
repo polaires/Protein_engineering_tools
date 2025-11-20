@@ -53,7 +53,11 @@ export default function RecipeBuilder() {
   const calculateComponentMass = (component: RecipeBuilderComponent): number => {
     if (!component.chemical) return 0;
 
-    const molarityInM = convertToMolarity(component.concentration * concentrationMultiplier, component.concentrationUnit);
+    const molarityInM = convertToMolarity(
+      component.concentration * concentrationMultiplier,
+      component.concentrationUnit,
+      component.chemical.molecularWeight
+    );
     const volumeInML = convertToMilliliters(totalVolume, volumeUnit);
     const mass = calculateMass(molarityInM, volumeInML, component.chemical.molecularWeight);
 

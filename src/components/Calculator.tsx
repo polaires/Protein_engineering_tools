@@ -112,7 +112,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     const convertedCalculation: MolarityCalculation = {
       ...calculation,
       molarity: calculation.molarity !== undefined
-        ? convertToMolarity(calculation.molarity, molarityUnit)
+        ? convertToMolarity(calculation.molarity, molarityUnit, calculation.molecularWeight)
         : undefined,
       volume: calculation.volume !== undefined
         ? convertToMilliliters(calculation.volume, volumeUnit)
@@ -121,10 +121,10 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         ? convertToGrams(calculation.mass, massUnit)
         : undefined,
       initialMolarity: calculation.initialMolarity !== undefined
-        ? convertToMolarity(calculation.initialMolarity, initialMolarityUnit)
+        ? convertToMolarity(calculation.initialMolarity, initialMolarityUnit, calculation.molecularWeight)
         : undefined,
       finalMolarity: calculation.finalMolarity !== undefined
-        ? convertToMolarity(calculation.finalMolarity, finalMolarityUnit)
+        ? convertToMolarity(calculation.finalMolarity, finalMolarityUnit, calculation.molecularWeight)
         : undefined,
       initialVolume: calculation.initialVolume !== undefined
         ? convertToMilliliters(calculation.initialVolume, initialVolumeUnit)
