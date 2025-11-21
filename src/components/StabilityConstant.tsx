@@ -652,12 +652,21 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
             Filters
           </h3>
-          <button
-            onClick={resetFilters}
-            className="btn-secondary text-sm"
-          >
-            Reset Filters
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setComparisonMode(!comparisonMode)}
+              className={`btn-secondary text-sm flex items-center gap-2 ${comparisonMode ? 'bg-primary-100 dark:bg-primary-900' : ''}`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              {comparisonMode ? 'Exit Compare' : 'Compare'}
+            </button>
+            <button
+              onClick={resetFilters}
+              className="btn-secondary text-sm"
+            >
+              Reset Filters
+            </button>
+          </div>
         </div>
 
 
