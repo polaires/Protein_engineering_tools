@@ -2,9 +2,10 @@
  * Stability Constant Component
  * Interactive periodic table focused on metal-ligand stability constants from NIST SRD 46 database
  * Features: Hierarchical ligand filtering, debounced search, Kd conversion
+ * OPTIMIZED VERSION - Performance improvements with memoization, pre-indexing, and score-based filtering
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { TestTube2, Info, Search, Loader2 } from 'lucide-react';
 import { elements } from '@/data/elements';
 import Fuse from 'fuse.js';
@@ -88,6 +89,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [showKd, setShowKd] = useState<boolean>(false);
   const [showInfo, setShowInfo] = useState<boolean>(false);
+  const [fuzzyMatchCount, setFuzzyMatchCount] = useState<number>(0);
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -119,6 +121,22 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [availableConstantTypes, setAvailableConstantTypes] = useState<string[]>([]);
   const [availableBetaDefinitions, setAvailableBetaDefinitions] = useState<string[]>([]);
 
+  // OPTIMIZATION 1: Pre-index data by element on load (reduces filtering from 722k to ~few thousand per element)
+  const dataByElement = useMemo(() => {
+    if (stabilityData.length === 0) return new Map<string, StabilityRecord[]>();
+
+    const map = new Map<string, StabilityRecord[]>();
+    stabilityData.forEach(record => {
+      if (!map.has(record.element)) {
+        map.set(record.element, []);
+      }
+      map.get(record.element)!.push(record);
+    });
+
+    console.log(`Pre-indexed data: ${map.size} elements with ${stabilityData.length} total records`);
+    return map;
+  }, [stabilityData]);
+
   // Create unique ligand list for efficient searching (instead of searching all 722k records)
   const uniqueLigands = useMemo(() => {
     if (stabilityData.length === 0) return [];
@@ -149,6 +167,29 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       shouldSort: true,
     });
   }, [uniqueLigands]);
+
+  // OPTIMIZATION 2: Memoize fuzzy-matched ligands with score-based filtering
+  // This prevents re-running the Fuse.js search for every element on every render
+  const fuzzyMatchedLigands = useMemo<Set<string>>(() => {
+    if (!fuse || !debouncedSearchText || debouncedSearchText.length < 2) {
+      setFuzzyMatchCount(0);
+      return new Set();
+    }
+
+    console.log(`Running fuzzy search for: "${debouncedSearchText}"`);
+    // Use score-based filtering instead of hard limit
+    const results = fuse.search(debouncedSearchText);
+    const SCORE_THRESHOLD = 0.6; // Only include matches with score < 0.6 (lower is better)
+    const matches = new Set(
+      results
+        .filter(result => result.score! < SCORE_THRESHOLD)
+        .map(result => result.item.name)
+    );
+
+    console.log(`Found ${matches.size} quality fuzzy matches (score < ${SCORE_THRESHOLD})`);
+    setFuzzyMatchCount(matches.size);
+    return matches;
+  }, [fuse, debouncedSearchText]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -224,14 +265,72 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     loadData();
   }, []);
 
-  // Get fuzzy-matched ligand names from search text
-  const getFuzzyMatchedLigands = (searchText: string): Set<string> => {
-    if (!fuse || !searchText || searchText.length < 2) return new Set();
+  // OPTIMIZATION 3: Memoize filtered data by element
+  // This creates a Map of element -> filtered records, calculated only when dependencies change
+  const elementStabilityMap = useMemo<Map<string, StabilityRecord[]>>(() => {
+    console.log('Recalculating element stability map...');
+    const map = new Map<string, StabilityRecord[]>();
 
-    // Limit to top 100 matches for performance
-    const results = fuse.search(searchText, { limit: 100 });
-    return new Set(results.map(result => result.item.name));
-  };
+    // Iterate through pre-indexed data by element (much faster than all records!)
+    dataByElement.forEach((records, element) => {
+      const filtered = records.filter(record => {
+        // Apply filters
+        let matches = true;
+
+        // If using search, use fuzzy matching (ignore class/specific ligand)
+        if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
+          const matchesSearch = fuzzyMatchedLigands.has(record.ligandName);
+          const matchesType = constantType === 'All' || record.constantType === constantType;
+          const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
+          const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
+          matches = matchesSearch && matchesType && matchesBeta && matchesTemp;
+        } else {
+          // Otherwise use dropdown selections (class/specific ligand)
+          const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+          const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
+          const matchesType = constantType === 'All' || record.constantType === constantType;
+          const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
+          const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
+          matches = matchesClass && matchesSpecific && matchesType && matchesBeta && matchesTemp;
+        }
+
+        return matches;
+      });
+
+      if (filtered.length > 0) {
+        map.set(element, filtered);
+      }
+    });
+
+    console.log(`Element stability map created with ${map.size} elements (filtered from ${dataByElement.size} total)`);
+    return map;
+  }, [
+    dataByElement,
+    fuzzyMatchedLigands,
+    debouncedSearchText,
+    selectedLigandClass,
+    selectedSpecificLigand,
+    constantType,
+    betaDefinitionFilter,
+    temperature
+  ]);
+
+  // OPTIMIZATION 4: Memoize average stability calculations
+  // This calculates the average stability for each element only once per filter change
+  const elementAverageStability = useMemo<Map<string, number>>(() => {
+    console.log('Calculating average stabilities...');
+    const avgMap = new Map<string, number>();
+
+    elementStabilityMap.forEach((records, element) => {
+      if (records.length > 0) {
+        const sum = records.reduce((acc, r) => acc + r.stabilityConstant, 0);
+        avgMap.set(element, sum / records.length);
+      }
+    });
+
+    console.log(`Average stabilities calculated for ${avgMap.size} elements`);
+    return avgMap;
+  }, [elementStabilityMap]);
 
   // Get available specific ligands based on selected class
   const getAvailableSpecificLigands = (): string[] => {
@@ -253,59 +352,34 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       return availableBetaDefinitions;
     }
 
-    // Get fuzzy-matched ligands if searching
-    const fuzzyMatches = debouncedSearchText ? getFuzzyMatchedLigands(debouncedSearchText) : null;
-
-    const filtered = stabilityData.filter(record => {
-      // If using search, use fuzzy matching
-      if (debouncedSearchText && fuzzyMatches) {
-        return fuzzyMatches.has(record.ligandName);
-      }
-
-      // Otherwise use class/specific ligand
-      const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
-      const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
-      return matchesClass && matchesSpecific;
+    // Use pre-indexed data for faster filtering
+    const filtered: StabilityRecord[] = [];
+    dataByElement.forEach((records) => {
+      records.forEach(record => {
+        // If using search, use fuzzy matching
+        if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
+          if (fuzzyMatchedLigands.has(record.ligandName)) {
+            filtered.push(record);
+          }
+        } else {
+          // Otherwise use class/specific ligand
+          const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+          const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
+          if (matchesClass && matchesSpecific) {
+            filtered.push(record);
+          }
+        }
+      });
     });
 
     const betaSet = new Set(filtered.map(r => r.betaDefinition).filter(b => b));
     return ['All', ...Array.from(betaSet).sort().slice(0, 50)];
   };
 
-  // Get average stability constant for an element
-  const getStabilityForElement = (elementSymbol: string): number | null => {
-    // Get fuzzy-matched ligands if searching
-    const fuzzyMatches = debouncedSearchText ? getFuzzyMatchedLigands(debouncedSearchText) : null;
-
-    const filtered = stabilityData.filter(record => {
-      const matchesElement = record.element === elementSymbol;
-
-      // If using search, use fuzzy matching (ignore class/specific ligand)
-      if (debouncedSearchText && fuzzyMatches) {
-        const matchesSearch = fuzzyMatches.has(record.ligandName);
-        const matchesType = constantType === 'All' || record.constantType === constantType;
-        const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-        const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-        return matchesElement && matchesSearch && matchesType && matchesBeta && matchesTemp;
-      }
-
-      // Otherwise use dropdown selections (class/specific ligand)
-      const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
-      const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
-      const matchesType = constantType === 'All' || record.constantType === constantType;
-      const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-      const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-      return matchesElement && matchesClass && matchesSpecific && matchesType && matchesBeta && matchesTemp;
-    });
-
-    if (filtered.length === 0) {
-      return null;
-    }
-
-    // Calculate average log K value
-    const sum = filtered.reduce((acc, r) => acc + r.stabilityConstant, 0);
-    return sum / filtered.length;
-  };
+  // OPTIMIZATION 5: Optimized function to get stability for an element (now just a lookup!)
+  const getStabilityForElement = useCallback((elementSymbol: string): number | null => {
+    return elementAverageStability.get(elementSymbol) ?? null;
+  }, [elementAverageStability]);
 
   // Convert log K to Kd (dissociation constant in M)
   const convertToKd = (logK: number): string => {
@@ -539,9 +613,25 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 className="input-field w-full pl-10 text-sm"
               />
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Fuzzy search (min. 2 characters) - try misspellings!
-            </p>
+            {/* Search result count feedback */}
+            {debouncedSearchText && debouncedSearchText.length >= 2 && (
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                {fuzzyMatchCount > 0 ? (
+                  <span className="text-green-600 dark:text-green-400">
+                    ✓ Found {fuzzyMatchCount} ligand{fuzzyMatchCount !== 1 ? 's' : ''} matching "{debouncedSearchText}"
+                  </span>
+                ) : (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    No ligands found matching "{debouncedSearchText}" - try a different search
+                  </span>
+                )}
+              </p>
+            )}
+            {!debouncedSearchText && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Fuzzy search (min. 2 characters) - try misspellings!
+              </p>
+            )}
           </div>
 
           {/* Temperature Slider */}
@@ -756,28 +846,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
       {/* Detail Panel */}
       {selectedElement && (() => {
-        // Get fuzzy-matched ligands if searching
-        const fuzzyMatches = debouncedSearchText ? getFuzzyMatchedLigands(debouncedSearchText) : null;
+        // OPTIMIZATION 6: Get pre-filtered data from the memoized map
+        const elementRecords = elementStabilityMap.get(selectedElement) || [];
 
-        const elementData = stabilityData
-          .filter(record => {
-            const matchesElement = record.element === selectedElement;
-
-            // If using search, use fuzzy matching (ignore class/specific ligand)
-            if (debouncedSearchText && fuzzyMatches) {
-              const matchesSearch = fuzzyMatches.has(record.ligandName);
-              const matchesType = constantType === 'All' || record.constantType === constantType;
-              const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-              return matchesElement && matchesSearch && matchesType && matchesBeta;
-            }
-
-            // Otherwise use dropdown selections (class/specific ligand)
-            const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
-            const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
-            const matchesType = constantType === 'All' || record.constantType === constantType;
-            const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-            return matchesElement && matchesClass && matchesSpecific && matchesType && matchesBeta;
-          })
+        // Sort and limit for display
+        const elementData = elementRecords
           .sort((a, b) => b.stabilityConstant - a.stabilityConstant)
           .slice(0, 100); // Limit to top 100 for performance
 
@@ -788,7 +861,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 Stability Constants for {selectedElement}
                 {elementData.length > 0 && (
                   <span className="text-sm font-normal text-slate-600 dark:text-slate-400 ml-2">
-                    (showing top 100 of {stabilityData.filter(r => r.element === selectedElement).length} total records)
+                    (showing top 100 of {elementRecords.length} filtered records)
                   </span>
                 )}
               </h3>
