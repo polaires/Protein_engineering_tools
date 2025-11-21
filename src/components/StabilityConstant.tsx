@@ -19,6 +19,32 @@ interface StabilityRecord {
   error: string;
   constantType: string;
   betaDefinition: string;
+  refYear: string;
+  refJournal: string;
+  refPage: string;
+}
+
+// Simple CSV parser that handles quoted fields
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current); // Add the last field
+  return result;
 }
 
 // Metal categories (all metals from the periodic table)
@@ -76,8 +102,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         for (const line of lines) {
           if (!line.trim()) continue;
 
-          const parts = line.split(',');
-          if (parts.length < 10) continue;
+          const parts = parseCSVLine(line);
+          if (parts.length < 13) continue; // Now we have 13 fields including references
 
           const temp = parseFloat(parts[5]);
           const ionic = parseFloat(parts[6]);
@@ -95,7 +121,10 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             ionicStrength: isNaN(ionic) ? 0 : ionic,
             error: parts[7].trim(),
             constantType: parts[8].trim(),
-            betaDefinition: parts[9].trim()
+            betaDefinition: parts[9].trim(),
+            refYear: parts[10].trim(),
+            refJournal: parts[11].trim(),
+            refPage: parts[12].trim()
           };
 
           records.push(record);
@@ -532,34 +561,47 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                         Type
                       </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Reference
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                    {elementData.map((record, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                          {record.metalIon}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100 max-w-xs truncate" title={record.ligandName}>
-                          {record.ligandName}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                          {record.ligandFormula}
-                        </td>
-                        <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          {record.stabilityConstant.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                          {record.temperature || 'N/A'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                          {record.ionicStrength || 'N/A'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                          {record.constantType}
-                        </td>
-                      </tr>
-                    ))}
+                    {elementData.map((record, idx) => {
+                      const hasReference = record.refYear || record.refJournal || record.refPage;
+                      const referenceText = hasReference
+                        ? `${record.refJournal || ''} ${record.refYear ? `(${record.refYear})` : ''} ${record.refPage ? `p.${record.refPage}` : ''}`.trim()
+                        : 'N/A';
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                            {record.metalIon}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100 max-w-xs truncate" title={record.ligandName}>
+                            {record.ligandName}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                            {record.ligandFormula}
+                          </td>
+                          <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {record.stabilityConstant.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                            {record.temperature || 'N/A'}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                            {record.ionicStrength || 'N/A'}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                            {record.constantType}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-slate-700 dark:text-slate-300 max-w-xs truncate" title={referenceText}>
+                            {referenceText}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
