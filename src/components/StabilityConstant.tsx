@@ -811,20 +811,57 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             </p>
           )}
 
-          {/* Info Panel */}
+          {/* Documentation & Help Panel */}
           {showInfo && (
-            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Understanding Constant Types:</h4>
-              <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
-                <li><strong>K</strong> - Equilibrium/formation constant: M + L ⇌ ML (Ka = [ML]/[M][L])</li>
-                <li><strong>H</strong> - Protonation constant: HL ⇌ H<sup>+</sup> + L<sup>-</sup></li>
-                <li><strong>*</strong> - Special or mixed constant (see beta definition)</li>
-                <li><strong>S</strong> - Solubility product</li>
-              </ul>
-              <p className="text-sm text-slate-700 dark:text-slate-300 mt-3">
-                <strong>log K vs Kd:</strong> log K (stability constant) measures complex formation strength. Higher log K = more stable complex.
-                Kd (dissociation constant) = 1/Ka = 10<sup>-logK</sup>. Lower Kd = stronger binding.
-              </p>
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Understanding Constant Types</h4>
+                <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                  <li><strong>K₁, K₂, K₃...</strong> - Stepwise formation constants: M + L ⇌ ML (K₁), ML + L ⇌ ML₂ (K₂)</li>
+                  <li><strong>β₂, β₃...</strong> - Overall/cumulative constants: M + nL ⇌ MLₙ (βₙ = K₁×K₂×...×Kₙ)</li>
+                  <li><strong>H</strong> - Protonation constant: HL ⇌ H⁺ + L⁻</li>
+                  <li><strong>*</strong> - Special or mixed constant (see beta definition for details)</li>
+                  <li><strong>S</strong> - Solubility product constant</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">log K vs Kd Conversion</h4>
+                <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                  <li><strong>log K</strong> (stability constant): Measures complex formation strength. <em>Higher = more stable</em></li>
+                  <li><strong>Kd</strong> (dissociation constant): Kd = 1/Ka = 10⁻ˡᵒᵍᴷ. <em>Lower = stronger binding</em></li>
+                  <li><strong>Example:</strong> log K = 10 → Ka = 10¹⁰ M⁻¹ → Kd = 10⁻¹⁰ M = 0.1 nM</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Using Comparison Mode</h4>
+                <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                  <li><strong>Different Elements:</strong> Compare how different metals bind to the same ligand</li>
+                  <li><strong>Different Ligands:</strong> Compare how different ligands bind to the same metal</li>
+                  <li><strong>Different Conditions:</strong> Compare same metal-ligand pair at different T/ionic strength</li>
+                  <li><strong>Show All Conditions:</strong> Display all data points (not just best match) for scatter analysis</li>
+                  <li><strong>Reference Line:</strong> Shows average value when comparing same conditions</li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Data Source</h4>
+                <p className="text-sm text-slate-700 dark:text-slate-300">
+                  Data from <strong>NIST Standard Reference Database 46</strong> - Critically Selected Stability Constants of Metal Complexes.
+                  Temperature tolerance: ±5°C from selected value. Filter by ionic strength for more accurate comparisons.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Tips</h4>
+                <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                  <li>Use text search (2+ chars) to find specific ligands quickly</li>
+                  <li>Hover over scatter points to see detailed values</li>
+                  <li>Click elements on periodic table to select for comparison</li>
+                  <li>Gray elements have no stability data for current filters</li>
+                </ul>
+              </div>
             </div>
           )}
         </div>
@@ -1407,7 +1444,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
               {/* Scatter Plot View */}
               {comparisonPlotType === 'scatter' ? (
-                <div className={`relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 min-h-[300px] ${comparisonType === 'ligands' ? 'pb-24' : 'pb-12'}`}>
+                <div className={`relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 min-h-[300px] ${(comparisonType === 'ligands' || comparisonType === 'conditions') ? 'pb-28' : 'pb-12'}`}>
                   {(() => {
                     const validData = comparisonData.filter(d => d.logK !== null);
                     if (validData.length === 0) return <p className="text-center text-slate-500 py-8">No data</p>;
@@ -1435,10 +1472,10 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     return (
                       <div className="flex h-full">
                         {/* Y-axis */}
-                        <div className="w-12 flex flex-col justify-between text-xs text-slate-600 dark:text-slate-400 pr-2 py-2">
-                          <span>{yMax.toFixed(1)}</span>
-                          <span>{((yMax + yMin) / 2).toFixed(1)}</span>
-                          <span>{yMin.toFixed(1)}</span>
+                        <div className="w-16 flex flex-col justify-between text-xs text-slate-600 dark:text-slate-400 pr-2 py-2 text-right">
+                          <span>{showKd ? convertToKd(yMax) : yMax.toFixed(1)}</span>
+                          <span>{showKd ? convertToKd((yMax + yMin) / 2) : ((yMax + yMin) / 2).toFixed(1)}</span>
+                          <span>{showKd ? convertToKd(yMin) : yMin.toFixed(1)}</span>
                         </div>
                         {/* Plot area */}
                         <div className="flex-1 relative border-l border-b border-slate-400 dark:border-slate-500 min-h-[220px]">
@@ -1461,7 +1498,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                                 className="absolute text-xs text-amber-600 dark:text-amber-400 bg-slate-100 dark:bg-slate-800 px-1"
                                 style={{ top: `${((yMax - avgLogK) / range) * 100 - 3}%`, right: 0 }}
                               >
-                                avg: {avgLogK.toFixed(2)}
+                                avg: {showKd ? convertToKd(avgLogK) : avgLogK.toFixed(2)}
                               </span>
                             </>
                           )}
@@ -1518,25 +1555,29 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             });
                           })()}
                           {/* X-axis labels */}
-                          <div className="absolute top-full left-0 right-0 flex pt-2" style={{ height: comparisonType === 'ligands' ? '80px' : 'auto' }}>
-                            {uniqueXLabels.map((label) => (
+                          <div
+                            className="absolute top-full left-0 right-0 flex pt-1"
+                            style={{ height: (comparisonType === 'ligands' || comparisonType === 'conditions') ? '100px' : 'auto' }}
+                          >
+                            {uniqueXLabels.map((label, i) => (
                               <div
                                 key={label}
-                                className={`flex-1 text-xs text-slate-600 dark:text-slate-400 font-medium ${
-                                  comparisonType === 'ligands' ? 'writing-mode-vertical' : 'text-center truncate'
-                                }`}
-                                style={comparisonType === 'ligands' ? {
+                                className="flex-1 text-xs font-medium overflow-hidden"
+                                style={(comparisonType === 'ligands' || comparisonType === 'conditions') ? {
                                   writingMode: 'vertical-rl',
                                   transform: 'rotate(180deg)',
                                   textAlign: 'left',
-                                  paddingLeft: '2px',
-                                  overflow: 'hidden',
-                                  maxHeight: '75px'
-                                } : {}}
+                                  paddingTop: '4px',
+                                  color: colors[i % colors.length],
+                                  maxHeight: '95px'
+                                } : {
+                                  textAlign: 'center',
+                                  color: '#64748b'
+                                }}
                                 title={label}
                               >
-                                {comparisonType === 'ligands'
-                                  ? (label.length > 25 ? label.substring(0, 25) + '...' : label)
+                                {(comparisonType === 'ligands' || comparisonType === 'conditions')
+                                  ? (label.length > 30 ? label.substring(0, 30) + '...' : label)
                                   : (label.length > 10 ? label.substring(0, 10) + '...' : label)
                                 }
                               </div>
