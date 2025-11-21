@@ -101,8 +101,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [comparisonElement, setComparisonElement] = useState<string>(''); // Single element when comparing ligands
   const [comparisonLigandSearch, setComparisonLigandSearch] = useState<string>(''); // Search for ligands in comparison
   const [selectedConditionsForComparison, setSelectedConditionsForComparison] = useState<string[]>([]); // For conditions mode
-  const [, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
+  const [comparisonPlotType, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
   const [showAllConditions, setShowAllConditions] = useState<boolean>(false); // Show all conditions in elements mode
+  const [showReference, setShowReference] = useState<boolean>(true); // Show reference line in scatter when same conditions
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -1329,20 +1330,52 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           )}
 
           {/* Chart Options */}
-          {comparisonType === 'elements' && comparisonLigand && (
+          {comparisonData.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={showAllConditions}
-                  onChange={(e) => {
-                    setShowAllConditions(e.target.checked);
-                    if (e.target.checked) setComparisonPlotType('scatter'); // Auto-switch to scatter
-                  }}
-                  className="rounded border-slate-300"
-                />
-                Show all conditions (scatter plot)
-              </label>
+              {/* Bar/Scatter toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600 dark:text-slate-400">Chart:</span>
+                <div className="flex rounded overflow-hidden border border-slate-300 dark:border-slate-600">
+                  <button
+                    onClick={() => setComparisonPlotType('bar')}
+                    className={`px-3 py-1 text-sm ${comparisonPlotType === 'bar' ? 'bg-primary-600 text-white' : 'bg-white dark:bg-slate-700'}`}
+                  >
+                    Bar
+                  </button>
+                  <button
+                    onClick={() => setComparisonPlotType('scatter')}
+                    className={`px-3 py-1 text-sm ${comparisonPlotType === 'scatter' ? 'bg-primary-600 text-white' : 'bg-white dark:bg-slate-700'}`}
+                  >
+                    Scatter
+                  </button>
+                </div>
+              </div>
+
+              {/* Show all conditions (elements mode only) */}
+              {comparisonType === 'elements' && comparisonLigand && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showAllConditions}
+                    onChange={(e) => setShowAllConditions(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  Show all conditions
+                </label>
+              )}
+
+              {/* Reference toggle - show when not showing all conditions (same condition comparison) */}
+              {comparisonPlotType === 'scatter' && !showAllConditions && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={showReference}
+                    onChange={(e) => setShowReference(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  Show reference line
+                </label>
+              )}
             </div>
           )}
 
@@ -1362,7 +1395,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               </div>
 
               {/* Scatter Plot View */}
-              {showAllConditions ? (
+              {comparisonPlotType === 'scatter' ? (
                 <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 pb-12 min-h-[300px]">
                   {(() => {
                     const validData = comparisonData.filter(d => d.logK !== null);
@@ -1374,9 +1407,19 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     const yMax = maxLogK + padding;
                     const yMin = minLogK - padding;
                     const range = yMax - yMin || 1;
-                    const elements = selectedElementsForComparison.filter(el => validData.some(d => d.element === el));
+
+                    // Get x-axis labels based on comparison type
+                    const xLabels = showAllConditions && comparisonType === 'elements'
+                      ? selectedElementsForComparison.filter(el => validData.some(d => d.element === el))
+                      : validData.map(d => d.label);
+                    const uniqueXLabels = [...new Set(xLabels)];
+
                     const conditions = [...new Set(validData.map(d => d.condition))].filter(Boolean) as string[];
+                    const hasSameCondition = conditions.length <= 1;
                     const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#14b8a6', '#f97316'];
+
+                    // Calculate average for reference line
+                    const avgLogK = validData.reduce((sum, d) => sum + d.logK!, 0) / validData.length;
 
                     return (
                       <div className="flex h-full">
@@ -1396,21 +1439,37 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                               style={{ top: `${pct * 100}%` }}
                             />
                           ))}
-                          {/* Vertical grid lines for elements */}
-                          {elements.map((_, i) => (
+                          {/* Reference line (average) - shown when same conditions */}
+                          {showReference && hasSameCondition && (
+                            <>
+                              <div
+                                className="absolute w-full border-t-2 border-amber-500"
+                                style={{ top: `${((yMax - avgLogK) / range) * 100}%` }}
+                              />
+                              <span
+                                className="absolute text-xs text-amber-600 dark:text-amber-400 bg-slate-100 dark:bg-slate-800 px-1"
+                                style={{ top: `${((yMax - avgLogK) / range) * 100 - 3}%`, right: 0 }}
+                              >
+                                avg: {avgLogK.toFixed(2)}
+                              </span>
+                            </>
+                          )}
+                          {/* Vertical grid lines */}
+                          {uniqueXLabels.map((_, i) => (
                             <div
                               key={i}
                               className="absolute h-full border-l border-slate-300 dark:border-slate-600 border-dashed"
-                              style={{ left: `${((i + 1) / elements.length) * 100}%` }}
+                              style={{ left: `${((i + 1) / uniqueXLabels.length) * 100}%` }}
                             />
                           ))}
                           {/* Data points */}
                           {validData.map((item, idx) => {
-                            const xIndex = elements.indexOf(item.element!);
+                            const xLabel = showAllConditions && comparisonType === 'elements' ? item.element! : item.label;
+                            const xIndex = uniqueXLabels.indexOf(xLabel);
                             if (xIndex === -1) return null;
-                            const x = ((xIndex + 0.5) / elements.length) * 100;
+                            const x = ((xIndex + 0.5) / uniqueXLabels.length) * 100;
                             const y = ((yMax - item.logK!) / range) * 100;
-                            const colorIdx = conditions.indexOf(item.condition!) % colors.length;
+                            const colorIdx = showAllConditions ? conditions.indexOf(item.condition!) % colors.length : idx % colors.length;
                             return (
                               <div
                                 key={idx}
@@ -1426,23 +1485,25 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                           })}
                           {/* X-axis labels */}
                           <div className="absolute top-full left-0 right-0 flex pt-2">
-                            {elements.map((el) => (
-                              <div key={el} className="flex-1 text-center text-xs text-slate-600 dark:text-slate-400 font-medium">
-                                {el}
+                            {uniqueXLabels.map((label) => (
+                              <div key={label} className="flex-1 text-center text-xs text-slate-600 dark:text-slate-400 font-medium truncate px-1" title={label}>
+                                {label.length > 10 ? label.substring(0, 10) + '...' : label}
                               </div>
                             ))}
                           </div>
                         </div>
-                        {/* Legend */}
-                        <div className="ml-4 text-xs bg-white dark:bg-slate-700 p-2 rounded shadow max-h-48 overflow-y-auto min-w-[120px]">
-                          <div className="font-medium mb-1 text-slate-700 dark:text-slate-300">Conditions:</div>
-                          {conditions.map((cond, i) => (
-                            <div key={cond} className="flex items-center gap-1 py-0.5">
-                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
-                              <span className="truncate text-slate-600 dark:text-slate-400">{cond}</span>
-                            </div>
-                          ))}
-                        </div>
+                        {/* Legend - show conditions when multiple */}
+                        {showAllConditions && conditions.length > 1 && (
+                          <div className="ml-4 text-xs bg-white dark:bg-slate-700 p-2 rounded shadow max-h-48 overflow-y-auto min-w-[120px]">
+                            <div className="font-medium mb-1 text-slate-700 dark:text-slate-300">Conditions:</div>
+                            {conditions.map((cond, i) => (
+                              <div key={cond} className="flex items-center gap-1 py-0.5">
+                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
+                                <span className="truncate text-slate-600 dark:text-slate-400">{cond}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
