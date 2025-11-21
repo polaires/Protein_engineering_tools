@@ -20,9 +20,8 @@ interface StabilityRecord {
   error: string;
   constantType: string;
   betaDefinition: string;
-  refYear: string;
-  refJournal: string;
-  refPage: string;
+  refCode: string;
+  reference: string;
 }
 
 // Simple CSV parser that handles quoted fields
@@ -103,13 +102,18 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await fetch('/nist_stability_constants.csv');
+        const response = await fetch('/nist_stability_constants.csv.gz');
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const text = await response.text();
+        // Decompress gzipped data
+        const blob = await response.blob();
+        const ds = new DecompressionStream('gzip');
+        const decompressedStream = blob.stream().pipeThrough(ds);
+        const decompressedBlob = await new Response(decompressedStream).blob();
+        const text = await decompressedBlob.text();
         const lines = text.split('\n').slice(1); // Skip header
         const records: StabilityRecord[] = [];
         const classesSet = new Set<string>();
@@ -120,7 +124,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           if (!line.trim()) continue;
 
           const parts = parseCSVLine(line);
-          if (parts.length < 14) continue; // Now we have 14 fields including ligand_class
+          if (parts.length < 13) continue; // Now we have 13 fields
 
           const temp = parseFloat(parts[6]);
           const ionic = parseFloat(parts[7]);
@@ -140,9 +144,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             error: parts[8].trim(),
             constantType: parts[9].trim(),
             betaDefinition: parts[10].trim(),
-            refYear: parts[11].trim(),
-            refJournal: parts[12].trim(),
-            refPage: parts[13].trim()
+            refCode: parts[11].trim(),
+            reference: parts[12].trim()
           };
 
           records.push(record);
@@ -686,10 +689,10 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {elementData.map((record, idx) => {
-                      const hasReference = record.refYear || record.refJournal || record.refPage;
-                      const referenceText = hasReference
-                        ? `${record.refJournal || ''} ${record.refYear ? `(${record.refYear})` : ''} ${record.refPage ? `p.${record.refPage}` : ''}`.trim()
-                        : 'N/A';
+                      const referenceText = record.reference || 'N/A';
+                      const refDisplay = record.refCode && record.reference
+                        ? `[${record.refCode}] ${record.reference}`
+                        : (record.reference || 'N/A');
 
                       return (
                         <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
@@ -717,8 +720,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100" title={CONSTANT_TYPE_INFO[record.constantType]}>
                             {record.constantType}
                           </td>
-                          <td className="px-4 py-2 text-xs text-slate-700 dark:text-slate-300 max-w-xs truncate" title={referenceText}>
-                            {referenceText}
+                          <td className="px-4 py-2 text-xs text-slate-700 dark:text-slate-300 max-w-md" title={refDisplay}>
+                            <div className="truncate">{refDisplay}</div>
                           </td>
                         </tr>
                       );
