@@ -8,7 +8,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { TestTube2, Info, Search, Loader2 } from 'lucide-react';
 import { elements } from '@/data/elements';
-import Fuse from 'fuse.js';
 
 // Define the structure of stability constant data
 interface StabilityRecord {
@@ -155,59 +154,44 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return uniqueList;
   }, [stabilityData]);
 
-  // Create Fuse instance for fuzzy searching - only searches unique ligands (much faster!)
-  const fuse = useMemo(() => {
-    if (uniqueLigands.length === 0) return null;
-
-    return new Fuse(uniqueLigands, {
-      keys: ['name'],
-      threshold: 0.4, // 0 = exact match, 1 = match anything
-      includeScore: true,
-      minMatchCharLength: 2,
-      ignoreLocation: true,
-      distance: 100,
-      shouldSort: true,
-    });
-  }, [uniqueLigands]);
-
-  // OPTIMIZATION 2: Memoize fuzzy-matched ligands with score-based filtering
-  // This prevents re-running the Fuse.js search for every element on every render
-  const fuzzyMatchedLigands = useMemo<Set<string>>(() => {
-    if (!fuse || !debouncedSearchText || debouncedSearchText.length < 2) {
+  // Simple substring search (like original repo's Pos() function)
+  // Searches unique ligand names for substring match (case-insensitive)
+  const matchedLigands = useMemo<Set<string>>(() => {
+    if (!debouncedSearchText || debouncedSearchText.length < 2 || uniqueLigands.length === 0) {
       setFuzzyMatchCount(0);
       return new Set();
     }
 
-    console.log(`Running fuzzy search for: "${debouncedSearchText}"`);
-    // Use score-based filtering for quality matches
-    const results = fuse.search(debouncedSearchText);
-    const SCORE_THRESHOLD = 0.5; // Only include matches with score < 0.5 (lower is better, stricter)
+    const searchLower = debouncedSearchText.toLowerCase();
+    console.log(`Running substring search for: "${debouncedSearchText}"`);
+
+    // Find ligands containing the search text (case-insensitive substring match)
     const matches = new Set(
-      results
-        .filter(result => result.score! < SCORE_THRESHOLD)
-        .map(result => result.item.name)
+      uniqueLigands
+        .filter(ligand => ligand.name.toLowerCase().includes(searchLower))
+        .map(ligand => ligand.name)
     );
 
-    console.log(`Found ${matches.size} quality fuzzy matches (score < ${SCORE_THRESHOLD})`);
+    console.log(`Found ${matches.size} ligands containing "${debouncedSearchText}"`);
     setFuzzyMatchCount(matches.size);
     return matches;
-  }, [fuse, debouncedSearchText]);
+  }, [uniqueLigands, debouncedSearchText]);
 
   // Reset selected search ligand when search changes
   useEffect(() => {
     if (!debouncedSearchText || debouncedSearchText.length < 2) {
       setSelectedSearchLigand('All');
-    } else if (selectedSearchLigand !== 'All' && !fuzzyMatchedLigands.has(selectedSearchLigand)) {
+    } else if (selectedSearchLigand !== 'All' && !matchedLigands.has(selectedSearchLigand)) {
       setSelectedSearchLigand('All');
     }
-  }, [debouncedSearchText, fuzzyMatchedLigands, selectedSearchLigand]);
+  }, [debouncedSearchText, matchedLigands, selectedSearchLigand]);
 
-  // Create sorted array of matched ligand names for dropdown display (limit to 100 for usability)
-  const fuzzyMatchedLigandNames = useMemo<string[]>(() => {
-    const sortedLigands = Array.from(fuzzyMatchedLigands).sort();
-    const limited = sortedLigands.slice(0, 100);
-    return ['All', ...limited];
-  }, [fuzzyMatchedLigands]);
+  // Create sorted array of matched ligand names for inline display (limit to 50 for usability)
+  const matchedLigandNames = useMemo<string[]>(() => {
+    const sortedLigands = Array.from(matchedLigands).sort();
+    const limited = sortedLigands.slice(0, 50);
+    return limited;
+  }, [matchedLigands]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -304,7 +288,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           matches = matchesSearch && matchesType && matchesBeta && matchesTemp;
         }
         // If using search but no specific ligand selected yet (show nothing until user selects)
-        else if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
+        else if (debouncedSearchText && matchedLigands.size > 0) {
           matches = false; // Don't show any results until user selects a ligand
         }
         // Otherwise use dropdown selections (class/specific ligand)
@@ -329,7 +313,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return map;
   }, [
     dataByElement,
-    fuzzyMatchedLigands,
+    matchedLigands,
     debouncedSearchText,
     selectedSearchLigand,
     selectedLigandClass,
@@ -387,7 +371,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           }
         }
         // If using search but no specific ligand selected yet
-        else if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
+        else if (debouncedSearchText && matchedLigands.size > 0) {
           // Don't include anything until user selects a ligand
         }
         // Otherwise use class/specific ligand
@@ -567,32 +551,6 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           </div>
         </div>
 
-        {/* Search Results Dropdown - shown prominently when search has results */}
-        {debouncedSearchText && fuzzyMatchCount > 0 && (
-          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-lg mb-4">
-            <label className="block text-base font-semibold text-slate-800 dark:text-slate-200 mb-2">
-              🔍 Select a Ligand from {fuzzyMatchCount > 100 ? 'Top 100 of ' : ''}{fuzzyMatchCount} Search Results
-            </label>
-            <select
-              value={selectedSearchLigand}
-              onChange={(e) => setSelectedSearchLigand(e.target.value)}
-              className="w-full p-2 border-2 border-blue-400 dark:border-blue-600 rounded text-sm bg-white dark:bg-slate-800"
-              size={10}
-            >
-              <option value="All" disabled>-- Click a ligand below to view data --</option>
-              {fuzzyMatchedLigandNames.slice(1).map(ligand => (
-                <option key={ligand} value={ligand}>
-                  {ligand.length > 80 ? ligand.substring(0, 80) + '...' : ligand}
-                </option>
-              ))}
-            </select>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
-              {fuzzyMatchCount > 100
-                ? `⚠️ Showing top 100 of ${fuzzyMatchCount} results. Try a more specific search for better results.`
-                : '💡 Click a ligand above to highlight elements on the periodic table that have stability data for it.'}
-            </p>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Ligand Class Filter */}
@@ -642,8 +600,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             </div>
           )}
 
-          {/* Ligand Search */}
-          <div>
+          {/* Ligand Search - with inline collapsing results */}
+          <div className="lg:col-span-2">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Search Ligand Name {isSearching && <span className="text-xs text-slate-500">(searching...)</span>}
             </label>
@@ -665,28 +623,43 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   }
                   setBetaDefinitionFilter('All'); // Reset beta filter when search changes
                 }}
-                placeholder="Type 2+ chars (e.g., glycine, EDTA, glysine)..."
+                placeholder="Type 2+ chars (e.g., glycine, EDTA)..."
                 className="input-field w-full pl-10 text-sm"
               />
             </div>
-            {/* Search result count feedback */}
+            {/* Inline search results - collapses down below input */}
             {debouncedSearchText && debouncedSearchText.length >= 2 && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+              <div className="mt-2">
                 {fuzzyMatchCount > 0 ? (
-                  <span className="text-green-600 dark:text-green-400">
-                    ✓ Found {fuzzyMatchCount} ligand{fuzzyMatchCount !== 1 ? 's' : ''} matching "{debouncedSearchText}"
-                    {fuzzyMatchCount > 100 && ' (showing top 100)'} - select one below
-                  </span>
+                  <div className="border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden">
+                    <div className="bg-slate-100 dark:bg-slate-700 px-3 py-1 text-xs text-slate-600 dark:text-slate-300">
+                      {fuzzyMatchCount} result{fuzzyMatchCount !== 1 ? 's' : ''} for "{debouncedSearchText}"
+                      {fuzzyMatchCount > 50 && ' (showing first 50)'}
+                    </div>
+                    <div className="max-h-40 overflow-y-auto">
+                      {matchedLigandNames.map(ligand => (
+                        <button
+                          key={ligand}
+                          onClick={() => setSelectedSearchLigand(ligand)}
+                          className={`w-full text-left px-3 py-1.5 text-sm hover:bg-primary-100 dark:hover:bg-primary-900 border-b border-slate-200 dark:border-slate-700 last:border-b-0 ${
+                            selectedSearchLigand === ligand ? 'bg-primary-200 dark:bg-primary-800 font-medium' : ''
+                          }`}
+                        >
+                          {ligand.length > 60 ? ligand.substring(0, 60) + '...' : ligand}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
-                  <span className="text-amber-600 dark:text-amber-400">
-                    No ligands found matching "{debouncedSearchText}" - try a different search
-                  </span>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    No ligands found containing "{debouncedSearchText}"
+                  </p>
                 )}
-              </p>
+              </div>
             )}
             {!debouncedSearchText && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Fuzzy search (min. 2 characters) - try misspellings!
+                Substring search (min. 2 characters)
               </p>
             )}
           </div>
