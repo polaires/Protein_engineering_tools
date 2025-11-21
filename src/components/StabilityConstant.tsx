@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { TestTube2, Info, Search, Loader2 } from 'lucide-react';
+import { TestTube2, Info, Search, Loader2, BarChart3, X } from 'lucide-react';
 import { elements } from '@/data/elements';
 
 // Define the structure of stability constant data
@@ -91,6 +91,14 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [showInfo, setShowInfo] = useState<boolean>(false);
   const [fuzzyMatchCount, setFuzzyMatchCount] = useState<number>(0);
   const [selectedSearchLigand, setSelectedSearchLigand] = useState<string>('All');
+
+  // Comparison mode states
+  const [comparisonMode, setComparisonMode] = useState<boolean>(false);
+  const [comparisonType, setComparisonType] = useState<'elements' | 'ligands' | 'conditions'>('elements');
+  const [selectedElementsForComparison, setSelectedElementsForComparison] = useState<string[]>([]);
+  const [selectedLigandsForComparison, setSelectedLigandsForComparison] = useState<string[]>([]);
+  const [comparisonLigand, setComparisonLigand] = useState<string>(''); // Single ligand when comparing elements
+  const [comparisonElement, setComparisonElement] = useState<string>(''); // Single element when comparing ligands
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -433,6 +441,78 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return kd.toFixed(2) + ' M';
   };
 
+  // Get comparison data for chart
+  const comparisonData = useMemo(() => {
+    if (!comparisonMode) return [];
+
+    interface ComparisonItem {
+      label: string;
+      logK: number;
+      kd: number;
+      details: string;
+    }
+
+    const results: ComparisonItem[] = [];
+
+    if (comparisonType === 'elements' && comparisonLigand && selectedElementsForComparison.length > 0) {
+      // Compare different elements with same ligand
+      selectedElementsForComparison.forEach(element => {
+        const records = dataByElement.get(element) || [];
+        const matching = records.filter(r =>
+          r.ligandName === comparisonLigand &&
+          Math.abs(r.temperature - temperature) <= 5
+        );
+        if (matching.length > 0) {
+          const avg = matching.reduce((sum, r) => sum + r.stabilityConstant, 0) / matching.length;
+          results.push({
+            label: element,
+            logK: avg,
+            kd: Math.pow(10, -avg),
+            details: `${matching.length} record(s), avg at ${temperature}°C`
+          });
+        }
+      });
+    } else if (comparisonType === 'ligands' && comparisonElement && selectedLigandsForComparison.length > 0) {
+      // Compare different ligands with same element
+      const records = dataByElement.get(comparisonElement) || [];
+      selectedLigandsForComparison.forEach(ligand => {
+        const matching = records.filter(r =>
+          r.ligandName === ligand &&
+          Math.abs(r.temperature - temperature) <= 5
+        );
+        if (matching.length > 0) {
+          const avg = matching.reduce((sum, r) => sum + r.stabilityConstant, 0) / matching.length;
+          results.push({
+            label: ligand.length > 20 ? ligand.substring(0, 20) + '...' : ligand,
+            logK: avg,
+            kd: Math.pow(10, -avg),
+            details: `${matching.length} record(s), avg at ${temperature}°C`
+          });
+        }
+      });
+    }
+
+    return results.sort((a, b) => b.logK - a.logK);
+  }, [comparisonMode, comparisonType, comparisonLigand, comparisonElement,
+      selectedElementsForComparison, selectedLigandsForComparison, dataByElement, temperature]);
+
+  // Get available ligands for a set of elements (for comparison)
+  const getCommonLigands = useCallback((elementList: string[]): string[] => {
+    if (elementList.length === 0) return [];
+
+    const ligandSets = elementList.map(el => {
+      const records = dataByElement.get(el) || [];
+      return new Set(records.map(r => r.ligandName));
+    });
+
+    // Find intersection
+    const common = ligandSets.reduce((acc, set) => {
+      return new Set([...acc].filter(x => set.has(x)));
+    });
+
+    return Array.from(common).sort();
+  }, [dataByElement]);
+
   // Get color intensity based on stability constant value
   const getColorIntensity = (value: number | null): string => {
     // Return gray for no data
@@ -521,13 +601,22 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               <TestTube2 className="w-7 h-7" />
               Stability Constants - Interactive Periodic Table
             </h2>
-            <button
-              onClick={() => setShowInfo(!showInfo)}
-              className="btn-secondary text-sm flex items-center gap-2"
-            >
-              <Info className="w-4 h-4" />
-              {showInfo ? 'Hide' : 'Show'} Info
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setComparisonMode(!comparisonMode)}
+                className={`btn-secondary text-sm flex items-center gap-2 ${comparisonMode ? 'bg-primary-100 dark:bg-primary-900' : ''}`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                {comparisonMode ? 'Exit Compare' : 'Compare'}
+              </button>
+              <button
+                onClick={() => setShowInfo(!showInfo)}
+                className="btn-secondary text-sm flex items-center gap-2"
+              >
+                <Info className="w-4 h-4" />
+                {showInfo ? 'Hide' : 'Show'} Info
+              </button>
+            </div>
           </div>
           <p className="text-slate-600 dark:text-slate-400">
             Explore metal-ligand stability constants from the NIST SRD 46 database. Filter by ligand class, then select specific ligands from that class, or use text search. Adjust temperature (±5°C tolerance) and filter by equilibrium type. Colors dynamically update based on average log K values - elements without data for the selected conditions appear gray.
@@ -794,6 +883,203 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         </div>
       </div>
 
+      {/* Comparison Panel */}
+      {comparisonMode && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Comparison Mode
+            </h3>
+            <button onClick={() => setComparisonMode(false)} className="btn-secondary text-sm">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Comparison Type Selector */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Compare:
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setComparisonType('elements');
+                  setSelectedLigandsForComparison([]);
+                }}
+                className={`px-3 py-1 text-sm rounded ${comparisonType === 'elements' ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
+              >
+                Different Elements (same ligand)
+              </button>
+              <button
+                onClick={() => {
+                  setComparisonType('ligands');
+                  setSelectedElementsForComparison([]);
+                }}
+                className={`px-3 py-1 text-sm rounded ${comparisonType === 'ligands' ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
+              >
+                Different Ligands (same element)
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {comparisonType === 'elements' ? (
+              <>
+                {/* Select Elements */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Select Elements to Compare (click on periodic table below)
+                  </label>
+                  <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border border-slate-300 dark:border-slate-600 rounded">
+                    {selectedElementsForComparison.length === 0 ? (
+                      <span className="text-sm text-slate-500">Click elements below...</span>
+                    ) : (
+                      selectedElementsForComparison.map(el => (
+                        <span key={el} className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 rounded text-sm flex items-center gap-1">
+                          {el}
+                          <button onClick={() => setSelectedElementsForComparison(prev => prev.filter(e => e !== el))} className="hover:text-red-500">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+                {/* Select Ligand */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Select Ligand for Comparison
+                  </label>
+                  <select
+                    value={comparisonLigand}
+                    onChange={(e) => setComparisonLigand(e.target.value)}
+                    className="input-field w-full text-sm"
+                  >
+                    <option value="">-- Select a ligand --</option>
+                    {getCommonLigands(selectedElementsForComparison).slice(0, 100).map(lig => (
+                      <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
+                    ))}
+                  </select>
+                  {selectedElementsForComparison.length > 0 && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {getCommonLigands(selectedElementsForComparison).length} common ligand(s) found
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Select Element */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Select Element (click on periodic table below)
+                  </label>
+                  <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border border-slate-300 dark:border-slate-600 rounded">
+                    {!comparisonElement ? (
+                      <span className="text-sm text-slate-500">Click an element below...</span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 rounded text-sm flex items-center gap-1">
+                        {comparisonElement}
+                        <button onClick={() => setComparisonElement('')} className="hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Select Ligands */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Select Ligands to Compare
+                  </label>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value && !selectedLigandsForComparison.includes(e.target.value)) {
+                        setSelectedLigandsForComparison(prev => [...prev, e.target.value]);
+                      }
+                    }}
+                    className="input-field w-full text-sm"
+                    value=""
+                  >
+                    <option value="">-- Add a ligand --</option>
+                    {comparisonElement && (dataByElement.get(comparisonElement) || [])
+                      .map(r => r.ligandName)
+                      .filter((v, i, a) => a.indexOf(v) === i)
+                      .sort()
+                      .slice(0, 100)
+                      .map(lig => (
+                        <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
+                      ))}
+                  </select>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {selectedLigandsForComparison.map(lig => (
+                      <span key={lig} className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 rounded text-xs flex items-center gap-1">
+                        {lig.length > 20 ? lig.substring(0, 20) + '...' : lig}
+                        <button onClick={() => setSelectedLigandsForComparison(prev => prev.filter(l => l !== lig))} className="hover:text-red-500">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Comparison Chart */}
+          {comparisonData.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-slate-800 dark:text-slate-200">
+                  Comparison Results ({showKd ? 'Kd' : 'log K'})
+                </h4>
+                <button
+                  onClick={() => setShowKd(!showKd)}
+                  className="btn-secondary text-xs"
+                >
+                  Show {showKd ? 'log K' : 'Kd'}
+                </button>
+              </div>
+              <div className="space-y-2">
+                {comparisonData.map((item, idx) => {
+                  const maxLogK = Math.max(...comparisonData.map(d => d.logK));
+                  const minLogK = Math.min(...comparisonData.map(d => d.logK));
+                  const range = maxLogK - minLogK || 1;
+                  const percentage = ((item.logK - minLogK) / range) * 100;
+
+                  return (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="w-16 text-sm font-medium text-slate-800 dark:text-slate-200 truncate" title={item.label}>
+                        {item.label}
+                      </div>
+                      <div className="flex-1 h-6 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden relative">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary-400 to-primary-600 transition-all"
+                          style={{ width: `${Math.max(5, percentage)}%` }}
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">
+                          {showKd ? convertToKd(item.logK) : item.logK.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="w-32 text-xs text-slate-500 truncate" title={item.details}>
+                        {item.details}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {comparisonData.length === 0 && (comparisonLigand || comparisonElement) && (
+            <p className="text-sm text-amber-600 dark:text-amber-400 mt-4">
+              No data found for the selected comparison. Try different selections or adjust temperature.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Periodic Table */}
       <div className="card overflow-x-auto">
         <div className="min-w-max">
@@ -825,14 +1111,34 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 const stability = isMetalElement ? getStabilityForElement(element.symbol) : null;
                 const bgColor = isMetalElement ? getColorIntensity(stability) : 'rgb(200, 200, 200)';
                 const isGrayedOut = !isMetalElement;
+                const isSelectedForComparison = comparisonMode && (
+                  (comparisonType === 'elements' && selectedElementsForComparison.includes(element.symbol)) ||
+                  (comparisonType === 'ligands' && comparisonElement === element.symbol)
+                );
+
+                const handleElementClick = () => {
+                  if (comparisonMode) {
+                    if (comparisonType === 'elements') {
+                      setSelectedElementsForComparison(prev =>
+                        prev.includes(element.symbol)
+                          ? prev.filter(e => e !== element.symbol)
+                          : [...prev, element.symbol]
+                      );
+                    } else {
+                      setComparisonElement(element.symbol);
+                    }
+                  } else {
+                    setSelectedElement(element.symbol);
+                  }
+                };
 
                 return (
                   <div key={colIndex} className="w-14 h-16">
                     <button
-                      onClick={() => setSelectedElement(element.symbol)}
-                      className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border border-slate-300 ${
+                      onClick={handleElementClick}
+                      className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${
                         isGrayedOut ? 'opacity-40 cursor-not-allowed' : ''
-                      }`}
+                      } ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : 'border-slate-300'}`}
                       style={{ backgroundColor: bgColor }}
                       title={`${element.name}${stability !== null ? ` - log K: ${stability.toFixed(2)}` : ' - No data'}`}
                       disabled={isGrayedOut}
@@ -862,12 +1168,30 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
               const stability = getStabilityForElement(element.symbol);
               const bgColor = getColorIntensity(stability);
+              const isSelectedForComparison = comparisonMode && (
+                (comparisonType === 'elements' && selectedElementsForComparison.includes(element.symbol)) ||
+                (comparisonType === 'ligands' && comparisonElement === element.symbol)
+              );
+
+              const handleClick = () => {
+                if (comparisonMode) {
+                  if (comparisonType === 'elements') {
+                    setSelectedElementsForComparison(prev =>
+                      prev.includes(element.symbol) ? prev.filter(e => e !== element.symbol) : [...prev, element.symbol]
+                    );
+                  } else {
+                    setComparisonElement(element.symbol);
+                  }
+                } else {
+                  setSelectedElement(element.symbol);
+                }
+              };
 
               return (
                 <div key={idx} className="w-14 h-16">
                   <button
-                    onClick={() => setSelectedElement(element.symbol)}
-                    className="w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border border-slate-300"
+                    onClick={handleClick}
+                    className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : 'border-slate-300'}`}
                     style={{ backgroundColor: bgColor }}
                     title={`${element.name}${stability !== null ? ` - log K: ${stability.toFixed(2)}` : ' - No data'}`}
                   >
@@ -892,12 +1216,30 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
               const stability = getStabilityForElement(element.symbol);
               const bgColor = getColorIntensity(stability);
+              const isSelectedForComparison = comparisonMode && (
+                (comparisonType === 'elements' && selectedElementsForComparison.includes(element.symbol)) ||
+                (comparisonType === 'ligands' && comparisonElement === element.symbol)
+              );
+
+              const handleClick = () => {
+                if (comparisonMode) {
+                  if (comparisonType === 'elements') {
+                    setSelectedElementsForComparison(prev =>
+                      prev.includes(element.symbol) ? prev.filter(e => e !== element.symbol) : [...prev, element.symbol]
+                    );
+                  } else {
+                    setComparisonElement(element.symbol);
+                  }
+                } else {
+                  setSelectedElement(element.symbol);
+                }
+              };
 
               return (
                 <div key={idx} className="w-14 h-16">
                   <button
-                    onClick={() => setSelectedElement(element.symbol)}
-                    className="w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border border-slate-300"
+                    onClick={handleClick}
+                    className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : 'border-slate-300'}`}
                     style={{ backgroundColor: bgColor }}
                     title={`${element.name}${stability !== null ? ` - log K: ${stability.toFixed(2)}` : ' - No data'}`}
                   >
