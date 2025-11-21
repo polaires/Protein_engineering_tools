@@ -121,64 +121,40 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return 'Stability Constant Comparison';
   }, [comparisonType, comparisonLigand, comparisonElement, selectedElementsForComparison]);
 
-  // Save chart as PNG with watermark
+  // Save chart as SVG with watermark (PNG conversion has cross-browser issues)
   const saveChartAsImage = useCallback(() => {
     if (!chartRef.current) return;
 
     try {
       const rect = chartRef.current.getBoundingClientRect();
-      const scale = 2; // Higher resolution
-      const width = rect.width * scale;
-      const height = (rect.height + 30) * scale;
+      const width = rect.width;
+      const height = rect.height + 30;
 
-      // Create SVG with foreignObject
-      const svgContent = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-          <rect width="100%" height="100%" fill="white"/>
-          <foreignObject width="${width}" height="${rect.height * scale}" transform="scale(${scale})">
-            <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: system-ui, sans-serif;">
-              ${chartRef.current.innerHTML}
-            </div>
-          </foreignObject>
-          <text x="${width - 20}" y="${height - 10}" text-anchor="end" font-size="${14 * scale}" fill="rgba(100,100,100,0.6)">biochem.space</text>
-        </svg>
-      `;
+      // Clone the chart content and serialize to SVG
+      const clone = chartRef.current.cloneNode(true) as HTMLElement;
 
-      // Convert SVG to PNG via canvas
-      const img = new Image();
-      const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
+      // Create SVG with embedded HTML via foreignObject
+      const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <style>
+    .watermark { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; fill: rgba(100,100,100,0.6); }
+  </style>
+  <rect width="100%" height="100%" fill="white"/>
+  <foreignObject x="0" y="0" width="${width}" height="${rect.height}">
+    <xhtml:div style="font-family: system-ui, -apple-system, sans-serif;">${clone.innerHTML}</xhtml:div>
+  </foreignObject>
+  <text x="${width - 10}" y="${height - 8}" text-anchor="end" class="watermark">biochem.space</text>
+</svg>`;
 
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0, 0, width, height);
-          ctx.drawImage(img, 0, 0);
-
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement('a');
-              link.download = `stability-comparison-${Date.now()}.png`;
-              link.href = url;
-              link.click();
-              URL.revokeObjectURL(url);
-            }
-          }, 'image/png');
-        }
-        URL.revokeObjectURL(svgUrl);
-      };
-
-      img.onerror = () => {
-        URL.revokeObjectURL(svgUrl);
-        alert('Failed to generate image. Please try again.');
-      };
-
-      img.src = svgUrl;
+      const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `stability-comparison-${Date.now()}.svg`;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to save chart:', error);
       alert('Failed to save chart. Please try again.');
@@ -2101,17 +2077,26 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         // OPTIMIZATION 6: Get pre-filtered data from the memoized map
         const elementRecords = elementStabilityMap.get(selectedElement) || [];
 
-        // Deduplicate records with same conditions but different references
-        let processedRecords = elementRecords;
+        // Group records by data (collapse references for same conditions)
+        type GroupedRecord = StabilityRecord & { allRefs: string[] };
+        let processedRecords: GroupedRecord[];
+
         if (hideDuplicateRefs) {
-          const seen = new Map<string, StabilityRecord>();
+          const groups = new Map<string, GroupedRecord>();
           elementRecords.forEach(record => {
             const key = `${record.ligandName}|${record.stabilityConstant}|${record.temperature}|${record.ionicStrength}|${record.constantType}`;
-            if (!seen.has(key)) {
-              seen.set(key, record);
+            if (!groups.has(key)) {
+              groups.set(key, { ...record, allRefs: [] });
+            }
+            const group = groups.get(key)!;
+            const refStr = record.refCode ? `[${record.refCode}]` : record.reference?.substring(0, 30) || '';
+            if (refStr && !group.allRefs.includes(refStr)) {
+              group.allRefs.push(refStr);
             }
           });
-          processedRecords = Array.from(seen.values());
+          processedRecords = Array.from(groups.values());
+        } else {
+          processedRecords = elementRecords.map(r => ({ ...r, allRefs: [r.refCode ? `[${r.refCode}]` : ''] }));
         }
 
         // Sort and limit for display
@@ -2176,7 +2161,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                         Formula
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                        {showKd ? 'Kd' : 'log K'}
+                        {showKd ? 'Kd (nM/μM/mM/M)' : 'log K'}
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                         Temp (°C)
@@ -2194,9 +2179,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {elementData.map((record, idx) => {
-                      const refDisplay = record.refCode && record.reference
-                        ? `[${record.refCode}] ${record.reference}`
-                        : (record.reference || 'N/A');
+                      const refDisplay = hideDuplicateRefs && record.allRefs.length > 0
+                        ? record.allRefs.join(', ') + (record.allRefs.length > 1 ? ` (${record.allRefs.length} refs)` : '')
+                        : (record.refCode && record.reference
+                          ? `[${record.refCode}] ${record.reference}`
+                          : (record.reference || 'N/A'));
 
                       return (
                         <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800">
