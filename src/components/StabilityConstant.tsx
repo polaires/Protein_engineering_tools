@@ -4,9 +4,10 @@
  * Features: Hierarchical ligand filtering, debounced search, Kd conversion
  */
 
-import { useState, useEffect } from 'react';
-import { TestTube2, Info, Search } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { TestTube2, Info, Search, Loader2 } from 'lucide-react';
 import { elements } from '@/data/elements';
+import Fuse from 'fuse.js';
 
 // Define the structure of stability constant data
 interface StabilityRecord {
@@ -80,6 +81,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [selectedSpecificLigand, setSelectedSpecificLigand] = useState<string>('All');
   const [ligandSearchText, setLigandSearchText] = useState<string>('');
   const [debouncedSearchText, setDebouncedSearchText] = useState<string>('');
+  const [isSearching, setIsSearching] = useState<boolean>(false);
   const [temperature, setTemperature] = useState<number>(25);
   const [constantType, setConstantType] = useState<string>('All');
   const [betaDefinitionFilter, setBetaDefinitionFilter] = useState<string>('All');
@@ -89,12 +91,17 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
+    if (ligandSearchText !== debouncedSearchText) {
+      setIsSearching(true);
+    }
+
     const timer = setTimeout(() => {
       setDebouncedSearchText(ligandSearchText);
-    }, 500); // 500ms debounce
+      setIsSearching(false);
+    }, 300); // 300ms debounce for better responsiveness
 
     return () => clearTimeout(timer);
-  }, [ligandSearchText]);
+  }, [ligandSearchText, debouncedSearchText]);
 
   // Reset filters to default
   const resetFilters = () => {
@@ -111,6 +118,19 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [availableLigandClasses, setAvailableLigandClasses] = useState<string[]>([]);
   const [availableConstantTypes, setAvailableConstantTypes] = useState<string[]>([]);
   const [availableBetaDefinitions, setAvailableBetaDefinitions] = useState<string[]>([]);
+
+  // Create Fuse instance for fuzzy searching ligand names
+  const fuse = useMemo(() => {
+    if (stabilityData.length === 0) return null;
+
+    return new Fuse(stabilityData, {
+      keys: ['ligandName'],
+      threshold: 0.4, // 0 = exact match, 1 = match anything
+      includeScore: true,
+      minMatchCharLength: 2,
+      ignoreLocation: true,
+    });
+  }, [stabilityData]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -186,6 +206,14 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     loadData();
   }, []);
 
+  // Get fuzzy-matched ligand names from search text
+  const getFuzzyMatchedLigands = (searchText: string): Set<string> => {
+    if (!fuse || !searchText) return new Set();
+
+    const results = fuse.search(searchText);
+    return new Set(results.map(result => result.item.ligandName));
+  };
+
   // Get available specific ligands based on selected class
   const getAvailableSpecificLigands = (): string[] => {
     if (selectedLigandClass === 'All') {
@@ -206,10 +234,13 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       return availableBetaDefinitions;
     }
 
+    // Get fuzzy-matched ligands if searching
+    const fuzzyMatches = debouncedSearchText ? getFuzzyMatchedLigands(debouncedSearchText) : null;
+
     const filtered = stabilityData.filter(record => {
-      // If using search, ignore class/specific ligand selections
-      if (debouncedSearchText) {
-        return record.ligandName.toLowerCase().includes(debouncedSearchText.toLowerCase());
+      // If using search, use fuzzy matching
+      if (debouncedSearchText && fuzzyMatches) {
+        return fuzzyMatches.has(record.ligandName);
       }
 
       // Otherwise use class/specific ligand
@@ -224,12 +255,15 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
   // Get average stability constant for an element
   const getStabilityForElement = (elementSymbol: string): number | null => {
+    // Get fuzzy-matched ligands if searching
+    const fuzzyMatches = debouncedSearchText ? getFuzzyMatchedLigands(debouncedSearchText) : null;
+
     const filtered = stabilityData.filter(record => {
       const matchesElement = record.element === elementSymbol;
 
-      // If using search, only filter by search (ignore class/specific ligand)
-      if (debouncedSearchText) {
-        const matchesSearch = record.ligandName.toLowerCase().includes(debouncedSearchText.toLowerCase());
+      // If using search, use fuzzy matching (ignore class/specific ligand)
+      if (debouncedSearchText && fuzzyMatches) {
+        const matchesSearch = fuzzyMatches.has(record.ligandName);
         const matchesType = constantType === 'All' || record.constantType === constantType;
         const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
         const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
@@ -462,10 +496,14 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           {/* Ligand Search */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Search Ligand Name
+              Search Ligand Name {isSearching && <span className="text-xs text-slate-500">(searching...)</span>}
             </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              {isSearching ? (
+                <Loader2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-primary-500 animate-spin" />
+              ) : (
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              )}
               <input
                 type="text"
                 value={ligandSearchText}
@@ -478,10 +516,13 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   }
                   setBetaDefinitionFilter('All'); // Reset beta filter when search changes
                 }}
-                placeholder="e.g., glycine, EDTA..."
+                placeholder="e.g., glycine, EDTA, glysine (fuzzy)..."
                 className="input-field w-full pl-10 text-sm"
               />
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Supports fuzzy matching - try misspellings!
+            </p>
           </div>
 
           {/* Temperature Slider */}
@@ -696,13 +737,16 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
       {/* Detail Panel */}
       {selectedElement && (() => {
+        // Get fuzzy-matched ligands if searching
+        const fuzzyMatches = debouncedSearchText ? getFuzzyMatchedLigands(debouncedSearchText) : null;
+
         const elementData = stabilityData
           .filter(record => {
             const matchesElement = record.element === selectedElement;
 
-            // If using search, only filter by search (ignore class/specific ligand)
-            if (debouncedSearchText) {
-              const matchesSearch = record.ligandName.toLowerCase().includes(debouncedSearchText.toLowerCase());
+            // If using search, use fuzzy matching (ignore class/specific ligand)
+            if (debouncedSearchText && fuzzyMatches) {
+              const matchesSearch = fuzzyMatches.has(record.ligandName);
               const matchesType = constantType === 'All' || record.constantType === constantType;
               const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
               return matchesElement && matchesSearch && matchesType && matchesBeta;
