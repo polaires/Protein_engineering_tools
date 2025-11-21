@@ -420,15 +420,16 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return ['All', ...Array.from(ligandSet).sort()];
   };
 
-  // Get filtered beta definitions based on current ligand selection
+  // Get filtered beta definitions based on current ligand and element selection
   const getFilteredBetaDefinitions = () => {
-    if (selectedLigandClass === 'All' && selectedSpecificLigand === 'All' && !debouncedSearchText) {
+    if (selectedLigandClass === 'All' && selectedSpecificLigand === 'All' && !debouncedSearchText && !selectedElement) {
       return availableBetaDefinitions;
     }
 
     // Use pre-indexed data for faster filtering
     const filtered: StabilityRecord[] = [];
-    dataByElement.forEach((records) => {
+
+    const filterRecords = (records: StabilityRecord[]) => {
       records.forEach(record => {
         // If using search with a specific ligand selected
         if (debouncedSearchText && selectedSearchLigand !== 'All') {
@@ -449,16 +450,25 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           }
         }
       });
-    });
+    };
+
+    if (selectedElement) {
+      filterRecords(dataByElement.get(selectedElement) || []);
+    } else {
+      dataByElement.forEach((records) => filterRecords(records));
+    }
 
     const betaSet = new Set(filtered.map(r => r.betaDefinition).filter(b => b));
     return ['All', ...Array.from(betaSet).sort().slice(0, 50)];
   };
 
-  // Get available ionic strengths based on current ligand selection
+  // Get available ionic strengths based on current ligand and element selection
   const getAvailableIonicStrengths = (): number[] => {
     const filtered: StabilityRecord[] = [];
-    dataByElement.forEach((records) => {
+
+    // If an element is selected, only look at that element's records
+    if (selectedElement) {
+      const records = dataByElement.get(selectedElement) || [];
       records.forEach(record => {
         if (debouncedSearchText && selectedSearchLigand !== 'All') {
           if (record.ligandName === selectedSearchLigand) {
@@ -474,7 +484,26 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           }
         }
       });
-    });
+    } else {
+      // No element selected - look at all elements
+      dataByElement.forEach((records) => {
+        records.forEach(record => {
+          if (debouncedSearchText && selectedSearchLigand !== 'All') {
+            if (record.ligandName === selectedSearchLigand) {
+              filtered.push(record);
+            }
+          } else if (debouncedSearchText && matchedLigands.size > 0) {
+            // Don't include anything until user selects a ligand
+          } else {
+            const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+            const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
+            if (matchesClass && matchesSpecific) {
+              filtered.push(record);
+            }
+          }
+        });
+      });
+    }
 
     const ionicSet = new Set(filtered.map(r => r.ionicStrength));
     return Array.from(ionicSet).sort((a, b) => a - b);
