@@ -88,6 +88,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [betaDefinitionFilter, setBetaDefinitionFilter] = useState<string>('All');
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [showKd, setShowKd] = useState<boolean>(false);
+  const [hideDuplicateRefs, setHideDuplicateRefs] = useState<boolean>(true);
   const [showInfo, setShowInfo] = useState<boolean>(false);
   const [fuzzyMatchCount, setFuzzyMatchCount] = useState<number>(0);
   const [selectedSearchLigand, setSelectedSearchLigand] = useState<string>('All');
@@ -288,7 +289,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
           const temp = parseFloat(parts[6]);
           const ionic = parseFloat(parts[7]);
-          const constant = parseFloat(parts[5]);
+          // Strip parentheses from stability constant values (e.g., "(9.18)" -> "9.18")
+          const constantStr = parts[5].replace(/[()]/g, '');
+          const constant = parseFloat(constantStr);
 
           if (isNaN(constant)) continue;
 
@@ -2055,8 +2058,21 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         // OPTIMIZATION 6: Get pre-filtered data from the memoized map
         const elementRecords = elementStabilityMap.get(selectedElement) || [];
 
+        // Deduplicate records with same conditions but different references
+        let processedRecords = elementRecords;
+        if (hideDuplicateRefs) {
+          const seen = new Map<string, StabilityRecord>();
+          elementRecords.forEach(record => {
+            const key = `${record.ligandName}|${record.stabilityConstant}|${record.temperature}|${record.ionicStrength}|${record.constantType}`;
+            if (!seen.has(key)) {
+              seen.set(key, record);
+            }
+          });
+          processedRecords = Array.from(seen.values());
+        }
+
         // Sort and limit for display
-        const elementData = elementRecords
+        const elementData = processedRecords
           .sort((a, b) => b.stabilityConstant - a.stabilityConstant)
           .slice(0, 100); // Limit to top 100 for performance
 
@@ -2067,11 +2083,18 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 Stability Constants for {selectedElement}
                 {elementData.length > 0 && (
                   <span className="text-sm font-normal text-slate-600 dark:text-slate-400 ml-2">
-                    (showing top 100 of {elementRecords.length} filtered records)
+                    (showing top 100 of {processedRecords.length} {hideDuplicateRefs ? 'unique' : ''} records{hideDuplicateRefs && processedRecords.length !== elementRecords.length ? ` from ${elementRecords.length} total` : ''})
                   </span>
                 )}
               </h3>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setHideDuplicateRefs(!hideDuplicateRefs)}
+                  className={`btn-secondary text-sm ${hideDuplicateRefs ? 'bg-primary-100 dark:bg-primary-900' : ''}`}
+                  title="Hide records with same value/conditions but different references"
+                >
+                  {hideDuplicateRefs ? 'Show All Refs' : 'Hide Duplicate Refs'}
+                </button>
                 <button
                   onClick={() => setShowKd(!showKd)}
                   className="btn-secondary text-sm"
