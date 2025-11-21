@@ -1169,6 +1169,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     className="input-field w-full text-sm"
                     size={5}
                   >
+                    <option value="">-- Select a ligand --</option>
                     {getAvailableLigands(selectedElementsForComparison, comparisonLigandSearch).slice(0, 100).map(lig => (
                       <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
                     ))}
@@ -1286,6 +1287,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     className="input-field w-full text-sm"
                     size={5}
                   >
+                    <option value="">-- Select a ligand --</option>
                     {getElementLigands(comparisonElement, comparisonLigandSearch).slice(0, 100).map(lig => (
                       <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
                     ))}
