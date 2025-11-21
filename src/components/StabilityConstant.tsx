@@ -99,6 +99,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [selectedLigandsForComparison, setSelectedLigandsForComparison] = useState<string[]>([]);
   const [comparisonLigand, setComparisonLigand] = useState<string>(''); // Single ligand when comparing elements
   const [comparisonElement, setComparisonElement] = useState<string>(''); // Single element when comparing ligands
+  const [comparisonLigandSearch, setComparisonLigandSearch] = useState<string>(''); // Search for ligands in comparison
+  const [selectedConditionsForComparison, setSelectedConditionsForComparison] = useState<string[]>([]); // For conditions mode
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -516,28 +518,38 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           });
         }
       });
-    } else if (comparisonType === 'conditions' && comparisonElement && comparisonLigand) {
-      // Compare same element + ligand at different conditions
+    } else if (comparisonType === 'conditions' && comparisonElement && comparisonLigand && selectedConditionsForComparison.length > 0) {
+      // Compare same element + ligand at selected conditions
       const records = dataByElement.get(comparisonElement) || [];
-      const matching = records.filter(r =>
-        r.ligandName === comparisonLigand &&
-        (constantType === 'All' || r.constantType === constantType)
-      );
-      // Group by unique condition (temp + ionic strength)
-      const conditionMap = new Map<string, StabilityRecord>();
-      matching.forEach(r => {
-        const key = `T=${r.temperature}°C, I=${r.ionicStrength}M`;
-        if (!conditionMap.has(key)) {
-          conditionMap.set(key, r);
+      selectedConditionsForComparison.forEach(condition => {
+        // Parse condition string "T=25°C, I=0.1M"
+        const tempMatch = condition.match(/T=(\d+)/);
+        const ionicMatch = condition.match(/I=([\d.]+)/);
+        const temp = tempMatch ? parseFloat(tempMatch[1]) : null;
+        const ionic = ionicMatch ? parseFloat(ionicMatch[1]) : null;
+
+        const matching = records.filter(r =>
+          r.ligandName === comparisonLigand &&
+          (temp === null || r.temperature === temp) &&
+          (ionic === null || r.ionicStrength === ionic)
+        );
+
+        if (matching.length > 0) {
+          const record = matching[0];
+          results.push({
+            label: condition,
+            logK: record.stabilityConstant,
+            kd: Math.pow(10, -record.stabilityConstant),
+            details: record.betaDefinition || record.constantType
+          });
+        } else {
+          results.push({
+            label: condition,
+            logK: null,
+            kd: null,
+            details: 'No data'
+          });
         }
-      });
-      conditionMap.forEach((record, condition) => {
-        results.push({
-          label: condition,
-          logK: record.stabilityConstant,
-          kd: Math.pow(10, -record.stabilityConstant),
-          details: record.betaDefinition || record.constantType
-        });
       });
     }
 
@@ -549,11 +561,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       return b.logK - a.logK;
     });
   }, [comparisonMode, comparisonType, comparisonLigand, comparisonElement,
-      selectedElementsForComparison, selectedLigandsForComparison, dataByElement,
-      temperature, constantType, ionicStrengthFilter]);
+      selectedElementsForComparison, selectedLigandsForComparison, selectedConditionsForComparison,
+      dataByElement, temperature, constantType, ionicStrengthFilter]);
 
   // Get available ligands for a set of elements (union - allow partial matches)
-  const getAvailableLigands = useCallback((elementList: string[]): string[] => {
+  const getAvailableLigands = useCallback((elementList: string[], searchFilter?: string): string[] => {
     if (elementList.length === 0) return [];
 
     // Get union of all ligands (not intersection)
@@ -563,7 +575,50 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       records.forEach(r => allLigands.add(r.ligandName));
     });
 
-    return Array.from(allLigands).sort();
+    let result = Array.from(allLigands).sort();
+
+    // Apply search filter if provided
+    if (searchFilter && searchFilter.length >= 2) {
+      const searchLower = searchFilter.toLowerCase();
+      result = result.filter(lig => lig.toLowerCase().includes(searchLower));
+    }
+
+    return result;
+  }, [dataByElement]);
+
+  // Get available conditions for element+ligand pair
+  const getAvailableConditions = useCallback((element: string, ligand: string): { key: string; count: number }[] => {
+    if (!element || !ligand) return [];
+
+    const records = dataByElement.get(element) || [];
+    const matching = records.filter(r => r.ligandName === ligand);
+
+    // Group by condition
+    const conditionCounts = new Map<string, number>();
+    matching.forEach(r => {
+      const key = `T=${r.temperature}°C, I=${r.ionicStrength}M`;
+      conditionCounts.set(key, (conditionCounts.get(key) || 0) + 1);
+    });
+
+    // Sort by count (most data first)
+    return Array.from(conditionCounts.entries())
+      .map(([key, count]) => ({ key, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [dataByElement]);
+
+  // Get ligands for single element with search filter
+  const getElementLigands = useCallback((element: string, searchFilter?: string): string[] => {
+    if (!element) return [];
+
+    const records = dataByElement.get(element) || [];
+    const ligands = [...new Set(records.map(r => r.ligandName))].sort();
+
+    if (searchFilter && searchFilter.length >= 2) {
+      const searchLower = searchFilter.toLowerCase();
+      return ligands.filter(lig => lig.toLowerCase().includes(searchLower));
+    }
+
+    return ligands;
   }, [dataByElement]);
 
   // Get color intensity based on stability constant value
@@ -1023,24 +1078,34 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     )}
                   </div>
                 </div>
-                {/* Select Ligand */}
+                {/* Select Ligand with Search */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Select Ligand
+                    Search & Select Ligand
                   </label>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={comparisonLigandSearch}
+                      onChange={(e) => setComparisonLigandSearch(e.target.value)}
+                      placeholder="Search ligands..."
+                      className="input-field w-full pl-10 text-sm"
+                    />
+                  </div>
                   <select
                     value={comparisonLigand}
                     onChange={(e) => setComparisonLigand(e.target.value)}
                     className="input-field w-full text-sm"
+                    size={5}
                   >
-                    <option value="">-- Select a ligand --</option>
-                    {getAvailableLigands(selectedElementsForComparison).slice(0, 200).map(lig => (
+                    {getAvailableLigands(selectedElementsForComparison, comparisonLigandSearch).slice(0, 100).map(lig => (
                       <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
                     ))}
                   </select>
                   {selectedElementsForComparison.length > 0 && (
                     <p className="text-xs text-slate-500 mt-1">
-                      {getAvailableLigands(selectedElementsForComparison).length} ligand(s) available (some elements may have no data)
+                      {getAvailableLigands(selectedElementsForComparison, comparisonLigandSearch).length} ligand(s) {comparisonLigandSearch ? 'matching' : 'available'}
                     </p>
                   )}
                 </div>
@@ -1067,11 +1132,21 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     )}
                   </div>
                 </div>
-                {/* Select Ligands */}
+                {/* Select Ligands with Search */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Select Ligands to Compare
+                    Search & Add Ligands to Compare
                   </label>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={comparisonLigandSearch}
+                      onChange={(e) => setComparisonLigandSearch(e.target.value)}
+                      placeholder="Search ligands..."
+                      className="input-field w-full pl-10 text-sm"
+                    />
+                  </div>
                   <select
                     onChange={(e) => {
                       if (e.target.value && !selectedLigandsForComparison.includes(e.target.value)) {
@@ -1080,16 +1155,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     }}
                     className="input-field w-full text-sm"
                     value=""
+                    size={5}
                   >
-                    <option value="">-- Add a ligand --</option>
-                    {comparisonElement && (dataByElement.get(comparisonElement) || [])
-                      .map(r => r.ligandName)
-                      .filter((v, i, a) => a.indexOf(v) === i)
-                      .sort()
-                      .slice(0, 100)
-                      .map(lig => (
-                        <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
-                      ))}
+                    {getElementLigands(comparisonElement, comparisonLigandSearch).slice(0, 100).map(lig => (
+                      <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
+                    ))}
                   </select>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {selectedLigandsForComparison.map(lig => (
@@ -1118,37 +1188,73 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     ) : (
                       <span className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 rounded text-sm flex items-center gap-1">
                         {comparisonElement}
-                        <button onClick={() => setComparisonElement('')} className="hover:text-red-500">
+                        <button onClick={() => { setComparisonElement(''); setSelectedConditionsForComparison([]); }} className="hover:text-red-500">
                           <X className="w-3 h-3" />
                         </button>
                       </span>
                     )}
                   </div>
                 </div>
-                {/* Select Ligand */}
+                {/* Select Ligand with Search */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Select Ligand
+                    Search & Select Ligand
                   </label>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={comparisonLigandSearch}
+                      onChange={(e) => setComparisonLigandSearch(e.target.value)}
+                      placeholder="Search ligands..."
+                      className="input-field w-full pl-10 text-sm"
+                    />
+                  </div>
                   <select
                     value={comparisonLigand}
-                    onChange={(e) => setComparisonLigand(e.target.value)}
+                    onChange={(e) => { setComparisonLigand(e.target.value); setSelectedConditionsForComparison([]); }}
                     className="input-field w-full text-sm"
+                    size={5}
                   >
-                    <option value="">-- Select a ligand --</option>
-                    {comparisonElement && (dataByElement.get(comparisonElement) || [])
-                      .map(r => r.ligandName)
-                      .filter((v, i, a) => a.indexOf(v) === i)
-                      .sort()
-                      .slice(0, 100)
-                      .map(lig => (
-                        <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
-                      ))}
+                    {getElementLigands(comparisonElement, comparisonLigandSearch).slice(0, 100).map(lig => (
+                      <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
+                    ))}
                   </select>
                 </div>
               </>
             )}
           </div>
+
+          {/* Condition Selection for conditions mode */}
+          {comparisonType === 'conditions' && comparisonElement && comparisonLigand && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Select Conditions to Compare
+              </label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {getAvailableConditions(comparisonElement, comparisonLigand).map(({ key, count }) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSelectedConditionsForComparison(prev =>
+                        prev.includes(key) ? prev.filter(c => c !== key) : [...prev, key]
+                      );
+                    }}
+                    className={`px-2 py-1 text-xs rounded border ${
+                      selectedConditionsForComparison.includes(key)
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600'
+                    }`}
+                  >
+                    {key} ({count})
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">
+                {selectedConditionsForComparison.length} condition(s) selected. Numbers in parentheses show data point count.
+              </p>
+            </div>
+          )}
 
           {/* Comparison Chart */}
           {comparisonData.length > 0 && (
