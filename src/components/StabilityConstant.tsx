@@ -567,6 +567,33 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           </div>
         </div>
 
+        {/* Search Results Dropdown - shown prominently when search has results */}
+        {debouncedSearchText && fuzzyMatchCount > 0 && (
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-lg mb-4">
+            <label className="block text-base font-semibold text-slate-800 dark:text-slate-200 mb-2">
+              🔍 Select a Ligand from {fuzzyMatchCount > 100 ? 'Top 100 of ' : ''}{fuzzyMatchCount} Search Results
+            </label>
+            <select
+              value={selectedSearchLigand}
+              onChange={(e) => setSelectedSearchLigand(e.target.value)}
+              className="w-full p-2 border-2 border-blue-400 dark:border-blue-600 rounded text-sm bg-white dark:bg-slate-800"
+              size={10}
+            >
+              <option value="All" disabled>-- Click a ligand below to view data --</option>
+              {fuzzyMatchedLigandNames.slice(1).map(ligand => (
+                <option key={ligand} value={ligand}>
+                  {ligand.length > 80 ? ligand.substring(0, 80) + '...' : ligand}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+              {fuzzyMatchCount > 100
+                ? `⚠️ Showing top 100 of ${fuzzyMatchCount} results. Try a more specific search for better results.`
+                : '💡 Click a ligand above to highlight elements on the periodic table that have stability data for it.'}
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Ligand Class Filter */}
           <div>
@@ -663,32 +690,6 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               </p>
             )}
           </div>
-
-          {/* Search Results Dropdown - shown when search has results */}
-          {debouncedSearchText && fuzzyMatchCount > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Select Ligand from Search Results
-              </label>
-              <select
-                value={selectedSearchLigand}
-                onChange={(e) => setSelectedSearchLigand(e.target.value)}
-                className="input-field w-full text-sm"
-                size={Math.min(fuzzyMatchedLigandNames.length, 8)}
-              >
-                {fuzzyMatchedLigandNames.map(ligand => (
-                  <option key={ligand} value={ligand}>
-                    {ligand === 'All' ? 'Select a ligand...' : (ligand.length > 60 ? ligand.substring(0, 60) + '...' : ligand)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {fuzzyMatchCount > 100
-                  ? `Showing top 100 results (${fuzzyMatchCount} total found). Try a more specific search for better results.`
-                  : 'Choose a specific ligand to see which elements have data for it'}
-              </p>
-            </div>
-          )}
 
           {/* Temperature Slider */}
           <div>
