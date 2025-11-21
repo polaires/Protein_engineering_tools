@@ -513,17 +513,6 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return Array.from(common).sort();
   }, [dataByElement]);
 
-  // Get available elements that have data for selected ligands
-  const getElementsWithLigand = useCallback((ligand: string): string[] => {
-    const elementsWithLigand: string[] = [];
-    dataByElement.forEach((records, element) => {
-      if (records.some(r => r.ligandName === ligand)) {
-        elementsWithLigand.push(element);
-      }
-    });
-    return elementsWithLigand.sort();
-  }, [dataByElement]);
-
   // Get color intensity based on stability constant value
   const getColorIntensity = (value: number | null): string => {
     // Return gray for no data
