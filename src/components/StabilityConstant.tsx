@@ -1,6 +1,7 @@
 /**
  * Stability Constant Component
  * Interactive periodic table focused on metal-ligand stability constants from NIST SRD 46 database
+ * Features: Hierarchical ligand filtering, debounced search, Kd conversion
  */
 
 import { useState, useEffect } from 'react';
