@@ -491,26 +491,40 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           }
         });
       } else {
-        // Single best match per element (original behavior but without strict temp filter)
+        // Single best match per element - progressively relax filters
         selectedElementsForComparison.forEach(element => {
           const records = dataByElement.get(element) || [];
-          // First try with filters, if no results try without temp filter
-          let matching = records.filter(r =>
-            r.ligandName === comparisonLigand &&
-            (constantType === 'All' || r.constantType === constantType) &&
-            (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
-            Math.abs(r.temperature - temperature) <= 5
-          );
-          // If no matches, try without temperature filter
-          if (matching.length === 0) {
-            matching = records.filter(r =>
-              r.ligandName === comparisonLigand &&
-              (constantType === 'All' || r.constantType === constantType) &&
-              (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter)
-            );
-          }
+
+          // First: just filter by ligand name (most permissive)
+          let matching = records.filter(r => r.ligandName === comparisonLigand);
+
+          // If we have data, try to find best match with filters
           if (matching.length > 0) {
-            const best = matching.sort((a, b) =>
+            // Try with all filters
+            let filtered = matching.filter(r =>
+              (constantType === 'All' || r.constantType === constantType) &&
+              (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
+              Math.abs(r.temperature - temperature) <= 5
+            );
+            // If no match, try without temp filter
+            if (filtered.length === 0) {
+              filtered = matching.filter(r =>
+                (constantType === 'All' || r.constantType === constantType) &&
+                (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter)
+              );
+            }
+            // If still no match, try without ionic filter
+            if (filtered.length === 0) {
+              filtered = matching.filter(r =>
+                (constantType === 'All' || r.constantType === constantType)
+              );
+            }
+            // If still no match, use all matching records
+            if (filtered.length === 0) {
+              filtered = matching;
+            }
+
+            const best = filtered.sort((a, b) =>
               Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
             )[0];
             results.push({
@@ -533,17 +547,35 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         });
       }
     } else if (comparisonType === 'ligands' && comparisonElement && selectedLigandsForComparison.length > 0) {
-      // Compare different ligands with same element - show individual records
+      // Compare different ligands with same element - progressively relax filters
       const records = dataByElement.get(comparisonElement) || [];
       selectedLigandsForComparison.forEach(ligand => {
-        const matching = records.filter(r =>
-          r.ligandName === ligand &&
-          (constantType === 'All' || r.constantType === constantType) &&
-          (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
-          Math.abs(r.temperature - temperature) <= 5
-        );
+        // First: just filter by ligand name
+        let matching = records.filter(r => r.ligandName === ligand);
+
         if (matching.length > 0) {
-          const best = matching.sort((a, b) =>
+          // Try with all filters
+          let filtered = matching.filter(r =>
+            (constantType === 'All' || r.constantType === constantType) &&
+            (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
+            Math.abs(r.temperature - temperature) <= 5
+          );
+          if (filtered.length === 0) {
+            filtered = matching.filter(r =>
+              (constantType === 'All' || r.constantType === constantType) &&
+              (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter)
+            );
+          }
+          if (filtered.length === 0) {
+            filtered = matching.filter(r =>
+              (constantType === 'All' || r.constantType === constantType)
+            );
+          }
+          if (filtered.length === 0) {
+            filtered = matching;
+          }
+
+          const best = filtered.sort((a, b) =>
             Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
           )[0];
           results.push({
@@ -557,7 +589,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             label: ligand.length > 25 ? ligand.substring(0, 25) + '...' : ligand,
             logK: null,
             kd: null,
-            details: 'No data at this condition'
+            details: 'No data for this ligand'
           });
         }
       });
@@ -1301,28 +1333,14 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 <input
                   type="checkbox"
                   checked={showAllConditions}
-                  onChange={(e) => setShowAllConditions(e.target.checked)}
+                  onChange={(e) => {
+                    setShowAllConditions(e.target.checked);
+                    if (e.target.checked) setComparisonPlotType('scatter'); // Auto-switch to scatter
+                  }}
                   className="rounded border-slate-300"
                 />
                 Show all conditions (scatter plot)
               </label>
-              {showAllConditions && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span>Plot:</span>
-                  <button
-                    onClick={() => setComparisonPlotType('bar')}
-                    className={`px-2 py-0.5 rounded text-xs ${comparisonPlotType === 'bar' ? 'bg-primary-600 text-white' : 'bg-slate-200'}`}
-                  >
-                    Bar
-                  </button>
-                  <button
-                    onClick={() => setComparisonPlotType('scatter')}
-                    className={`px-2 py-0.5 rounded text-xs ${comparisonPlotType === 'scatter' ? 'bg-primary-600 text-white' : 'bg-slate-200'}`}
-                  >
-                    Scatter
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
@@ -1342,70 +1360,88 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               </div>
 
               {/* Scatter Plot View */}
-              {showAllConditions && comparisonPlotType === 'scatter' ? (
-                <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-4 h-64 overflow-hidden">
+              {showAllConditions ? (
+                <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 pb-12 min-h-[300px]">
                   {(() => {
                     const validData = comparisonData.filter(d => d.logK !== null);
-                    if (validData.length === 0) return <p className="text-center text-slate-500">No data</p>;
+                    if (validData.length === 0) return <p className="text-center text-slate-500 py-8">No data</p>;
 
                     const maxLogK = Math.max(...validData.map(d => d.logK!));
                     const minLogK = Math.min(...validData.map(d => d.logK!));
-                    const range = maxLogK - minLogK || 1;
-                    const elements = [...new Set(validData.map(d => d.element))];
-                    const conditions = [...new Set(validData.map(d => d.condition))];
-                    const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+                    const padding = (maxLogK - minLogK) * 0.1 || 1;
+                    const yMax = maxLogK + padding;
+                    const yMin = minLogK - padding;
+                    const range = yMax - yMin || 1;
+                    const elements = selectedElementsForComparison.filter(el => validData.some(d => d.element === el));
+                    const conditions = [...new Set(validData.map(d => d.condition))].filter(Boolean) as string[];
+                    const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#14b8a6', '#f97316'];
 
                     return (
-                      <>
-                        {/* Y-axis labels */}
-                        <div className="absolute left-0 top-4 bottom-8 w-12 flex flex-col justify-between text-xs text-slate-500">
-                          <span>{maxLogK.toFixed(1)}</span>
-                          <span>{((maxLogK + minLogK) / 2).toFixed(1)}</span>
-                          <span>{minLogK.toFixed(1)}</span>
+                      <div className="flex h-full">
+                        {/* Y-axis */}
+                        <div className="w-12 flex flex-col justify-between text-xs text-slate-600 dark:text-slate-400 pr-2 py-2">
+                          <span>{yMax.toFixed(1)}</span>
+                          <span>{((yMax + yMin) / 2).toFixed(1)}</span>
+                          <span>{yMin.toFixed(1)}</span>
                         </div>
                         {/* Plot area */}
-                        <div className="ml-14 h-full relative">
+                        <div className="flex-1 relative border-l border-b border-slate-400 dark:border-slate-500 min-h-[220px]">
                           {/* Grid lines */}
-                          <div className="absolute inset-0 flex flex-col justify-between">
-                            {[0, 1, 2].map(i => (
-                              <div key={i} className="border-t border-slate-300 dark:border-slate-600" />
-                            ))}
-                          </div>
+                          {[0.25, 0.5, 0.75].map(pct => (
+                            <div
+                              key={pct}
+                              className="absolute w-full border-t border-slate-300 dark:border-slate-600 border-dashed"
+                              style={{ top: `${pct * 100}%` }}
+                            />
+                          ))}
+                          {/* Vertical grid lines for elements */}
+                          {elements.map((_, i) => (
+                            <div
+                              key={i}
+                              className="absolute h-full border-l border-slate-300 dark:border-slate-600 border-dashed"
+                              style={{ left: `${((i + 1) / elements.length) * 100}%` }}
+                            />
+                          ))}
                           {/* Data points */}
                           {validData.map((item, idx) => {
                             const xIndex = elements.indexOf(item.element!);
-                            const x = (xIndex + 0.5) / elements.length * 100;
-                            const y = 100 - ((item.logK! - minLogK) / range) * 100;
+                            if (xIndex === -1) return null;
+                            const x = ((xIndex + 0.5) / elements.length) * 100;
+                            const y = ((yMax - item.logK!) / range) * 100;
                             const colorIdx = conditions.indexOf(item.condition!) % colors.length;
                             return (
                               <div
                                 key={idx}
-                                className="absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-150 transition-transform"
+                                className="absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-150 transition-transform border-2 border-white dark:border-slate-800 shadow-sm"
                                 style={{
                                   left: `${x}%`,
-                                  top: `${Math.max(5, Math.min(95, y))}%`,
+                                  top: `${Math.max(2, Math.min(98, y))}%`,
                                   backgroundColor: colors[colorIdx]
                                 }}
-                                title={`${item.label}: ${item.logK!.toFixed(2)} (${item.details})`}
+                                title={`${item.label}: ${showKd ? convertToKd(item.logK!) : item.logK!.toFixed(2)} (${item.details})`}
                               />
                             );
                           })}
                           {/* X-axis labels */}
-                          <div className="absolute -bottom-6 left-0 right-0 flex justify-around text-xs text-slate-500">
-                            {elements.map(el => <span key={el}>{el}</span>)}
+                          <div className="absolute top-full left-0 right-0 flex pt-2">
+                            {elements.map((el, i) => (
+                              <div key={el} className="flex-1 text-center text-xs text-slate-600 dark:text-slate-400 font-medium">
+                                {el}
+                              </div>
+                            ))}
                           </div>
                         </div>
                         {/* Legend */}
-                        <div className="absolute top-2 right-2 text-xs bg-white dark:bg-slate-700 p-1 rounded shadow max-h-24 overflow-y-auto">
-                          {conditions.slice(0, 5).map((cond, i) => (
-                            <div key={cond} className="flex items-center gap-1">
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
-                              <span className="truncate max-w-[100px]">{cond}</span>
+                        <div className="ml-4 text-xs bg-white dark:bg-slate-700 p-2 rounded shadow max-h-48 overflow-y-auto min-w-[120px]">
+                          <div className="font-medium mb-1 text-slate-700 dark:text-slate-300">Conditions:</div>
+                          {conditions.map((cond, i) => (
+                            <div key={cond} className="flex items-center gap-1 py-0.5">
+                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
+                              <span className="truncate text-slate-600 dark:text-slate-400">{cond}</span>
                             </div>
                           ))}
-                          {conditions.length > 5 && <span>+{conditions.length - 5} more</span>}
                         </div>
-                      </>
+                      </div>
                     );
                   })()}
                 </div>
