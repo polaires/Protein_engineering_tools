@@ -1229,10 +1229,16 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     value=""
                     size={5}
                   >
+                    <option value="">-- Click to add ligand --</option>
                     {getElementLigands(comparisonElement, comparisonLigandSearch).slice(0, 100).map(lig => (
                       <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
                     ))}
                   </select>
+                  {comparisonElement && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {getElementLigands(comparisonElement, comparisonLigandSearch).length} ligand(s) available
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-1 mt-2">
                     {selectedLigandsForComparison.map(lig => (
                       <span key={lig} className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 rounded text-xs flex items-center gap-1">
@@ -1396,7 +1402,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
               {/* Scatter Plot View */}
               {comparisonPlotType === 'scatter' ? (
-                <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 pb-12 min-h-[300px]">
+                <div className={`relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 min-h-[300px] ${comparisonType === 'ligands' ? 'pb-24' : 'pb-12'}`}>
                   {(() => {
                     const validData = comparisonData.filter(d => d.logK !== null);
                     if (validData.length === 0) return <p className="text-center text-slate-500 py-8">No data</p>;
@@ -1503,10 +1509,27 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             });
                           })()}
                           {/* X-axis labels */}
-                          <div className="absolute top-full left-0 right-0 flex pt-2">
+                          <div className="absolute top-full left-0 right-0 flex pt-2" style={{ height: comparisonType === 'ligands' ? '80px' : 'auto' }}>
                             {uniqueXLabels.map((label) => (
-                              <div key={label} className="flex-1 text-center text-xs text-slate-600 dark:text-slate-400 font-medium truncate px-1" title={label}>
-                                {label.length > 10 ? label.substring(0, 10) + '...' : label}
+                              <div
+                                key={label}
+                                className={`flex-1 text-xs text-slate-600 dark:text-slate-400 font-medium ${
+                                  comparisonType === 'ligands' ? 'writing-mode-vertical' : 'text-center truncate'
+                                }`}
+                                style={comparisonType === 'ligands' ? {
+                                  writingMode: 'vertical-rl',
+                                  transform: 'rotate(180deg)',
+                                  textAlign: 'left',
+                                  paddingLeft: '2px',
+                                  overflow: 'hidden',
+                                  maxHeight: '75px'
+                                } : {}}
+                                title={label}
+                              >
+                                {comparisonType === 'ligands'
+                                  ? (label.length > 25 ? label.substring(0, 25) + '...' : label)
+                                  : (label.length > 10 ? label.substring(0, 10) + '...' : label)
+                                }
                               </div>
                             ))}
                           </div>
@@ -1570,7 +1593,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             </div>
           )}
 
-          {comparisonData.length === 0 && (comparisonLigand || comparisonElement) && (
+          {comparisonData.length === 0 && (
+            (comparisonType === 'elements' && comparisonLigand && selectedElementsForComparison.length > 0) ||
+            (comparisonType === 'ligands' && comparisonElement && selectedLigandsForComparison.length > 0) ||
+            (comparisonType === 'conditions' && comparisonElement && comparisonLigand && selectedConditionsForComparison.length > 0)
+          ) && (
             <p className="text-sm text-amber-600 dark:text-amber-400 mt-4">
               No data found for the selected comparison. Try different selections or adjust temperature.
             </p>
