@@ -1594,7 +1594,6 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     const uniqueXLabels = [...new Set(xLabels)];
 
                     const conditions = [...new Set(validData.map(d => d.condition))].filter(Boolean) as string[];
-                    const hasSameCondition = conditions.length <= 1;
                     const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#14b8a6', '#f97316'];
 
                     // Calculate average for reference line
