@@ -119,18 +119,36 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [availableConstantTypes, setAvailableConstantTypes] = useState<string[]>([]);
   const [availableBetaDefinitions, setAvailableBetaDefinitions] = useState<string[]>([]);
 
-  // Create Fuse instance for fuzzy searching ligand names
-  const fuse = useMemo(() => {
-    if (stabilityData.length === 0) return null;
+  // Create unique ligand list for efficient searching (instead of searching all 722k records)
+  const uniqueLigands = useMemo(() => {
+    if (stabilityData.length === 0) return [];
 
-    return new Fuse(stabilityData, {
-      keys: ['ligandName'],
+    const ligandSet = new Set<string>();
+    stabilityData.forEach(record => {
+      if (record.ligandName) {
+        ligandSet.add(record.ligandName);
+      }
+    });
+
+    const uniqueList = Array.from(ligandSet).map(name => ({ name }));
+    console.log(`Created unique ligand list: ${uniqueList.length} unique ligands (from ${stabilityData.length} total records)`);
+    return uniqueList;
+  }, [stabilityData]);
+
+  // Create Fuse instance for fuzzy searching - only searches unique ligands (much faster!)
+  const fuse = useMemo(() => {
+    if (uniqueLigands.length === 0) return null;
+
+    return new Fuse(uniqueLigands, {
+      keys: ['name'],
       threshold: 0.4, // 0 = exact match, 1 = match anything
       includeScore: true,
       minMatchCharLength: 2,
       ignoreLocation: true,
+      distance: 100,
+      shouldSort: true,
     });
-  }, [stabilityData]);
+  }, [uniqueLigands]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -208,10 +226,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
   // Get fuzzy-matched ligand names from search text
   const getFuzzyMatchedLigands = (searchText: string): Set<string> => {
-    if (!fuse || !searchText) return new Set();
+    if (!fuse || !searchText || searchText.length < 2) return new Set();
 
-    const results = fuse.search(searchText);
-    return new Set(results.map(result => result.item.ligandName));
+    // Limit to top 100 matches for performance
+    const results = fuse.search(searchText, { limit: 100 });
+    return new Set(results.map(result => result.item.name));
   };
 
   // Get available specific ligands based on selected class
@@ -516,12 +535,12 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   }
                   setBetaDefinitionFilter('All'); // Reset beta filter when search changes
                 }}
-                placeholder="e.g., glycine, EDTA, glysine (fuzzy)..."
+                placeholder="Type 2+ chars (e.g., glycine, EDTA, glysine)..."
                 className="input-field w-full pl-10 text-sm"
               />
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Supports fuzzy matching - try misspellings!
+              Fuzzy search (min. 2 characters) - try misspellings!
             </p>
           </div>
 
