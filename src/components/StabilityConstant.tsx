@@ -103,7 +103,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [selectedConditionsForComparison, setSelectedConditionsForComparison] = useState<string[]>([]); // For conditions mode
   const [comparisonPlotType, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
   const [showAllConditions, setShowAllConditions] = useState<boolean>(false); // Show all conditions in elements mode
-  const [showReference, setShowReference] = useState<boolean>(true); // Show reference line in scatter when same conditions
+  const [showReference, setShowReference] = useState<boolean>(false); // Show reference line in scatter (off by default)
 
   // Ref for chart container (for saving as image)
   const chartRef = useRef<HTMLDivElement>(null);
@@ -120,36 +120,37 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return 'Stability Constant Comparison';
   }, [comparisonType, comparisonLigand, comparisonElement, selectedElementsForComparison]);
 
-  // Save chart as image with watermark
-  const saveChartAsImage = useCallback(async () => {
+  // Save chart as SVG with watermark (no external dependencies)
+  const saveChartAsImage = useCallback(() => {
     if (!chartRef.current) return;
 
     try {
-      // Dynamic import of html2canvas
-      const html2canvas = (await import('html2canvas')).default;
+      const rect = chartRef.current.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
 
-      const canvas = await html2canvas(chartRef.current, {
-        backgroundColor: '#ffffff',
-        scale: 2, // Higher resolution
-      });
+      // Create SVG with foreignObject
+      const svgContent = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + 25}">
+          <rect width="100%" height="100%" fill="white"/>
+          <foreignObject width="${width}" height="${height}">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: system-ui, sans-serif;">
+              ${chartRef.current.innerHTML}
+            </div>
+          </foreignObject>
+          <text x="${width - 10}" y="${height + 18}" text-anchor="end" font-size="12" fill="rgba(100,100,100,0.6)">biochem.space</text>
+        </svg>
+      `;
 
-      // Add watermark
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.font = '14px Arial';
-        ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
-        ctx.textAlign = 'right';
-        ctx.fillText('biochem.space', canvas.width - 10, canvas.height - 10);
-      }
-
-      // Download
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.download = `stability-comparison-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.download = `stability-comparison-${Date.now()}.svg`;
+      link.href = url;
       link.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to save chart:', error);
-      // Fallback: alert user
       alert('Failed to save chart. Please try again.');
     }
   }, []);
@@ -1525,8 +1526,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 </label>
               )}
 
-              {/* Reference toggle - show when not showing all conditions (same condition comparison) */}
-              {comparisonPlotType === 'scatter' && !showAllConditions && (
+              {/* Reference toggle - always show in scatter mode */}
+              {comparisonPlotType === 'scatter' && (
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -1534,7 +1535,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     onChange={(e) => setShowReference(e.target.checked)}
                     className="rounded border-slate-300"
                   />
-                  Show reference line
+                  Show reference (avg)
                 </label>
               )}
             </div>
@@ -1631,7 +1632,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             />
                           ))}
                           {/* Reference line (average) - shown when same conditions */}
-                          {showReference && hasSameCondition && (
+                          {showReference && (
                             <>
                               <div
                                 className="absolute w-full border-t-2 border-amber-500"
@@ -1745,9 +1746,15 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
                     return (
                       <div key={idx} className="flex items-center gap-2">
-                        <div className="w-24 text-sm font-medium text-slate-800 dark:text-slate-200 truncate" title={item.label}>
+                        <div className="w-20 text-sm font-medium text-slate-800 dark:text-slate-200 truncate" title={item.label}>
                           {item.label}
                         </div>
+                        {/* Equilibrium type badge */}
+                        {item.constantType && (
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded">
+                            {item.constantType}
+                          </span>
+                        )}
                         <div className="flex-1 h-6 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden relative">
                           {item.logK !== null ? (
                             <>
@@ -1765,7 +1772,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             </span>
                           )}
                         </div>
-                        <div className="w-36 text-xs text-slate-500 truncate" title={item.details}>
+                        <div className="w-40 text-xs text-slate-500 truncate" title={item.details}>
                           {item.details}
                         </div>
                       </div>
