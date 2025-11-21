@@ -90,6 +90,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [showKd, setShowKd] = useState<boolean>(false);
   const [showInfo, setShowInfo] = useState<boolean>(false);
   const [fuzzyMatchCount, setFuzzyMatchCount] = useState<number>(0);
+  const [selectedSearchLigand, setSelectedSearchLigand] = useState<string>('All');
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -111,6 +112,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     setSelectedSpecificLigand('All');
     setLigandSearchText('');
     setDebouncedSearchText('');
+    setSelectedSearchLigand('All');
     setTemperature(25);
     setConstantType('All');
     setBetaDefinitionFilter('All');
@@ -190,6 +192,20 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     setFuzzyMatchCount(matches.size);
     return matches;
   }, [fuse, debouncedSearchText]);
+
+  // Reset selected search ligand when search changes
+  useEffect(() => {
+    if (!debouncedSearchText || debouncedSearchText.length < 2) {
+      setSelectedSearchLigand('All');
+    } else if (selectedSearchLigand !== 'All' && !fuzzyMatchedLigands.has(selectedSearchLigand)) {
+      setSelectedSearchLigand('All');
+    }
+  }, [debouncedSearchText, fuzzyMatchedLigands, selectedSearchLigand]);
+
+  // Create sorted array of matched ligand names for dropdown display
+  const fuzzyMatchedLigandNames = useMemo<string[]>(() => {
+    return ['All', ...Array.from(fuzzyMatchedLigands).sort()];
+  }, [fuzzyMatchedLigands]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -277,15 +293,20 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         // Apply filters
         let matches = true;
 
-        // If using search, use fuzzy matching (ignore class/specific ligand)
-        if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
-          const matchesSearch = fuzzyMatchedLigands.has(record.ligandName);
+        // If using search with a specific ligand selected from search results
+        if (debouncedSearchText && selectedSearchLigand !== 'All') {
+          const matchesSearch = record.ligandName === selectedSearchLigand;
           const matchesType = constantType === 'All' || record.constantType === constantType;
           const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
           const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
           matches = matchesSearch && matchesType && matchesBeta && matchesTemp;
-        } else {
-          // Otherwise use dropdown selections (class/specific ligand)
+        }
+        // If using search but no specific ligand selected yet (show nothing until user selects)
+        else if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
+          matches = false; // Don't show any results until user selects a ligand
+        }
+        // Otherwise use dropdown selections (class/specific ligand)
+        else {
           const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
           const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
           const matchesType = constantType === 'All' || record.constantType === constantType;
@@ -308,6 +329,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     dataByElement,
     fuzzyMatchedLigands,
     debouncedSearchText,
+    selectedSearchLigand,
     selectedLigandClass,
     selectedSpecificLigand,
     constantType,
@@ -356,13 +378,18 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     const filtered: StabilityRecord[] = [];
     dataByElement.forEach((records) => {
       records.forEach(record => {
-        // If using search, use fuzzy matching
-        if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
-          if (fuzzyMatchedLigands.has(record.ligandName)) {
+        // If using search with a specific ligand selected
+        if (debouncedSearchText && selectedSearchLigand !== 'All') {
+          if (record.ligandName === selectedSearchLigand) {
             filtered.push(record);
           }
-        } else {
-          // Otherwise use class/specific ligand
+        }
+        // If using search but no specific ligand selected yet
+        else if (debouncedSearchText && fuzzyMatchedLigands.size > 0) {
+          // Don't include anything until user selects a ligand
+        }
+        // Otherwise use class/specific ligand
+        else {
           const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
           const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
           if (matchesClass && matchesSpecific) {
@@ -618,7 +645,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                 {fuzzyMatchCount > 0 ? (
                   <span className="text-green-600 dark:text-green-400">
-                    ✓ Found {fuzzyMatchCount} ligand{fuzzyMatchCount !== 1 ? 's' : ''} matching "{debouncedSearchText}"
+                    ✓ Found {fuzzyMatchCount} ligand{fuzzyMatchCount !== 1 ? 's' : ''} matching "{debouncedSearchText}" - select one below
                   </span>
                 ) : (
                   <span className="text-amber-600 dark:text-amber-400">
@@ -633,6 +660,29 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               </p>
             )}
           </div>
+
+          {/* Search Results Dropdown - shown when search has results */}
+          {debouncedSearchText && fuzzyMatchCount > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Select Ligand from Search Results
+              </label>
+              <select
+                value={selectedSearchLigand}
+                onChange={(e) => setSelectedSearchLigand(e.target.value)}
+                className="input-field w-full text-sm"
+              >
+                {fuzzyMatchedLigandNames.map(ligand => (
+                  <option key={ligand} value={ligand}>
+                    {ligand === 'All' ? 'Select a ligand...' : (ligand.length > 60 ? ligand.substring(0, 60) + '...' : ligand)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Choose a specific ligand to see which elements have data for it
+              </p>
+            </div>
+          )}
 
           {/* Temperature Slider */}
           <div>
