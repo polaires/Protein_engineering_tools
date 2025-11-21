@@ -82,7 +82,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [ligandSearchText, setLigandSearchText] = useState<string>('');
   const [debouncedSearchText, setDebouncedSearchText] = useState<string>('');
   const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [temperature, setTemperature] = useState<number>(25);
+  const [temperature, setTemperature] = useState<number | null>(null);
   const [ionicStrengthFilter, setIonicStrengthFilter] = useState<number | null>(null);
   const [constantType, setConstantType] = useState<string>('All');
   const [betaDefinitionFilter, setBetaDefinitionFilter] = useState<string>('All');
@@ -206,7 +206,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     setLigandSearchText('');
     setDebouncedSearchText('');
     setSelectedSearchLigand('All');
-    setTemperature(25);
+    setTemperature(null);
     setIonicStrengthFilter(null);
     setConstantType('All');
     setBetaDefinitionFilter('All');
@@ -380,7 +380,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         // Common filters
         const matchesType = constantType === 'All' || record.constantType === constantType;
         const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-        const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
+        const matchesTemp = temperature === null || Math.abs(record.temperature - temperature) <= 5; // Within 5°C or all temps
         const matchesIonic = ionicStrengthFilter === null || record.ionicStrength === ionicStrengthFilter;
 
         if (debouncedSearchText && selectedSearchLigand !== 'All') {
@@ -636,7 +636,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             let filtered = matching.filter(r =>
               (constantType === 'All' || r.constantType === constantType) &&
               (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
-              Math.abs(r.temperature - temperature) <= 5
+              (temperature === null || Math.abs(r.temperature - temperature) <= 5)
             );
             // If no match, try without temp filter
             if (filtered.length === 0) {
@@ -657,7 +657,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             }
 
             const best = filtered.sort((a, b) =>
-              Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
+              temperature === null ? a.temperature - b.temperature : Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
             )[0];
             results.push({
               label: element,
@@ -691,7 +691,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           let filtered = matching.filter(r =>
             (constantType === 'All' || r.constantType === constantType) &&
             (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
-            Math.abs(r.temperature - temperature) <= 5
+            (temperature === null || Math.abs(r.temperature - temperature) <= 5)
           );
           if (filtered.length === 0) {
             filtered = matching.filter(r =>
@@ -709,7 +709,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           }
 
           const best = filtered.sort((a, b) =>
-            Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
+            temperature === null ? a.temperature - b.temperature : Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
           )[0];
           results.push({
             label: ligand.length > 25 ? ligand.substring(0, 25) + '...' : ligand,
@@ -1198,24 +1198,38 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             )}
           </div>
 
-          {/* Temperature Slider */}
+          {/* Temperature Filter */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Temperature: {temperature}°C (±5°C)
+              Temperature: {temperature === null ? 'All' : `${temperature}°C (±5°C)`}
             </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={temperature}
-              onChange={(e) => setTemperature(parseInt(e.target.value))}
-              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
-            />
-            <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
-              <span>0°C</span>
-              <span>100°C</span>
+            <div className="flex items-center gap-2 mb-1">
+              <input
+                type="checkbox"
+                id="tempAll"
+                checked={temperature === null}
+                onChange={(e) => setTemperature(e.target.checked ? null : 25)}
+                className="rounded border-slate-300"
+              />
+              <label htmlFor="tempAll" className="text-sm text-slate-600 dark:text-slate-400">All temperatures</label>
             </div>
+            {temperature !== null && (
+              <>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseInt(e.target.value))}
+                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                />
+                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  <span>0°C</span>
+                  <span>100°C</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Ionic Strength Filter */}
