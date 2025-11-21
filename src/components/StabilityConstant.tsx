@@ -882,6 +882,13 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               {comparisonMode ? 'Exit Compare' : 'Compare'}
             </button>
             <button
+              onClick={() => setShowInfo(!showInfo)}
+              className={`btn-secondary text-sm flex items-center gap-2 ${showInfo ? 'bg-blue-100 dark:bg-blue-900' : ''}`}
+            >
+              <Info className="w-4 h-4" />
+              Help
+            </button>
+            <button
               onClick={resetFilters}
               className="btn-secondary text-sm"
             >
@@ -889,6 +896,60 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             </button>
           </div>
         </div>
+
+        {/* Documentation & Help Panel */}
+        {showInfo && (
+          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Understanding Constant Types</h4>
+              <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                <li><strong>K₁, K₂, K₃...</strong> - Stepwise formation constants: M + L ⇌ ML (K₁), ML + L ⇌ ML₂ (K₂)</li>
+                <li><strong>β₂, β₃...</strong> - Overall/cumulative constants: M + nL ⇌ MLₙ (βₙ = K₁×K₂×...×Kₙ)</li>
+                <li><strong>H</strong> - Protonation constant: HL ⇌ H⁺ + L⁻</li>
+                <li><strong>*</strong> - Special or mixed constant (see beta definition for details)</li>
+                <li><strong>S</strong> - Solubility product constant</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">log K vs Kd Conversion</h4>
+              <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                <li><strong>log K</strong> (stability constant): Measures complex formation strength. <em>Higher = more stable</em></li>
+                <li><strong>Kd</strong> (dissociation constant): Kd = 1/Ka = 10⁻ˡᵒᵍᴷ. <em>Lower = stronger binding</em></li>
+                <li><strong>Example:</strong> log K = 10 → Ka = 10¹⁰ M⁻¹ → Kd = 10⁻¹⁰ M = 0.1 nM</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Using Comparison Mode</h4>
+              <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                <li><strong>Different Elements:</strong> Compare how different metals bind to the same ligand</li>
+                <li><strong>Different Ligands:</strong> Compare how different ligands bind to the same metal</li>
+                <li><strong>Different Conditions:</strong> Compare same metal-ligand pair at different T/ionic strength</li>
+                <li><strong>Show All Conditions:</strong> Display all data points (not just best match) for scatter analysis</li>
+                <li><strong>Reference Line:</strong> Shows average value when comparing same conditions</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Data Source</h4>
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                Data from <strong>NIST Standard Reference Database 46</strong> - Critically Selected Stability Constants of Metal Complexes.
+                Temperature tolerance: ±5°C from selected value. Filter by ionic strength for more accurate comparisons.
+              </p>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Tips</h4>
+              <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                <li>Use text search (2+ chars) to find specific ligands quickly</li>
+                <li>Hover over scatter points to see detailed values</li>
+                <li>Click elements on periodic table to select for comparison</li>
+                <li>Gray elements have no stability data for current filters</li>
+              </ul>
+            </div>
+          </div>
+        )}
 
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
