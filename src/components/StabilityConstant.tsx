@@ -697,14 +697,19 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const getAvailableLigands = useCallback((elementList: string[], searchFilter?: string): string[] => {
     if (elementList.length === 0) return [];
 
-    // Get union of all ligands (not intersection)
-    const allLigands = new Set<string>();
-    elementList.forEach(el => {
+    // Get INTERSECTION of ligands (ligands common to ALL selected elements)
+    const ligandSets = elementList.map(el => {
       const records = dataByElement.get(el) || [];
-      records.forEach(r => allLigands.add(r.ligandName));
+      return new Set(records.map(r => r.ligandName));
     });
 
-    let result = Array.from(allLigands).sort();
+    // Start with first element's ligands, then intersect with others
+    let commonLigands = ligandSets[0] ? Array.from(ligandSets[0]) : [];
+    for (let i = 1; i < ligandSets.length; i++) {
+      commonLigands = commonLigands.filter(lig => ligandSets[i].has(lig));
+    }
+
+    let result = commonLigands.sort();
 
     // Apply search filter if provided
     if (searchFilter && searchFilter.length >= 2) {
@@ -1834,14 +1839,26 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 const handleElementClick = () => {
                   if (comparisonMode) {
                     if (comparisonType === 'elements') {
-                      setSelectedElementsForComparison(prev =>
-                        prev.includes(element.symbol)
+                      setSelectedElementsForComparison(prev => {
+                        const newSelection = prev.includes(element.symbol)
                           ? prev.filter(e => e !== element.symbol)
-                          : [...prev, element.symbol]
-                      );
+                          : [...prev, element.symbol];
+
+                        // Clear ligand if no longer available for all selected elements
+                        if (comparisonLigand && newSelection.length > 0) {
+                          const availableLigands = getAvailableLigands(newSelection, '');
+                          if (!availableLigands.includes(comparisonLigand)) {
+                            setComparisonLigand('');
+                          }
+                        }
+                        return newSelection;
+                      });
                     } else {
                       // For 'ligands' and 'conditions' modes, select single element
                       setComparisonElement(element.symbol);
+                      // Clear ligand selections when element changes
+                      setSelectedLigandsForComparison([]);
+                      setComparisonLigand('');
                     }
                   } else {
                     setSelectedElement(element.symbol);
