@@ -5,8 +5,8 @@
  * OPTIMIZED VERSION - Performance improvements with memoization, pre-indexing, and score-based filtering
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { TestTube2, Info, Search, Loader2, BarChart3, X } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { TestTube2, Info, Search, Loader2, BarChart3, X, Download } from 'lucide-react';
 import { elements } from '@/data/elements';
 
 // Define the structure of stability constant data
@@ -104,6 +104,55 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [comparisonPlotType, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
   const [showAllConditions, setShowAllConditions] = useState<boolean>(false); // Show all conditions in elements mode
   const [showReference, setShowReference] = useState<boolean>(true); // Show reference line in scatter when same conditions
+
+  // Ref for chart container (for saving as image)
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // Generate smart chart title based on comparison type
+  const getChartTitle = useCallback(() => {
+    if (comparisonType === 'elements' && comparisonLigand) {
+      return `${comparisonLigand} binding to ${selectedElementsForComparison.join(', ')}`;
+    } else if (comparisonType === 'ligands' && comparisonElement) {
+      return `${comparisonElement} binding to different ligands`;
+    } else if (comparisonType === 'conditions' && comparisonElement && comparisonLigand) {
+      return `${comparisonElement}-${comparisonLigand} at different conditions`;
+    }
+    return 'Stability Constant Comparison';
+  }, [comparisonType, comparisonLigand, comparisonElement, selectedElementsForComparison]);
+
+  // Save chart as image with watermark
+  const saveChartAsImage = useCallback(async () => {
+    if (!chartRef.current) return;
+
+    try {
+      // Dynamic import of html2canvas
+      const html2canvas = (await import('html2canvas')).default;
+
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher resolution
+      });
+
+      // Add watermark
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = 'rgba(100, 100, 100, 0.5)';
+        ctx.textAlign = 'right';
+        ctx.fillText('biochem.space', canvas.width - 10, canvas.height - 10);
+      }
+
+      // Download
+      const link = document.createElement('a');
+      link.download = `stability-comparison-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Failed to save chart:', error);
+      // Fallback: alert user
+      alert('Failed to save chart. Please try again.');
+    }
+  }, []);
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -1496,19 +1545,36 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">
-                  Comparison Results ({showKd ? 'Kd' : 'log K'}) - {comparisonData.length} data points
+                  {comparisonData.length} data points
                 </h4>
-                <button
-                  onClick={() => setShowKd(!showKd)}
-                  className="btn-secondary text-xs"
-                >
-                  Show {showKd ? 'log K' : 'Kd'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowKd(!showKd)}
+                    className="btn-secondary text-xs"
+                  >
+                    Show {showKd ? 'log K' : 'Kd'}
+                  </button>
+                  <button
+                    onClick={saveChartAsImage}
+                    className="btn-secondary text-xs flex items-center gap-1"
+                    title="Save chart as image"
+                  >
+                    <Download className="w-3 h-3" />
+                    Save
+                  </button>
+                </div>
               </div>
 
-              {/* Scatter Plot View */}
-              {comparisonPlotType === 'scatter' ? (
-                <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 pb-12 min-h-[300px]">
+              {/* Chart Container with ref for saving */}
+              <div ref={chartRef} className="bg-white dark:bg-slate-900 p-4 rounded-lg">
+                {/* Chart Title */}
+                <h3 className="text-center font-semibold text-slate-800 dark:text-slate-200 mb-4">
+                  {getChartTitle()}
+                </h3>
+
+                {/* Scatter Plot View */}
+                {comparisonPlotType === 'scatter' ? (
+                  <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 pb-16 min-h-[300px]">
                   {(() => {
                     const validData = comparisonData.filter(d => d.logK !== null);
                     if (validData.length === 0) return <p className="text-center text-slate-500 py-8">No data</p>;
@@ -1533,10 +1599,23 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     // Calculate average for reference line
                     const avgLogK = validData.reduce((sum, d) => sum + d.logK!, 0) / validData.length;
 
+                    // Generate x-axis label based on comparison type
+                    const xAxisLabel = comparisonType === 'elements' ? 'Elements' :
+                      comparisonType === 'ligands' ? 'Ligands' : 'Conditions';
+
                     return (
                       <div className="flex h-full">
-                        {/* Y-axis */}
-                        <div className="w-16 flex flex-col justify-between text-xs text-slate-600 dark:text-slate-400 pr-2 py-2 text-right">
+                        {/* Y-axis label */}
+                        <div className="flex items-center justify-center w-6">
+                          <span
+                            className="text-xs font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap"
+                            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+                          >
+                            {showKd ? 'Kd (dissociation constant)' : 'log K (stability constant)'}
+                          </span>
+                        </div>
+                        {/* Y-axis values */}
+                        <div className="w-14 flex flex-col justify-between text-xs text-slate-600 dark:text-slate-400 pr-2 py-2 text-right">
                           <span>{showKd ? convertToKd(yMax) : yMax.toFixed(1)}</span>
                           <span>{showKd ? convertToKd((yMax + yMin) / 2) : ((yMax + yMin) / 2).toFixed(1)}</span>
                           <span>{showKd ? convertToKd(yMin) : yMin.toFixed(1)}</span>
@@ -1619,17 +1698,23 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             });
                           })()}
                           {/* X-axis labels */}
-                          <div className="absolute top-full left-0 right-0 flex pt-2">
-                            {uniqueXLabels.map((label, i) => (
-                              <div
-                                key={label}
-                                className="flex-1 text-xs font-medium text-center px-1 truncate"
-                                style={{ color: colors[i % colors.length] }}
-                                title={label}
-                              >
-                                {label.length > 15 ? label.substring(0, 15) + '...' : label}
-                              </div>
-                            ))}
+                          <div className="absolute top-full left-0 right-0 pt-2">
+                            <div className="flex">
+                              {uniqueXLabels.map((label, i) => (
+                                <div
+                                  key={label}
+                                  className="flex-1 text-xs font-medium text-center px-1 truncate"
+                                  style={{ color: colors[i % colors.length] }}
+                                  title={label}
+                                >
+                                  {label.length > 15 ? label.substring(0, 15) + '...' : label}
+                                </div>
+                              ))}
+                            </div>
+                            {/* X-axis label */}
+                            <div className="text-center text-xs font-medium text-slate-600 dark:text-slate-400 mt-2">
+                              {xAxisLabel}
+                            </div>
                           </div>
                         </div>
                         {/* Legend - show conditions when multiple */}
@@ -1688,6 +1773,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   })}
                 </div>
               )}
+              </div>
             </div>
           )}
 
