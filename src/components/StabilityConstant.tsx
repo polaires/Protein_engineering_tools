@@ -458,6 +458,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       subLabel?: string;
       condition?: string; // For grouping in scatter plot
       element?: string; // For grouping
+      constantType?: string; // Equilibrium type (K1, β2, etc.)
     }
 
     const results: ComparisonItem[] = [];
@@ -475,10 +476,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 label: element,
                 logK: record.stabilityConstant,
                 kd: Math.pow(10, -record.stabilityConstant),
-                details: condition,
+                details: `${record.constantType}, ${condition}`,
                 subLabel: record.metalIon,
                 condition: condition,
-                element: element
+                element: element,
+                constantType: record.constantType
               });
             });
           } else {
@@ -532,9 +534,10 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               label: element,
               logK: best.stabilityConstant,
               kd: Math.pow(10, -best.stabilityConstant),
-              details: `T=${best.temperature}°C, I=${best.ionicStrength}M`,
+              details: `${best.constantType}, T=${best.temperature}°C, I=${best.ionicStrength}M`,
               subLabel: best.metalIon,
-              element: element
+              element: element,
+              constantType: best.constantType
             });
           } else {
             results.push({
@@ -583,7 +586,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             label: ligand.length > 25 ? ligand.substring(0, 25) + '...' : ligand,
             logK: best.stabilityConstant,
             kd: Math.pow(10, -best.stabilityConstant),
-            details: `T=${best.temperature}°C, I=${best.ionicStrength}M`
+            details: `${best.constantType}, T=${best.temperature}°C, I=${best.ionicStrength}M`,
+            constantType: best.constantType
           });
         } else {
           results.push({
@@ -616,7 +620,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             label: condition,
             logK: record.stabilityConstant,
             kd: Math.pow(10, -record.stabilityConstant),
-            details: record.betaDefinition || record.constantType
+            details: record.constantType + (record.betaDefinition ? ` (${record.betaDefinition})` : ''),
+            constantType: record.constantType
           });
         } else {
           results.push({
@@ -1493,15 +1498,19 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
                               const x = ((xIndex + 0.5 + jitter) / uniqueXLabels.length) * 100;
                               const y = ((yMax - item.logK!) / range) * 100;
-                              const colorIdx = showAllConditions ? conditions.indexOf(item.condition!) % colors.length : idx % colors.length;
+                              // Color by condition if multiple, otherwise by index
+                              const colorIdx = (showAllConditions && conditions.length > 1)
+                                ? conditions.indexOf(item.condition!) % colors.length
+                                : xIndex % colors.length;
                               return (
                                 <div
                                   key={idx}
-                                  className="absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-150 transition-transform border border-white dark:border-slate-800 shadow-sm"
+                                  className="absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-125 transition-transform shadow-md"
                                   style={{
                                     left: `${x}%`,
                                     top: `${Math.max(2, Math.min(98, y))}%`,
-                                    backgroundColor: colors[colorIdx]
+                                    backgroundColor: colors[colorIdx],
+                                    border: '2px solid rgba(255,255,255,0.8)'
                                   }}
                                   title={`${item.label}: ${showKd ? convertToKd(item.logK!) : item.logK!.toFixed(2)} (${item.details})`}
                                 />
