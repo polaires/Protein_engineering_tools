@@ -689,7 +689,6 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {elementData.map((record, idx) => {
-                      const referenceText = record.reference || 'N/A';
                       const refDisplay = record.refCode && record.reference
                         ? `[${record.refCode}] ${record.reference}`
                         : (record.reference || 'N/A');
