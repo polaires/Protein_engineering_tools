@@ -406,15 +406,30 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return avgMap;
   }, [elementStabilityMap]);
 
-  // Get available specific ligands based on selected class
+  // Get available ligand classes based on selected element
+  const getAvailableLigandClasses = (): string[] => {
+    if (selectedElement) {
+      const records = dataByElement.get(selectedElement) || [];
+      const classSet = new Set(records.map(r => r.ligandClass).filter(c => c));
+      return ['All', ...Array.from(classSet).sort()];
+    }
+    return availableLigandClasses;
+  };
+
+  // Get available specific ligands based on selected class and element
   const getAvailableSpecificLigands = (): string[] => {
     if (selectedLigandClass === 'All') {
       return ['All'];
     }
 
-    const filtered = stabilityData.filter(record =>
-      record.ligandClass === selectedLigandClass
-    );
+    let filtered: StabilityRecord[];
+    if (selectedElement) {
+      // Only show ligands available for the selected element
+      const records = dataByElement.get(selectedElement) || [];
+      filtered = records.filter(record => record.ligandClass === selectedLigandClass);
+    } else {
+      filtered = stabilityData.filter(record => record.ligandClass === selectedLigandClass);
+    }
 
     const ligandSet = new Set(filtered.map(r => r.ligandName).filter(name => name));
     return ['All', ...Array.from(ligandSet).sort()];
@@ -1056,7 +1071,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               }}
               className="input-field w-full text-sm"
             >
-              {availableLigandClasses.map(cls => (
+              {getAvailableLigandClasses().map(cls => (
                 <option key={cls} value={cls}>{cls}</option>
               ))}
             </select>
@@ -1891,6 +1906,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                     }
                   } else {
                     setSelectedElement(element.symbol);
+                    // Reset filters when element changes to avoid stale selections
+                    setSelectedLigandClass('All');
+                    setSelectedSpecificLigand('All');
+                    setIonicStrengthFilter(null);
+                    setBetaDefinitionFilter('All');
                   }
                 };
 
@@ -1946,6 +1966,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   }
                 } else {
                   setSelectedElement(element.symbol);
+                  // Reset filters when element changes to avoid stale selections
+                  setSelectedLigandClass('All');
+                  setSelectedSpecificLigand('All');
+                  setIonicStrengthFilter(null);
+                  setBetaDefinitionFilter('All');
                 }
               };
 
@@ -1994,6 +2019,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   }
                 } else {
                   setSelectedElement(element.symbol);
+                  // Reset filters when element changes to avoid stale selections
+                  setSelectedLigandClass('All');
+                  setSelectedSpecificLigand('All');
+                  setIonicStrengthFilter(null);
+                  setBetaDefinitionFilter('All');
                 }
               };
 
