@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { TestTube2 } from 'lucide-react';
+import { TestTube2, Info, Search } from 'lucide-react';
 import { elements } from '@/data/elements';
 
 // Define the structure of stability constant data
@@ -13,6 +13,7 @@ interface StabilityRecord {
   metalIon: string;
   ligandName: string;
   ligandFormula: string;
+  ligandClass: string;
   stabilityConstant: number;
   temperature: number;
   ionicStrength: number;
@@ -57,6 +58,14 @@ const METAL_CATEGORIES = [
   'actinide'
 ];
 
+// Constant type explanations
+const CONSTANT_TYPE_INFO: { [key: string]: string } = {
+  'K': 'Equilibrium constant (formation constant)',
+  'H': 'Protonation constant',
+  '*': 'Special or mixed constant',
+  'S': 'Solubility product'
+};
+
 interface StabilityConstantProps {
   hideHeader?: boolean;
 }
@@ -67,21 +76,28 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [error, setError] = useState<string | null>(null);
 
   // Filter states
-  const [selectedLigand, setSelectedLigand] = useState<string>('All');
+  const [selectedLigandClass, setSelectedLigandClass] = useState<string>('All');
+  const [ligandSearchText, setLigandSearchText] = useState<string>('');
   const [temperature, setTemperature] = useState<number>(25);
   const [constantType, setConstantType] = useState<string>('All');
+  const [betaDefinitionFilter, setBetaDefinitionFilter] = useState<string>('All');
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
+  const [showKd, setShowKd] = useState<boolean>(false);
+  const [showInfo, setShowInfo] = useState<boolean>(false);
 
   // Reset filters to default
   const resetFilters = () => {
-    setSelectedLigand('All');
+    setSelectedLigandClass('All');
+    setLigandSearchText('');
     setTemperature(25);
     setConstantType('All');
+    setBetaDefinitionFilter('All');
   };
 
-  // Available ligands and constant types from the data
-  const [availableLigands, setAvailableLigands] = useState<string[]>([]);
+  // Available ligand classes, constant types, and beta definitions
+  const [availableLigandClasses, setAvailableLigandClasses] = useState<string[]>([]);
   const [availableConstantTypes, setAvailableConstantTypes] = useState<string[]>([]);
+  const [availableBetaDefinitions, setAvailableBetaDefinitions] = useState<string[]>([]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -96,18 +112,19 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         const text = await response.text();
         const lines = text.split('\n').slice(1); // Skip header
         const records: StabilityRecord[] = [];
-        const ligandsSet = new Set<string>();
+        const classesSet = new Set<string>();
         const typesSet = new Set<string>();
+        const betaSet = new Set<string>();
 
         for (const line of lines) {
           if (!line.trim()) continue;
 
           const parts = parseCSVLine(line);
-          if (parts.length < 13) continue; // Now we have 13 fields including references
+          if (parts.length < 14) continue; // Now we have 14 fields including ligand_class
 
-          const temp = parseFloat(parts[5]);
-          const ionic = parseFloat(parts[6]);
-          const constant = parseFloat(parts[4]);
+          const temp = parseFloat(parts[6]);
+          const ionic = parseFloat(parts[7]);
+          const constant = parseFloat(parts[5]);
 
           if (isNaN(constant)) continue;
 
@@ -116,41 +133,31 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             metalIon: parts[1].trim(),
             ligandName: parts[2].trim(),
             ligandFormula: parts[3].trim(),
+            ligandClass: parts[4].trim() || 'Uncategorized',
             stabilityConstant: constant,
             temperature: isNaN(temp) ? 25 : temp,
             ionicStrength: isNaN(ionic) ? 0 : ionic,
-            error: parts[7].trim(),
-            constantType: parts[8].trim(),
-            betaDefinition: parts[9].trim(),
-            refYear: parts[10].trim(),
-            refJournal: parts[11].trim(),
-            refPage: parts[12].trim()
+            error: parts[8].trim(),
+            constantType: parts[9].trim(),
+            betaDefinition: parts[10].trim(),
+            refYear: parts[11].trim(),
+            refJournal: parts[12].trim(),
+            refPage: parts[13].trim()
           };
 
           records.push(record);
-          if (record.ligandName) ligandsSet.add(record.ligandName);
+          if (record.ligandClass) classesSet.add(record.ligandClass);
           if (record.constantType) typesSet.add(record.constantType);
+          if (record.betaDefinition) betaSet.add(record.betaDefinition);
         }
 
         console.log(`Loaded ${records.length} stability constant records`);
         console.log(`Available elements:`, [...new Set(records.map(r => r.element))].sort().join(', '));
 
         setStabilityData(records);
-
-        // Limit ligands to top 100 most common to avoid overwhelming the dropdown
-        const ligandCounts = new Map<string, number>();
-        records.forEach(r => {
-          if (r.ligandName) {
-            ligandCounts.set(r.ligandName, (ligandCounts.get(r.ligandName) || 0) + 1);
-          }
-        });
-        const topLigands = Array.from(ligandCounts.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 100)
-          .map(([ligand]) => ligand);
-
-        setAvailableLigands(['All', ...topLigands.sort()]);
+        setAvailableLigandClasses(['All', ...Array.from(classesSet).sort()]);
         setAvailableConstantTypes(['All', ...Array.from(typesSet).sort()]);
+        setAvailableBetaDefinitions(['All', ...Array.from(betaSet).filter(b => b).sort().slice(0, 50)]);
         setLoading(false);
       } catch (err) {
         console.error('Error loading stability constant data:', err);
@@ -162,14 +169,34 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     loadData();
   }, []);
 
+  // Get filtered beta definitions based on current ligand class
+  const getFilteredBetaDefinitions = () => {
+    if (selectedLigandClass === 'All' && !ligandSearchText) {
+      return availableBetaDefinitions;
+    }
+
+    const filtered = stabilityData.filter(record => {
+      const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+      const matchesSearch = !ligandSearchText ||
+        record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase());
+      return matchesClass && matchesSearch;
+    });
+
+    const betaSet = new Set(filtered.map(r => r.betaDefinition).filter(b => b));
+    return ['All', ...Array.from(betaSet).sort().slice(0, 50)];
+  };
+
   // Get average stability constant for an element
   const getStabilityForElement = (elementSymbol: string): number | null => {
     const filtered = stabilityData.filter(record => {
       const matchesElement = record.element === elementSymbol;
-      const matchesLigand = selectedLigand === 'All' || record.ligandName === selectedLigand;
+      const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+      const matchesSearch = !ligandSearchText ||
+        record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase());
       const matchesType = constantType === 'All' || record.constantType === constantType;
+      const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
       const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-      return matchesElement && matchesLigand && matchesType && matchesTemp;
+      return matchesElement && matchesClass && matchesSearch && matchesType && matchesBeta && matchesTemp;
     });
 
     if (filtered.length === 0) {
@@ -179,6 +206,17 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     // Calculate average log K value
     const sum = filtered.reduce((acc, r) => acc + r.stabilityConstant, 0);
     return sum / filtered.length;
+  };
+
+  // Convert log K to Kd (dissociation constant in M)
+  const convertToKd = (logK: number): string => {
+    // Kd = 1/Ka = 10^(-logK)
+    const kd = Math.pow(10, -logK);
+    if (kd < 1e-15) return kd.toExponential(2);
+    if (kd < 1e-6) return (kd * 1e9).toFixed(2) + ' nM';
+    if (kd < 1e-3) return (kd * 1e6).toFixed(2) + ' μM';
+    if (kd < 1) return (kd * 1e3).toFixed(2) + ' mM';
+    return kd.toFixed(2) + ' M';
   };
 
   // Get color intensity based on stability constant value
@@ -264,17 +302,43 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       {/* Header */}
       {!hideHeader && (
         <div className="card">
-          <h2 className="section-title flex items-center gap-2">
-            <TestTube2 className="w-7 h-7" />
-            Stability Constants - Interactive Periodic Table
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title flex items-center gap-2">
+              <TestTube2 className="w-7 h-7" />
+              Stability Constants - Interactive Periodic Table
+            </h2>
+            <button
+              onClick={() => setShowInfo(!showInfo)}
+              className="btn-secondary text-sm flex items-center gap-2"
+            >
+              <Info className="w-4 h-4" />
+              {showInfo ? 'Hide' : 'Show'} Info
+            </button>
+          </div>
           <p className="text-slate-600 dark:text-slate-400">
-            Explore metal-ligand stability constants from the NIST SRD 46 database. Filter by specific ligands, adjust temperature (±5°C tolerance), and filter by constant type. Colors dynamically update based on average log K values - elements without data for the selected conditions appear gray.
+            Explore metal-ligand stability constants from the NIST SRD 46 database. Filter by ligand class, search specific ligands, adjust temperature (±5°C tolerance), and filter by equilibrium type. Colors dynamically update based on average log K values - elements without data for the selected conditions appear gray.
           </p>
           {stabilityData.length > 0 && (
             <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
               Loaded {stabilityData.length.toLocaleString()} data points for {[...new Set(stabilityData.map(r => r.element))].length} elements • Data from NIST Critically Selected Stability Constants of Metal Complexes
             </p>
+          )}
+
+          {/* Info Panel */}
+          {showInfo && (
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">Understanding Constant Types:</h4>
+              <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+                <li><strong>K</strong> - Equilibrium/formation constant: M + L ⇌ ML (Ka = [ML]/[M][L])</li>
+                <li><strong>H</strong> - Protonation constant: HL ⇌ H<sup>+</sup> + L<sup>-</sup></li>
+                <li><strong>*</strong> - Special or mixed constant (see beta definition)</li>
+                <li><strong>S</strong> - Solubility product</li>
+              </ul>
+              <p className="text-sm text-slate-700 dark:text-slate-300 mt-3">
+                <strong>log K vs Kd:</strong> log K (stability constant) measures complex formation strength. Higher log K = more stable complex.
+                Kd (dissociation constant) = 1/Ka = 10<sup>-logK</sup>. Lower Kd = stronger binding.
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -285,31 +349,60 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
             Filters
           </h3>
-          <button
-            onClick={resetFilters}
-            className="btn-secondary text-sm"
-          >
-            Reset Filters
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowKd(!showKd)}
+              className="btn-secondary text-sm"
+            >
+              Show {showKd ? 'log K' : 'Kd'}
+            </button>
+            <button
+              onClick={resetFilters}
+              className="btn-secondary text-sm"
+            >
+              Reset Filters
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Ligand Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Ligand Class Filter */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Ligand Filter (Top 100)
+              Ligand Class
             </label>
             <select
-              value={selectedLigand}
-              onChange={(e) => setSelectedLigand(e.target.value)}
-              className="input-field w-full text-xs"
+              value={selectedLigandClass}
+              onChange={(e) => {
+                setSelectedLigandClass(e.target.value);
+                setBetaDefinitionFilter('All'); // Reset beta filter when class changes
+              }}
+              className="input-field w-full text-sm"
             >
-              {availableLigands.map(ligand => (
-                <option key={ligand} value={ligand}>
-                  {ligand.length > 40 ? ligand.substring(0, 40) + '...' : ligand}
-                </option>
+              {availableLigandClasses.map(cls => (
+                <option key={cls} value={cls}>{cls}</option>
               ))}
             </select>
+          </div>
+
+          {/* Ligand Search */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Search Ligand Name
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={ligandSearchText}
+                onChange={(e) => {
+                  setLigandSearchText(e.target.value);
+                  setBetaDefinitionFilter('All'); // Reset beta filter when search changes
+                }}
+                placeholder="e.g., glycine, EDTA..."
+                className="input-field w-full pl-10 text-sm"
+              />
+            </div>
           </div>
 
           {/* Temperature Slider */}
@@ -343,7 +436,27 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               className="input-field w-full"
             >
               {availableConstantTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>
+                  {type} {type !== 'All' && CONSTANT_TYPE_INFO[type] ? `- ${CONSTANT_TYPE_INFO[type]}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Equilibrium/Beta Definition Filter */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Equilibrium Type
+            </label>
+            <select
+              value={betaDefinitionFilter}
+              onChange={(e) => setBetaDefinitionFilter(e.target.value)}
+              className="input-field w-full text-xs"
+            >
+              {getFilteredBetaDefinitions().map((beta, idx) => (
+                <option key={idx} value={beta}>
+                  {beta === 'All' ? 'All' : (beta.length > 60 ? beta.substring(0, 60) + '...' : beta)}
+                </option>
               ))}
             </select>
           </div>
@@ -506,8 +619,10 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       {selectedElement && (() => {
         const elementData = stabilityData
           .filter(record => record.element === selectedElement)
-          .filter(record => selectedLigand === 'All' || record.ligandName === selectedLigand)
+          .filter(record => selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass)
+          .filter(record => !ligandSearchText || record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase()))
           .filter(record => constantType === 'All' || record.constantType === constantType)
+          .filter(record => betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter)
           .sort((a, b) => b.stabilityConstant - a.stabilityConstant)
           .slice(0, 100); // Limit to top 100 for performance
 
@@ -533,7 +648,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             {elementData.length === 0 ? (
               <div className="text-center py-8 text-slate-600 dark:text-slate-400">
                 <p className="text-lg mb-2">No data available for {selectedElement}</p>
-                <p className="text-sm">Try selecting "All" in the ligand and constant type filters</p>
+                <p className="text-sm">Try adjusting your filters (ligand class, search, or constant type)</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -547,10 +662,13 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                         Ligand
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                        Class
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                         Formula
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                        log K
+                        {showKd ? 'Kd' : 'log K'}
                       </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                         Temp (°C)
@@ -581,11 +699,14 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100 max-w-xs truncate" title={record.ligandName}>
                             {record.ligandName}
                           </td>
+                          <td className="px-4 py-2 text-xs text-slate-700 dark:text-slate-300">
+                            {record.ligandClass}
+                          </td>
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
                             {record.ligandFormula}
                           </td>
                           <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {record.stabilityConstant.toFixed(2)}
+                            {showKd ? convertToKd(record.stabilityConstant) : record.stabilityConstant.toFixed(2)}
                           </td>
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
                             {record.temperature || 'N/A'}
@@ -593,7 +714,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
                             {record.ionicStrength || 'N/A'}
                           </td>
-                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
+                          <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100" title={CONSTANT_TYPE_INFO[record.constantType]}>
                             {record.constantType}
                           </td>
                           <td className="px-4 py-2 text-xs text-slate-700 dark:text-slate-300 max-w-xs truncate" title={referenceText}>
