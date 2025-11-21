@@ -465,10 +465,13 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
     if (comparisonType === 'elements' && comparisonLigand && selectedElementsForComparison.length > 0) {
       if (showAllConditions) {
-        // Show ALL data points for each element, grouped by condition
+        // Show ALL data points for each element, grouped by condition (but still filter by equilibrium type)
         selectedElementsForComparison.forEach(element => {
           const records = dataByElement.get(element) || [];
-          const matching = records.filter(r => r.ligandName === comparisonLigand);
+          const matching = records.filter(r =>
+            r.ligandName === comparisonLigand &&
+            (constantType === 'All' || r.constantType === constantType)
+          );
           if (matching.length > 0) {
             matching.forEach(record => {
               const condition = `T=${record.temperature}°C, I=${record.ionicStrength}M`;
@@ -1505,7 +1508,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
               {/* Scatter Plot View */}
               {comparisonPlotType === 'scatter' ? (
-                <div className={`relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 min-h-[300px] ${(comparisonType === 'ligands' || comparisonType === 'conditions') ? 'pb-28' : 'pb-12'}`}>
+                <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-6 pb-12 min-h-[300px]">
                   {(() => {
                     const validData = comparisonData.filter(d => d.logK !== null);
                     if (validData.length === 0) return <p className="text-center text-slate-500 py-8">No data</p>;
@@ -1616,31 +1619,15 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             });
                           })()}
                           {/* X-axis labels */}
-                          <div
-                            className="absolute top-full left-0 right-0 flex pt-1"
-                            style={{ height: (comparisonType === 'ligands' || comparisonType === 'conditions') ? '100px' : 'auto' }}
-                          >
+                          <div className="absolute top-full left-0 right-0 flex pt-2">
                             {uniqueXLabels.map((label, i) => (
                               <div
                                 key={label}
-                                className="flex-1 text-xs font-medium overflow-hidden"
-                                style={(comparisonType === 'ligands' || comparisonType === 'conditions') ? {
-                                  writingMode: 'vertical-rl',
-                                  transform: 'rotate(180deg)',
-                                  textAlign: 'left',
-                                  paddingTop: '4px',
-                                  color: colors[i % colors.length],
-                                  maxHeight: '95px'
-                                } : {
-                                  textAlign: 'center',
-                                  color: '#64748b'
-                                }}
+                                className="flex-1 text-xs font-medium text-center px-1 truncate"
+                                style={{ color: colors[i % colors.length] }}
                                 title={label}
                               >
-                                {(comparisonType === 'ligands' || comparisonType === 'conditions')
-                                  ? (label.length > 30 ? label.substring(0, 30) + '...' : label)
-                                  : (label.length > 10 ? label.substring(0, 10) + '...' : label)
-                                }
+                                {label.length > 15 ? label.substring(0, 15) + '...' : label}
                               </div>
                             ))}
                           </div>
