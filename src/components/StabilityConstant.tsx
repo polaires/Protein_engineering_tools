@@ -101,6 +101,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [comparisonElement, setComparisonElement] = useState<string>(''); // Single element when comparing ligands
   const [comparisonLigandSearch, setComparisonLigandSearch] = useState<string>(''); // Search for ligands in comparison
   const [selectedConditionsForComparison, setSelectedConditionsForComparison] = useState<string[]>([]); // For conditions mode
+  const [comparisonPlotType, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
+  const [showAllConditions, setShowAllConditions] = useState<boolean>(false); // Show all conditions in elements mode
 
   // Debounce search text to avoid filtering on every keystroke
   useEffect(() => {
@@ -453,42 +455,83 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       kd: number | null;
       details: string;
       subLabel?: string;
+      condition?: string; // For grouping in scatter plot
+      element?: string; // For grouping
     }
 
     const results: ComparisonItem[] = [];
 
     if (comparisonType === 'elements' && comparisonLigand && selectedElementsForComparison.length > 0) {
-      // Compare different elements with same ligand - show individual records
-      selectedElementsForComparison.forEach(element => {
-        const records = dataByElement.get(element) || [];
-        const matching = records.filter(r =>
-          r.ligandName === comparisonLigand &&
-          (constantType === 'All' || r.constantType === constantType) &&
-          (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
-          Math.abs(r.temperature - temperature) <= 5
-        );
-        if (matching.length > 0) {
-          // Show best match (closest to target temperature)
-          const best = matching.sort((a, b) =>
-            Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
-          )[0];
-          results.push({
-            label: element,
-            logK: best.stabilityConstant,
-            kd: Math.pow(10, -best.stabilityConstant),
-            details: `T=${best.temperature}°C, I=${best.ionicStrength}M`,
-            subLabel: best.metalIon
-          });
-        } else {
-          // Show no data for this element
-          results.push({
-            label: element,
-            logK: null,
-            kd: null,
-            details: 'No data at this condition'
-          });
-        }
-      });
+      if (showAllConditions) {
+        // Show ALL data points for each element, grouped by condition
+        selectedElementsForComparison.forEach(element => {
+          const records = dataByElement.get(element) || [];
+          const matching = records.filter(r => r.ligandName === comparisonLigand);
+          if (matching.length > 0) {
+            matching.forEach(record => {
+              const condition = `T=${record.temperature}°C, I=${record.ionicStrength}M`;
+              results.push({
+                label: element,
+                logK: record.stabilityConstant,
+                kd: Math.pow(10, -record.stabilityConstant),
+                details: condition,
+                subLabel: record.metalIon,
+                condition: condition,
+                element: element
+              });
+            });
+          } else {
+            results.push({
+              label: element,
+              logK: null,
+              kd: null,
+              details: 'No data',
+              element: element
+            });
+          }
+        });
+      } else {
+        // Single best match per element (original behavior but without strict temp filter)
+        selectedElementsForComparison.forEach(element => {
+          const records = dataByElement.get(element) || [];
+          // First try with filters, if no results try without temp filter
+          let matching = records.filter(r =>
+            r.ligandName === comparisonLigand &&
+            (constantType === 'All' || r.constantType === constantType) &&
+            (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
+            Math.abs(r.temperature - temperature) <= 5
+          );
+          // If no matches, try without temperature filter
+          if (matching.length === 0) {
+            matching = records.filter(r =>
+              r.ligandName === comparisonLigand &&
+              (constantType === 'All' || r.constantType === constantType) &&
+              (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter)
+            );
+          }
+          if (matching.length > 0) {
+            const best = matching.sort((a, b) =>
+              Math.abs(a.temperature - temperature) - Math.abs(b.temperature - temperature)
+            )[0];
+            results.push({
+              label: element,
+              logK: best.stabilityConstant,
+              kd: Math.pow(10, -best.stabilityConstant),
+              details: `T=${best.temperature}°C, I=${best.ionicStrength}M`,
+              subLabel: best.metalIon,
+              element: element
+            });
+          } else {
+            results.push({
+              label: element,
+              logK: null,
+              kd: null,
+              details: 'No data for this ligand',
+              element: element
+            });
+          }
+        });
+      }
     } else if (comparisonType === 'ligands' && comparisonElement && selectedLigandsForComparison.length > 0) {
       // Compare different ligands with same element - show individual records
       const records = dataByElement.get(comparisonElement) || [];
@@ -553,16 +596,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       });
     }
 
-    // Sort by logK (nulls at end)
-    return results.sort((a, b) => {
-      if (a.logK === null && b.logK === null) return 0;
-      if (a.logK === null) return 1;
-      if (b.logK === null) return -1;
-      return b.logK - a.logK;
-    });
+    // Preserve user input order (don't sort)
+    return results;
   }, [comparisonMode, comparisonType, comparisonLigand, comparisonElement,
       selectedElementsForComparison, selectedLigandsForComparison, selectedConditionsForComparison,
-      dataByElement, temperature, constantType, ionicStrengthFilter]);
+      dataByElement, temperature, constantType, ionicStrengthFilter, showAllConditions]);
 
   // Get available ligands for a set of elements (union - allow partial matches)
   const getAvailableLigands = useCallback((elementList: string[], searchFilter?: string): string[] => {
@@ -1256,12 +1294,44 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             </div>
           )}
 
+          {/* Chart Options */}
+          {comparisonType === 'elements' && comparisonLigand && (
+            <div className="mb-4 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showAllConditions}
+                  onChange={(e) => setShowAllConditions(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Show all conditions (scatter plot)
+              </label>
+              {showAllConditions && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span>Plot:</span>
+                  <button
+                    onClick={() => setComparisonPlotType('bar')}
+                    className={`px-2 py-0.5 rounded text-xs ${comparisonPlotType === 'bar' ? 'bg-primary-600 text-white' : 'bg-slate-200'}`}
+                  >
+                    Bar
+                  </button>
+                  <button
+                    onClick={() => setComparisonPlotType('scatter')}
+                    className={`px-2 py-0.5 rounded text-xs ${comparisonPlotType === 'scatter' ? 'bg-primary-600 text-white' : 'bg-slate-200'}`}
+                  >
+                    Scatter
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Comparison Chart */}
           {comparisonData.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">
-                  Comparison Results ({showKd ? 'Kd' : 'log K'})
+                  Comparison Results ({showKd ? 'Kd' : 'log K'}) - {comparisonData.length} data points
                 </h4>
                 <button
                   onClick={() => setShowKd(!showKd)}
@@ -1270,43 +1340,115 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   Show {showKd ? 'log K' : 'Kd'}
                 </button>
               </div>
-              <div className="space-y-2">
-                {comparisonData.map((item, idx) => {
-                  const validData = comparisonData.filter(d => d.logK !== null);
-                  const maxLogK = validData.length > 0 ? Math.max(...validData.map(d => d.logK!)) : 0;
-                  const minLogK = validData.length > 0 ? Math.min(...validData.map(d => d.logK!)) : 0;
-                  const range = maxLogK - minLogK || 1;
-                  const percentage = item.logK !== null ? ((item.logK - minLogK) / range) * 100 : 0;
 
-                  return (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className="w-24 text-sm font-medium text-slate-800 dark:text-slate-200 truncate" title={item.label}>
-                        {item.label}
-                      </div>
-                      <div className="flex-1 h-6 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden relative">
-                        {item.logK !== null ? (
-                          <>
-                            <div
-                              className="h-full bg-gradient-to-r from-primary-400 to-primary-600 transition-all"
-                              style={{ width: `${Math.max(5, percentage)}%` }}
-                            />
-                            <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">
-                              {showKd ? convertToKd(item.logK) : item.logK.toFixed(2)}
+              {/* Scatter Plot View */}
+              {showAllConditions && comparisonPlotType === 'scatter' ? (
+                <div className="relative bg-slate-100 dark:bg-slate-800 rounded-lg p-4 h-64 overflow-hidden">
+                  {(() => {
+                    const validData = comparisonData.filter(d => d.logK !== null);
+                    if (validData.length === 0) return <p className="text-center text-slate-500">No data</p>;
+
+                    const maxLogK = Math.max(...validData.map(d => d.logK!));
+                    const minLogK = Math.min(...validData.map(d => d.logK!));
+                    const range = maxLogK - minLogK || 1;
+                    const elements = [...new Set(validData.map(d => d.element))];
+                    const conditions = [...new Set(validData.map(d => d.condition))];
+                    const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+                    return (
+                      <>
+                        {/* Y-axis labels */}
+                        <div className="absolute left-0 top-4 bottom-8 w-12 flex flex-col justify-between text-xs text-slate-500">
+                          <span>{maxLogK.toFixed(1)}</span>
+                          <span>{((maxLogK + minLogK) / 2).toFixed(1)}</span>
+                          <span>{minLogK.toFixed(1)}</span>
+                        </div>
+                        {/* Plot area */}
+                        <div className="ml-14 h-full relative">
+                          {/* Grid lines */}
+                          <div className="absolute inset-0 flex flex-col justify-between">
+                            {[0, 1, 2].map(i => (
+                              <div key={i} className="border-t border-slate-300 dark:border-slate-600" />
+                            ))}
+                          </div>
+                          {/* Data points */}
+                          {validData.map((item, idx) => {
+                            const xIndex = elements.indexOf(item.element!);
+                            const x = (xIndex + 0.5) / elements.length * 100;
+                            const y = 100 - ((item.logK! - minLogK) / range) * 100;
+                            const colorIdx = conditions.indexOf(item.condition!) % colors.length;
+                            return (
+                              <div
+                                key={idx}
+                                className="absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-150 transition-transform"
+                                style={{
+                                  left: `${x}%`,
+                                  top: `${Math.max(5, Math.min(95, y))}%`,
+                                  backgroundColor: colors[colorIdx]
+                                }}
+                                title={`${item.label}: ${item.logK!.toFixed(2)} (${item.details})`}
+                              />
+                            );
+                          })}
+                          {/* X-axis labels */}
+                          <div className="absolute -bottom-6 left-0 right-0 flex justify-around text-xs text-slate-500">
+                            {elements.map(el => <span key={el}>{el}</span>)}
+                          </div>
+                        </div>
+                        {/* Legend */}
+                        <div className="absolute top-2 right-2 text-xs bg-white dark:bg-slate-700 p-1 rounded shadow max-h-24 overflow-y-auto">
+                          {conditions.slice(0, 5).map((cond, i) => (
+                            <div key={cond} className="flex items-center gap-1">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
+                              <span className="truncate max-w-[100px]">{cond}</span>
+                            </div>
+                          ))}
+                          {conditions.length > 5 && <span>+{conditions.length - 5} more</span>}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                /* Bar Chart View */
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {comparisonData.map((item, idx) => {
+                    const validData = comparisonData.filter(d => d.logK !== null);
+                    const maxLogK = validData.length > 0 ? Math.max(...validData.map(d => d.logK!)) : 0;
+                    const minLogK = validData.length > 0 ? Math.min(...validData.map(d => d.logK!)) : 0;
+                    const range = maxLogK - minLogK || 1;
+                    const percentage = item.logK !== null ? ((item.logK - minLogK) / range) * 100 : 0;
+
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-24 text-sm font-medium text-slate-800 dark:text-slate-200 truncate" title={item.label}>
+                          {item.label}
+                        </div>
+                        <div className="flex-1 h-6 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden relative">
+                          {item.logK !== null ? (
+                            <>
+                              <div
+                                className="h-full bg-gradient-to-r from-primary-400 to-primary-600 transition-all"
+                                style={{ width: `${Math.max(5, percentage)}%` }}
+                              />
+                              <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">
+                                {showKd ? convertToKd(item.logK) : item.logK.toFixed(2)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 italic">
+                              No data
                             </span>
-                          </>
-                        ) : (
-                          <span className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 italic">
-                            No data
-                          </span>
-                        )}
+                          )}
+                        </div>
+                        <div className="w-36 text-xs text-slate-500 truncate" title={item.details}>
+                          {item.details}
+                        </div>
                       </div>
-                      <div className="w-36 text-xs text-slate-500 truncate" title={item.details}>
-                        {item.details}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
