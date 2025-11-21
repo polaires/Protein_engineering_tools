@@ -121,35 +121,64 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return 'Stability Constant Comparison';
   }, [comparisonType, comparisonLigand, comparisonElement, selectedElementsForComparison]);
 
-  // Save chart as SVG with watermark (no external dependencies)
+  // Save chart as PNG with watermark
   const saveChartAsImage = useCallback(() => {
     if (!chartRef.current) return;
 
     try {
       const rect = chartRef.current.getBoundingClientRect();
-      const width = rect.width;
-      const height = rect.height;
+      const scale = 2; // Higher resolution
+      const width = rect.width * scale;
+      const height = (rect.height + 30) * scale;
 
       // Create SVG with foreignObject
       const svgContent = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + 25}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
           <rect width="100%" height="100%" fill="white"/>
-          <foreignObject width="${width}" height="${height}">
+          <foreignObject width="${width}" height="${rect.height * scale}" transform="scale(${scale})">
             <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: system-ui, sans-serif;">
               ${chartRef.current.innerHTML}
             </div>
           </foreignObject>
-          <text x="${width - 10}" y="${height + 18}" text-anchor="end" font-size="12" fill="rgba(100,100,100,0.6)">biochem.space</text>
+          <text x="${width - 20}" y="${height - 10}" text-anchor="end" font-size="${14 * scale}" fill="rgba(100,100,100,0.6)">biochem.space</text>
         </svg>
       `;
 
-      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = `stability-comparison-${Date.now()}.svg`;
-      link.href = url;
-      link.click();
-      URL.revokeObjectURL(url);
+      // Convert SVG to PNG via canvas
+      const img = new Image();
+      const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = 'white';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0);
+
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.download = `stability-comparison-${Date.now()}.png`;
+              link.href = url;
+              link.click();
+              URL.revokeObjectURL(url);
+            }
+          }, 'image/png');
+        }
+        URL.revokeObjectURL(svgUrl);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(svgUrl);
+        alert('Failed to generate image. Please try again.');
+      };
+
+      img.src = svgUrl;
     } catch (error) {
       console.error('Failed to save chart:', error);
       alert('Failed to save chart. Please try again.');
@@ -2173,10 +2202,10 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             {showKd ? convertToKd(record.stabilityConstant) : record.stabilityConstant.toFixed(2)}
                           </td>
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                            {record.temperature || 'N/A'}
+                            {record.temperature ?? 'N/A'}
                           </td>
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100">
-                            {record.ionicStrength || 'N/A'}
+                            {record.ionicStrength ?? 'N/A'}
                           </td>
                           <td className="px-4 py-2 text-sm text-slate-900 dark:text-slate-100" title={CONSTANT_TYPE_INFO[record.constantType]}>
                             {record.constantType}
