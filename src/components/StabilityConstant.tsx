@@ -83,6 +83,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [debouncedSearchText, setDebouncedSearchText] = useState<string>('');
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [temperature, setTemperature] = useState<number>(25);
+  const [ionicStrengthFilter, setIonicStrengthFilter] = useState<number | null>(null);
   const [constantType, setConstantType] = useState<string>('All');
   const [betaDefinitionFilter, setBetaDefinitionFilter] = useState<string>('All');
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     setDebouncedSearchText('');
     setSelectedSearchLigand('All');
     setTemperature(25);
+    setIonicStrengthFilter(null);
     setConstantType('All');
     setBetaDefinitionFilter('All');
   };
@@ -280,12 +282,15 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         let matches = true;
 
         // If using search with a specific ligand selected from search results
+        // Common filters
+        const matchesType = constantType === 'All' || record.constantType === constantType;
+        const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
+        const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
+        const matchesIonic = ionicStrengthFilter === null || Math.abs(record.ionicStrength - ionicStrengthFilter) <= 0.1;
+
         if (debouncedSearchText && selectedSearchLigand !== 'All') {
           const matchesSearch = record.ligandName === selectedSearchLigand;
-          const matchesType = constantType === 'All' || record.constantType === constantType;
-          const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-          const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-          matches = matchesSearch && matchesType && matchesBeta && matchesTemp;
+          matches = matchesSearch && matchesType && matchesBeta && matchesTemp && matchesIonic;
         }
         // If using search but no specific ligand selected yet (show nothing until user selects)
         else if (debouncedSearchText && matchedLigands.size > 0) {
@@ -295,10 +300,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         else {
           const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
           const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
-          const matchesType = constantType === 'All' || record.constantType === constantType;
-          const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
-          const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-          matches = matchesClass && matchesSpecific && matchesType && matchesBeta && matchesTemp;
+          matches = matchesClass && matchesSpecific && matchesType && matchesBeta && matchesTemp && matchesIonic;
         }
 
         return matches;
@@ -320,7 +322,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     selectedSpecificLigand,
     constantType,
     betaDefinitionFilter,
-    temperature
+    temperature,
+    ionicStrengthFilter
   ]);
 
   // OPTIMIZATION 4: Memoize average stability calculations
@@ -535,20 +538,12 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
             Filters
           </h3>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowKd(!showKd)}
-              className="btn-secondary text-sm"
-            >
-              Show {showKd ? 'log K' : 'Kd'}
-            </button>
-            <button
-              onClick={resetFilters}
-              className="btn-secondary text-sm"
-            >
-              Reset Filters
-            </button>
-          </div>
+          <button
+            onClick={resetFilters}
+            className="btn-secondary text-sm"
+          >
+            Reset Filters
+          </button>
         </div>
 
 
@@ -681,6 +676,29 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
               <span>0°C</span>
               <span>100°C</span>
+            </div>
+          </div>
+
+          {/* Ionic Strength Filter */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Ionic Strength: {ionicStrengthFilter === null ? 'All' : `${ionicStrengthFilter} M (±0.1)`}
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="0.1"
+              value={ionicStrengthFilter ?? 0}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setIonicStrengthFilter(val === 0 ? null : val);
+              }}
+              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
+            />
+            <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <span>All</span>
+              <span>3 M</span>
             </div>
           </div>
 
@@ -895,12 +913,20 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   </span>
                 )}
               </h3>
-              <button
-                onClick={() => setSelectedElement(null)}
-                className="btn-secondary text-sm"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowKd(!showKd)}
+                  className="btn-secondary text-sm"
+                >
+                  Show {showKd ? 'log K' : 'Kd'}
+                </button>
+                <button
+                  onClick={() => setSelectedElement(null)}
+                  className="btn-secondary text-sm"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             {elementData.length === 0 ? (
