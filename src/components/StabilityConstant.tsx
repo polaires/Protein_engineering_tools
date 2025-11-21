@@ -179,9 +179,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     }
 
     console.log(`Running fuzzy search for: "${debouncedSearchText}"`);
-    // Use score-based filtering instead of hard limit
+    // Use score-based filtering for quality matches
     const results = fuse.search(debouncedSearchText);
-    const SCORE_THRESHOLD = 0.6; // Only include matches with score < 0.6 (lower is better)
+    const SCORE_THRESHOLD = 0.5; // Only include matches with score < 0.5 (lower is better, stricter)
     const matches = new Set(
       results
         .filter(result => result.score! < SCORE_THRESHOLD)
@@ -202,9 +202,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     }
   }, [debouncedSearchText, fuzzyMatchedLigands, selectedSearchLigand]);
 
-  // Create sorted array of matched ligand names for dropdown display
+  // Create sorted array of matched ligand names for dropdown display (limit to 100 for usability)
   const fuzzyMatchedLigandNames = useMemo<string[]>(() => {
-    return ['All', ...Array.from(fuzzyMatchedLigands).sort()];
+    const sortedLigands = Array.from(fuzzyMatchedLigands).sort();
+    const limited = sortedLigands.slice(0, 100);
+    return ['All', ...limited];
   }, [fuzzyMatchedLigands]);
 
   // Load and parse CSV data
@@ -645,7 +647,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
                 {fuzzyMatchCount > 0 ? (
                   <span className="text-green-600 dark:text-green-400">
-                    ✓ Found {fuzzyMatchCount} ligand{fuzzyMatchCount !== 1 ? 's' : ''} matching "{debouncedSearchText}" - select one below
+                    ✓ Found {fuzzyMatchCount} ligand{fuzzyMatchCount !== 1 ? 's' : ''} matching "{debouncedSearchText}"
+                    {fuzzyMatchCount > 100 && ' (showing top 100)'} - select one below
                   </span>
                 ) : (
                   <span className="text-amber-600 dark:text-amber-400">
@@ -671,6 +674,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 value={selectedSearchLigand}
                 onChange={(e) => setSelectedSearchLigand(e.target.value)}
                 className="input-field w-full text-sm"
+                size={Math.min(fuzzyMatchedLigandNames.length, 8)}
               >
                 {fuzzyMatchedLigandNames.map(ligand => (
                   <option key={ligand} value={ligand}>
@@ -679,7 +683,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 ))}
               </select>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Choose a specific ligand to see which elements have data for it
+                {fuzzyMatchCount > 100
+                  ? `Showing top 100 results (${fuzzyMatchCount} total found). Try a more specific search for better results.`
+                  : 'Choose a specific ligand to see which elements have data for it'}
               </p>
             </div>
           )}
