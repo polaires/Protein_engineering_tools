@@ -76,6 +76,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
   // Filter states
   const [selectedLigandClass, setSelectedLigandClass] = useState<string>('All');
+  const [selectedSpecificLigand, setSelectedSpecificLigand] = useState<string>('All');
   const [ligandSearchText, setLigandSearchText] = useState<string>('');
   const [temperature, setTemperature] = useState<number>(25);
   const [constantType, setConstantType] = useState<string>('All');
@@ -87,6 +88,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   // Reset filters to default
   const resetFilters = () => {
     setSelectedLigandClass('All');
+    setSelectedSpecificLigand('All');
     setLigandSearchText('');
     setTemperature(25);
     setConstantType('All');
@@ -172,17 +174,32 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     loadData();
   }, []);
 
-  // Get filtered beta definitions based on current ligand class
+  // Get available specific ligands based on selected class
+  const getAvailableSpecificLigands = (): string[] => {
+    if (selectedLigandClass === 'All') {
+      return ['All'];
+    }
+
+    const filtered = stabilityData.filter(record =>
+      record.ligandClass === selectedLigandClass
+    );
+
+    const ligandSet = new Set(filtered.map(r => r.ligandName).filter(name => name));
+    return ['All', ...Array.from(ligandSet).sort()];
+  };
+
+  // Get filtered beta definitions based on current ligand selection
   const getFilteredBetaDefinitions = () => {
-    if (selectedLigandClass === 'All' && !ligandSearchText) {
+    if (selectedLigandClass === 'All' && selectedSpecificLigand === 'All' && !ligandSearchText) {
       return availableBetaDefinitions;
     }
 
     const filtered = stabilityData.filter(record => {
       const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+      const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
       const matchesSearch = !ligandSearchText ||
         record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase());
-      return matchesClass && matchesSearch;
+      return matchesClass && matchesSpecific && matchesSearch;
     });
 
     const betaSet = new Set(filtered.map(r => r.betaDefinition).filter(b => b));
@@ -194,12 +211,13 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     const filtered = stabilityData.filter(record => {
       const matchesElement = record.element === elementSymbol;
       const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+      const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
       const matchesSearch = !ligandSearchText ||
         record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase());
       const matchesType = constantType === 'All' || record.constantType === constantType;
       const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
       const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-      return matchesElement && matchesClass && matchesSearch && matchesType && matchesBeta && matchesTemp;
+      return matchesElement && matchesClass && matchesSpecific && matchesSearch && matchesType && matchesBeta && matchesTemp;
     });
 
     if (filtered.length === 0) {
@@ -319,7 +337,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             </button>
           </div>
           <p className="text-slate-600 dark:text-slate-400">
-            Explore metal-ligand stability constants from the NIST SRD 46 database. Filter by ligand class, search specific ligands, adjust temperature (±5°C tolerance), and filter by equilibrium type. Colors dynamically update based on average log K values - elements without data for the selected conditions appear gray.
+            Explore metal-ligand stability constants from the NIST SRD 46 database. Filter by ligand class, then select specific ligands from that class, or use text search. Adjust temperature (±5°C tolerance) and filter by equilibrium type. Colors dynamically update based on average log K values - elements without data for the selected conditions appear gray.
           </p>
           {stabilityData.length > 0 && (
             <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
@@ -378,6 +396,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               value={selectedLigandClass}
               onChange={(e) => {
                 setSelectedLigandClass(e.target.value);
+                setSelectedSpecificLigand('All'); // Reset specific ligand when class changes
                 setBetaDefinitionFilter('All'); // Reset beta filter when class changes
               }}
               className="input-field w-full text-sm"
@@ -387,6 +406,29 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               ))}
             </select>
           </div>
+
+          {/* Specific Ligand Filter - Only show when a class is selected */}
+          {selectedLigandClass !== 'All' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Specific Ligand
+              </label>
+              <select
+                value={selectedSpecificLigand}
+                onChange={(e) => {
+                  setSelectedSpecificLigand(e.target.value);
+                  setBetaDefinitionFilter('All'); // Reset beta filter when ligand changes
+                }}
+                className="input-field w-full text-sm"
+              >
+                {getAvailableSpecificLigands().map(ligand => (
+                  <option key={ligand} value={ligand}>
+                    {ligand.length > 50 ? ligand.substring(0, 50) + '...' : ligand}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Ligand Search */}
           <div>
@@ -623,6 +665,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         const elementData = stabilityData
           .filter(record => record.element === selectedElement)
           .filter(record => selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass)
+          .filter(record => selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand)
           .filter(record => !ligandSearchText || record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase()))
           .filter(record => constantType === 'All' || record.constantType === constantType)
           .filter(record => betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter)
