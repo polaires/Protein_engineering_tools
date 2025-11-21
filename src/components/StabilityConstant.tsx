@@ -121,7 +121,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     return 'Stability Constant Comparison';
   }, [comparisonType, comparisonLigand, comparisonElement, selectedElementsForComparison]);
 
-  // Save chart as SVG with watermark (PNG conversion has cross-browser issues)
+  // Save chart as PNG with watermark
   const saveChartAsImage = useCallback(() => {
     if (!chartRef.current) return;
 
@@ -146,15 +146,48 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   <text x="${width - 10}" y="${height - 8}" text-anchor="end" class="watermark">biochem.space</text>
 </svg>`;
 
-      const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = `stability-comparison-${Date.now()}.svg`;
-      link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Convert SVG to PNG using canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      const img = new Image();
+      const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+
+        // Convert canvas to PNG and download
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            alert('Failed to create PNG image. Please try again.');
+            return;
+          }
+
+          const pngUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = `stability-comparison-${Date.now()}.png`;
+          link.href = pngUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(pngUrl);
+        }, 'image/png');
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        alert('Failed to save chart as PNG. Please try again.');
+      };
+
+      img.src = url;
     } catch (error) {
       console.error('Failed to save chart:', error);
       alert('Failed to save chart. Please try again.');
