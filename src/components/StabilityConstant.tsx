@@ -1463,26 +1463,45 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                             />
                           ))}
                           {/* Data points */}
-                          {validData.map((item, idx) => {
-                            const xLabel = showAllConditions && comparisonType === 'elements' ? item.element! : item.label;
-                            const xIndex = uniqueXLabels.indexOf(xLabel);
-                            if (xIndex === -1) return null;
-                            const x = ((xIndex + 0.5) / uniqueXLabels.length) * 100;
-                            const y = ((yMax - item.logK!) / range) * 100;
-                            const colorIdx = showAllConditions ? conditions.indexOf(item.condition!) % colors.length : idx % colors.length;
-                            return (
-                              <div
-                                key={idx}
-                                className="absolute w-4 h-4 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-150 transition-transform border-2 border-white dark:border-slate-800 shadow-sm"
-                                style={{
-                                  left: `${x}%`,
-                                  top: `${Math.max(2, Math.min(98, y))}%`,
-                                  backgroundColor: colors[colorIdx]
-                                }}
-                                title={`${item.label}: ${showKd ? convertToKd(item.logK!) : item.logK!.toFixed(2)} (${item.details})`}
-                              />
-                            );
-                          })}
+                          {(() => {
+                            // Group points by x-label to calculate jitter
+                            const pointsByX: Record<string, typeof validData> = {};
+                            validData.forEach(item => {
+                              const xLabel = showAllConditions && comparisonType === 'elements' ? item.element! : item.label;
+                              if (!pointsByX[xLabel]) pointsByX[xLabel] = [];
+                              pointsByX[xLabel].push(item);
+                            });
+
+                            return validData.map((item, idx) => {
+                              const xLabel = showAllConditions && comparisonType === 'elements' ? item.element! : item.label;
+                              const xIndex = uniqueXLabels.indexOf(xLabel);
+                              if (xIndex === -1) return null;
+
+                              // Calculate jitter for multiple points at same x
+                              const pointsAtX = pointsByX[xLabel] || [];
+                              const pointIdxInGroup = pointsAtX.indexOf(item);
+                              const jitterSpread = Math.min(0.4, 0.8 / uniqueXLabels.length); // Max spread within column
+                              const jitter = pointsAtX.length > 1
+                                ? (pointIdxInGroup / (pointsAtX.length - 1) - 0.5) * jitterSpread
+                                : 0;
+
+                              const x = ((xIndex + 0.5 + jitter) / uniqueXLabels.length) * 100;
+                              const y = ((yMax - item.logK!) / range) * 100;
+                              const colorIdx = showAllConditions ? conditions.indexOf(item.condition!) % colors.length : idx % colors.length;
+                              return (
+                                <div
+                                  key={idx}
+                                  className="absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 cursor-pointer hover:scale-150 transition-transform border border-white dark:border-slate-800 shadow-sm"
+                                  style={{
+                                    left: `${x}%`,
+                                    top: `${Math.max(2, Math.min(98, y))}%`,
+                                    backgroundColor: colors[colorIdx]
+                                  }}
+                                  title={`${item.label}: ${showKd ? convertToKd(item.logK!) : item.logK!.toFixed(2)} (${item.details})`}
+                                />
+                              );
+                            });
+                          })()}
                           {/* X-axis labels */}
                           <div className="absolute top-full left-0 right-0 flex pt-2">
                             {uniqueXLabels.map((label) => (
