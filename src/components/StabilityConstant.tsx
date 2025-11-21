@@ -101,7 +101,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [comparisonElement, setComparisonElement] = useState<string>(''); // Single element when comparing ligands
   const [comparisonLigandSearch, setComparisonLigandSearch] = useState<string>(''); // Search for ligands in comparison
   const [selectedConditionsForComparison, setSelectedConditionsForComparison] = useState<string[]>([]); // For conditions mode
-  const [comparisonPlotType, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
+  const [, setComparisonPlotType] = useState<'bar' | 'scatter'>('bar');
   const [showAllConditions, setShowAllConditions] = useState<boolean>(false); // Show all conditions in elements mode
 
   // Debounce search text to avoid filtering on every keystroke
@@ -1424,7 +1424,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                           })}
                           {/* X-axis labels */}
                           <div className="absolute top-full left-0 right-0 flex pt-2">
-                            {elements.map((el, i) => (
+                            {elements.map((el) => (
                               <div key={el} className="flex-1 text-center text-xs text-slate-600 dark:text-slate-400 font-medium">
                                 {el}
                               </div>
