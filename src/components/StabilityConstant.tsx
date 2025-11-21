@@ -286,7 +286,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         const matchesType = constantType === 'All' || record.constantType === constantType;
         const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
         const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-        const matchesIonic = ionicStrengthFilter === null || Math.abs(record.ionicStrength - ionicStrengthFilter) <= 0.1;
+        const matchesIonic = ionicStrengthFilter === null || record.ionicStrength === ionicStrengthFilter;
 
         if (debouncedSearchText && selectedSearchLigand !== 'All') {
           const matchesSearch = record.ligandName === selectedSearchLigand;
@@ -390,6 +390,31 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
     const betaSet = new Set(filtered.map(r => r.betaDefinition).filter(b => b));
     return ['All', ...Array.from(betaSet).sort().slice(0, 50)];
+  };
+
+  // Get available ionic strengths based on current ligand selection
+  const getAvailableIonicStrengths = (): number[] => {
+    const filtered: StabilityRecord[] = [];
+    dataByElement.forEach((records) => {
+      records.forEach(record => {
+        if (debouncedSearchText && selectedSearchLigand !== 'All') {
+          if (record.ligandName === selectedSearchLigand) {
+            filtered.push(record);
+          }
+        } else if (debouncedSearchText && matchedLigands.size > 0) {
+          // Don't include anything until user selects a ligand
+        } else {
+          const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+          const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
+          if (matchesClass && matchesSpecific) {
+            filtered.push(record);
+          }
+        }
+      });
+    });
+
+    const ionicSet = new Set(filtered.map(r => r.ionicStrength));
+    return Array.from(ionicSet).sort((a, b) => a - b);
   };
 
   // OPTIMIZATION 5: Optimized function to get stability for an element (now just a lookup!)
@@ -682,24 +707,23 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           {/* Ionic Strength Filter */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Ionic Strength: {ionicStrengthFilter === null ? 'All' : `${ionicStrengthFilter} M (±0.1)`}
+              Ionic Strength (M)
             </label>
-            <input
-              type="range"
-              min="0"
-              max="3"
-              step="0.1"
-              value={ionicStrengthFilter ?? 0}
+            <select
+              value={ionicStrengthFilter === null ? 'All' : ionicStrengthFilter.toString()}
               onChange={(e) => {
-                const val = parseFloat(e.target.value);
-                setIonicStrengthFilter(val === 0 ? null : val);
+                const val = e.target.value;
+                setIonicStrengthFilter(val === 'All' ? null : parseFloat(val));
               }}
-              className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary-600"
-            />
-            <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
-              <span>All</span>
-              <span>3 M</span>
-            </div>
+              className="input-field w-full text-sm"
+            >
+              <option value="All">All</option>
+              {getAvailableIonicStrengths().map(ionic => (
+                <option key={ionic} value={ionic.toString()}>
+                  {ionic}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Constant Type Selector */}
