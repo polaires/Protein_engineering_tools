@@ -78,6 +78,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [selectedLigandClass, setSelectedLigandClass] = useState<string>('All');
   const [selectedSpecificLigand, setSelectedSpecificLigand] = useState<string>('All');
   const [ligandSearchText, setLigandSearchText] = useState<string>('');
+  const [debouncedSearchText, setDebouncedSearchText] = useState<string>('');
   const [temperature, setTemperature] = useState<number>(25);
   const [constantType, setConstantType] = useState<string>('All');
   const [betaDefinitionFilter, setBetaDefinitionFilter] = useState<string>('All');
@@ -85,11 +86,21 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const [showKd, setShowKd] = useState<boolean>(false);
   const [showInfo, setShowInfo] = useState<boolean>(false);
 
+  // Debounce search text to avoid filtering on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchText(ligandSearchText);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [ligandSearchText]);
+
   // Reset filters to default
   const resetFilters = () => {
     setSelectedLigandClass('All');
     setSelectedSpecificLigand('All');
     setLigandSearchText('');
+    setDebouncedSearchText('');
     setTemperature(25);
     setConstantType('All');
     setBetaDefinitionFilter('All');
@@ -190,16 +201,20 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
   // Get filtered beta definitions based on current ligand selection
   const getFilteredBetaDefinitions = () => {
-    if (selectedLigandClass === 'All' && selectedSpecificLigand === 'All' && !ligandSearchText) {
+    if (selectedLigandClass === 'All' && selectedSpecificLigand === 'All' && !debouncedSearchText) {
       return availableBetaDefinitions;
     }
 
     const filtered = stabilityData.filter(record => {
+      // If using search, ignore class/specific ligand selections
+      if (debouncedSearchText) {
+        return record.ligandName.toLowerCase().includes(debouncedSearchText.toLowerCase());
+      }
+
+      // Otherwise use class/specific ligand
       const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
       const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
-      const matchesSearch = !ligandSearchText ||
-        record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase());
-      return matchesClass && matchesSpecific && matchesSearch;
+      return matchesClass && matchesSpecific;
     });
 
     const betaSet = new Set(filtered.map(r => r.betaDefinition).filter(b => b));
@@ -210,14 +225,23 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const getStabilityForElement = (elementSymbol: string): number | null => {
     const filtered = stabilityData.filter(record => {
       const matchesElement = record.element === elementSymbol;
+
+      // If using search, only filter by search (ignore class/specific ligand)
+      if (debouncedSearchText) {
+        const matchesSearch = record.ligandName.toLowerCase().includes(debouncedSearchText.toLowerCase());
+        const matchesType = constantType === 'All' || record.constantType === constantType;
+        const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
+        const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
+        return matchesElement && matchesSearch && matchesType && matchesBeta && matchesTemp;
+      }
+
+      // Otherwise use dropdown selections (class/specific ligand)
       const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
       const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
-      const matchesSearch = !ligandSearchText ||
-        record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase());
       const matchesType = constantType === 'All' || record.constantType === constantType;
       const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
       const matchesTemp = Math.abs(record.temperature - temperature) <= 5; // Within 5°C
-      return matchesElement && matchesClass && matchesSpecific && matchesSearch && matchesType && matchesBeta && matchesTemp;
+      return matchesElement && matchesClass && matchesSpecific && matchesType && matchesBeta && matchesTemp;
     });
 
     if (filtered.length === 0) {
@@ -397,6 +421,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               onChange={(e) => {
                 setSelectedLigandClass(e.target.value);
                 setSelectedSpecificLigand('All'); // Reset specific ligand when class changes
+                setLigandSearchText(''); // Clear search when using dropdown
+                setDebouncedSearchText(''); // Clear debounced search too
                 setBetaDefinitionFilter('All'); // Reset beta filter when class changes
               }}
               className="input-field w-full text-sm"
@@ -417,6 +443,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 value={selectedSpecificLigand}
                 onChange={(e) => {
                   setSelectedSpecificLigand(e.target.value);
+                  setLigandSearchText(''); // Clear search when using dropdown
+                  setDebouncedSearchText(''); // Clear debounced search too
                   setBetaDefinitionFilter('All'); // Reset beta filter when ligand changes
                 }}
                 className="input-field w-full text-sm"
@@ -442,6 +470,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 value={ligandSearchText}
                 onChange={(e) => {
                   setLigandSearchText(e.target.value);
+                  // Clear dropdown selections when using search
+                  if (e.target.value) {
+                    setSelectedLigandClass('All');
+                    setSelectedSpecificLigand('All');
+                  }
                   setBetaDefinitionFilter('All'); // Reset beta filter when search changes
                 }}
                 placeholder="e.g., glycine, EDTA..."
@@ -663,12 +696,24 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       {/* Detail Panel */}
       {selectedElement && (() => {
         const elementData = stabilityData
-          .filter(record => record.element === selectedElement)
-          .filter(record => selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass)
-          .filter(record => selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand)
-          .filter(record => !ligandSearchText || record.ligandName.toLowerCase().includes(ligandSearchText.toLowerCase()))
-          .filter(record => constantType === 'All' || record.constantType === constantType)
-          .filter(record => betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter)
+          .filter(record => {
+            const matchesElement = record.element === selectedElement;
+
+            // If using search, only filter by search (ignore class/specific ligand)
+            if (debouncedSearchText) {
+              const matchesSearch = record.ligandName.toLowerCase().includes(debouncedSearchText.toLowerCase());
+              const matchesType = constantType === 'All' || record.constantType === constantType;
+              const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
+              return matchesElement && matchesSearch && matchesType && matchesBeta;
+            }
+
+            // Otherwise use dropdown selections (class/specific ligand)
+            const matchesClass = selectedLigandClass === 'All' || record.ligandClass === selectedLigandClass;
+            const matchesSpecific = selectedSpecificLigand === 'All' || record.ligandName === selectedSpecificLigand;
+            const matchesType = constantType === 'All' || record.constantType === constantType;
+            const matchesBeta = betaDefinitionFilter === 'All' || record.betaDefinition === betaDefinitionFilter;
+            return matchesElement && matchesClass && matchesSpecific && matchesType && matchesBeta;
+          })
           .sort((a, b) => b.stabilityConstant - a.stabilityConstant)
           .slice(0, 100); // Limit to top 100 for performance
 
