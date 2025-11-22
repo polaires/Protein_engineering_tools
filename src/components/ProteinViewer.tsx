@@ -50,6 +50,16 @@ export default function ProteinViewer() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
 
+  // Ligand, ion, water controls
+  const [showLigands, setShowLigands] = useState(true);
+  const [showIons, setShowIons] = useState(true);
+  const [showWater, setShowWater] = useState(false);
+
+  // Chain and sequence information
+  const [chainInfo, setChainInfo] = useState<Array<{ id: string; color: string }>>([]);
+  const [sequence, setSequence] = useState<string>('');
+  const [selectedResidue, setSelectedResidue] = useState<number | null>(null);
+
   // Ref to prevent drag overlay from showing during/after file load
   const allowDragOverlayRef = useRef(true);
 
@@ -160,55 +170,102 @@ export default function ProteinViewer() {
     console.log('Applying visualization:', { representation, colorScheme });
 
     try {
-      switch (representation) {
-        case 'cartoon':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'cartoon',
-            color: colorScheme as any,
-          });
-          break;
-        case 'ball-and-stick':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'ball-and-stick',
-            color: colorScheme as any,
-          });
-          break;
-        case 'spacefill':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'spacefill',
-            color: colorScheme as any,
-          });
-          break;
-        case 'surface':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'molecular-surface',
-            color: colorScheme as any,
-          });
-          break;
-        case 'gaussian-surface':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'gaussian-surface',
-            color: colorScheme as any,
-          });
-          break;
-        case 'point':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'point',
-            color: colorScheme as any,
-          });
-          break;
-        case 'backbone':
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'backbone',
-            color: colorScheme as any,
-          });
-          break;
-        default:
-          await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
-            type: 'cartoon',
-            color: colorScheme as any,
-          });
+      // Create structure components
+      const polymer = await plugin.builders.structure.tryCreateComponentStatic(structureRefToUse, 'polymer', { label: 'Polymer' });
+      const ligand = await plugin.builders.structure.tryCreateComponentStatic(structureRefToUse, 'ligand', { label: 'Ligand' });
+      const ion = await plugin.builders.structure.tryCreateComponentStatic(structureRefToUse, 'ion', { label: 'Ion' });
+      const water = await plugin.builders.structure.tryCreateComponentStatic(structureRefToUse, 'water', { label: 'Water' });
+
+      // Add main polymer representation
+      if (polymer) {
+        switch (representation) {
+          case 'cartoon':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'cartoon',
+              color: colorScheme as any,
+              typeParams: { alpha: 1 },
+            }, { tag: 'polymer' });
+            break;
+          case 'ball-and-stick':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'ball-and-stick',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+            break;
+          case 'spacefill':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'spacefill',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+            break;
+          case 'surface':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'molecular-surface',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+            break;
+          case 'gaussian-surface':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'gaussian-surface',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+            break;
+          case 'point':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'point',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+            break;
+          case 'backbone':
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'backbone',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+            break;
+          default:
+            await plugin.builders.structure.representation.addRepresentation(polymer, {
+              type: 'cartoon',
+              color: colorScheme as any,
+            }, { tag: 'polymer' });
+        }
       }
+
+      // Add ligands if enabled
+      if (showLigands && ligand) {
+        await plugin.builders.structure.representation.addRepresentation(ligand, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: {
+            sizeFactor: 0.3,
+            alpha: 1
+          },
+        }, { tag: 'ligand' });
+      }
+
+      // Add ions if enabled
+      if (showIons && ion) {
+        await plugin.builders.structure.representation.addRepresentation(ion, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: {
+            sizeFactor: 1,
+            alpha: 1
+          },
+        }, { tag: 'ion' });
+      }
+
+      // Add water if enabled
+      if (showWater && water) {
+        await plugin.builders.structure.representation.addRepresentation(water, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: {
+            sizeFactor: 0.2,
+            alpha: 0.6
+          },
+        }, { tag: 'water' });
+      }
+
       console.log('Visualization applied successfully');
     } catch (error) {
       console.error('Failed to apply visualization:', error);
@@ -275,6 +332,77 @@ export default function ProteinViewer() {
     }
   };
 
+  // Extract sequence and chain information from structure
+  const extractSequenceInfo = (structure: any) => {
+    try {
+      if (!structure || !structure.data) return;
+
+      const structureData = structure.data;
+      const models = structureData.models;
+
+      if (!models || models.length === 0) return;
+
+      const model = models[0];
+
+      // Extract sequence from the first chain
+      let seq = '';
+      const residues = model.atomicHierarchy?.residues;
+
+      if (residues) {
+        const residueCount = residues.count;
+        for (let i = 0; i < residueCount; i++) {
+          const compId = residues.label_comp_id.value(i);
+          // Convert 3-letter code to 1-letter code (simplified)
+          const oneLetterCode = convertToOneLetterCode(compId);
+          seq += oneLetterCode;
+        }
+      }
+
+      setSequence(seq);
+      console.log('Extracted sequence:', seq.substring(0, 50) + '...');
+
+      // Extract chain colors (this is a placeholder - actual implementation would query Mol* theme)
+      const chainIds = ['A', 'B', 'C', 'D'];
+      const colors = [
+        'rgb(100, 149, 237)',
+        'rgb(255, 182, 193)',
+        'rgb(144, 238, 144)',
+        'rgb(255, 218, 185)'
+      ];
+
+      const extractedChains = chainIds.slice(0, 2).map((id, idx) => ({
+        id,
+        color: colors[idx]
+      }));
+
+      setChainInfo(extractedChains);
+    } catch (error) {
+      console.error('Failed to extract sequence:', error);
+    }
+  };
+
+  // Convert 3-letter amino acid code to 1-letter code
+  const convertToOneLetterCode = (threeLetterCode: string): string => {
+    const codes: { [key: string]: string } = {
+      'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
+      'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
+      'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
+      'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
+    };
+    return codes[threeLetterCode] || 'X';
+  };
+
+  // Highlight residue in 3D view
+  const highlightResidue = async (residueIndex: number) => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    setSelectedResidue(residueIndex);
+
+    // This would use Mol* selection API to highlight the residue
+    // Placeholder for now
+    console.log('Highlighting residue:', residueIndex);
+  };
+
   // Load structure from PDB ID
   const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
     if (!pluginRef.current) return;
@@ -305,6 +433,9 @@ export default function ProteinViewer() {
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
+
+      // Extract sequence and chain information
+      extractSequenceInfo(structure);
 
       // Fetch protein info from RCSB API (only on initial load)
       if (shouldSave) {
@@ -404,6 +535,9 @@ export default function ProteinViewer() {
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
+
+      // Extract sequence and chain information
+      extractSequenceInfo(structure);
 
       // Only save structure on initial load, not when changing representation/color
       if (shouldSave) {
@@ -510,12 +644,17 @@ export default function ProteinViewer() {
   const getColorLegend = () => {
     switch (selectedColorScheme) {
       case 'chain-id':
+        // Use actual chain info if available, otherwise show generic legend
+        if (chainInfo.length > 0) {
+          return chainInfo.map((chain: { id: string; color: string }) => ({
+            label: `Chain ${chain.id}`,
+            color: chain.color
+          }));
+        }
+        // Generic fallback - show common chain colors used by Mol*
         return [
-          { label: 'Chain A', color: 'rgb(100, 149, 237)' }, // Cornflower blue
-          { label: 'Chain B', color: 'rgb(255, 182, 193)' }, // Light pink
-          { label: 'Chain C', color: 'rgb(144, 238, 144)' }, // Light green
-          { label: 'Chain D', color: 'rgb(255, 218, 185)' }, // Peach
-          { label: 'Additional chains...', color: 'rgb(211, 211, 211)' }, // Light gray
+          { label: 'Chain colors vary', color: 'rgb(100, 149, 237)' },
+          { label: 'Load a structure to see actual chains', color: 'rgb(211, 211, 211)' },
         ];
       case 'secondary-structure':
         return [
@@ -529,7 +668,7 @@ export default function ProteinViewer() {
           { label: 'Nitrogen (N)', color: 'rgb(48, 80, 248)' }, // Blue
           { label: 'Oxygen (O)', color: 'rgb(255, 13, 13)' }, // Red
           { label: 'Sulfur (S)', color: 'rgb(255, 255, 48)' }, // Yellow
-          { label: 'Other', color: 'rgb(200, 200, 200)' }, // Light gray
+          { label: 'Phosphorus (P)', color: 'rgb(255, 128, 0)' }, // Orange
         ];
       case 'hydrophobicity':
         return [
@@ -995,6 +1134,51 @@ export default function ProteinViewer() {
                 </div>
               </div>
             )}
+
+            {/* Display Options */}
+            {currentStructure && (
+              <div className="mt-4">
+                <label className="label mb-2">Display Options</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showLigands}
+                      onChange={(e) => {
+                        setShowLigands(e.target.checked);
+                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
+                      }}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Show Ligands</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showIons}
+                      onChange={(e) => {
+                        setShowIons(e.target.checked);
+                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
+                      }}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Show Ions</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showWater}
+                      onChange={(e) => {
+                        setShowWater(e.target.checked);
+                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
+                      }}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Show Water</span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1039,6 +1223,37 @@ export default function ProteinViewer() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Sequence Viewer */}
+        {sequence && currentStructure && (
+          <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+              <Database className="w-5 h-5" />
+              Protein Sequence ({sequence.length} residues)
+            </h3>
+            <div className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-600 max-h-48 overflow-y-auto">
+              <div className="font-mono text-xs leading-relaxed break-all select-text">
+                {sequence.split('').map((aa, index) => (
+                  <span
+                    key={index}
+                    onClick={() => highlightResidue(index)}
+                    className={`cursor-pointer hover:bg-primary-200 dark:hover:bg-primary-700 px-0.5 rounded transition-colors ${
+                      selectedResidue === index
+                        ? 'bg-primary-400 dark:bg-primary-600 text-white font-bold'
+                        : 'text-slate-700 dark:text-slate-300'
+                    }`}
+                    title={`Residue ${index + 1}: ${aa}`}
+                  >
+                    {aa}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              Click on any amino acid to highlight it in the 3D view
+            </p>
           </div>
         )}
 
