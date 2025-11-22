@@ -44,7 +44,7 @@ export default function ProteinViewer() {
   const [showControls, setShowControls] = useState(true);
   const [showStructureList, setShowStructureList] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
-  const [selectedColorScheme, setSelectedColorScheme] = useState('default');
+  const [selectedColorScheme, setSelectedColorScheme] = useState('uniform');
   const [selectedRepresentation, setSelectedRepresentation] = useState('cartoon');
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -55,7 +55,7 @@ export default function ProteinViewer() {
 
   // Color schemes
   const colorSchemes: ColorScheme[] = [
-    { id: 'default', name: 'Default', description: 'Standard coloring' },
+    { id: 'uniform', name: 'Uniform', description: 'Single solid color' },
     { id: 'chain-id', name: 'By Chain', description: 'Color by chain ID' },
     { id: 'entity-id', name: 'By Entity', description: 'Color by entity' },
     { id: 'residue-name', name: 'By Residue', description: 'Color by residue type' },
@@ -162,49 +162,49 @@ export default function ProteinViewer() {
         case 'cartoon':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         case 'ball-and-stick':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'ball-and-stick',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         case 'spacefill':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'spacefill',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         case 'surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'molecular-surface',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         case 'gaussian-surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'gaussian-surface',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         case 'point':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'point',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         case 'backbone':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'backbone',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
           break;
         default:
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            colorTheme: { name: colorScheme as any },
+            colorTheme: { name: colorScheme, params: {} },
           });
       }
     } catch (error) {
