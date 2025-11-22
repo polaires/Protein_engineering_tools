@@ -157,56 +157,59 @@ export default function ProteinViewer() {
 
     const plugin = pluginRef.current;
 
+    console.log('Applying visualization:', { representation, colorScheme });
+
     try {
       switch (representation) {
         case 'cartoon':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         case 'ball-and-stick':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'ball-and-stick',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         case 'spacefill':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'spacefill',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         case 'surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'molecular-surface',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         case 'gaussian-surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'gaussian-surface',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         case 'point':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'point',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         case 'backbone':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'backbone',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
           break;
         default:
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            colorTheme: { name: colorScheme, params: {} },
+            color: colorScheme,
           });
       }
+      console.log('Visualization applied successfully');
     } catch (error) {
       console.error('Failed to apply visualization:', error);
     }
