@@ -41,7 +41,6 @@ export default function ProteinViewer() {
   const [proteinInfo, setProteinInfo] = useState<ProteinInfo | null>(null);
   const [pdbSearchQuery, setPdbSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showControls, setShowControls] = useState(true);
   const [showStructureList, setShowStructureList] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
   const [selectedColorScheme, setSelectedColorScheme] = useState('uniform');
@@ -220,7 +219,6 @@ export default function ProteinViewer() {
 
     try {
       // Clear existing structure
-      await PluginCommands.State.RemoveObject(plugin, { state: plugin.state.data, ref: structureRef.current });
       await plugin.clear();
 
       let data;
@@ -235,14 +233,13 @@ export default function ProteinViewer() {
       } else {
         const file = source as File;
         const content = await file.text();
-        const blob = new Blob([content], { type: 'text/plain' });
-        data = await plugin.builders.data.readFile({ file: blob, name: file.name }, { state: { isGhost: true } });
+        data = await plugin.builders.data.rawData({ data: content, label: file.name });
         format = file.name.endsWith('.cif') ? 'mmcif' : 'pdb';
         id = file.name.replace(/\.(pdb|cif)$/i, '') || generateStructureId();
       }
 
       // Parse structure
-      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+      const trajectory = await plugin.builders.structure.parseTrajectory(data, format as any);
       const model = await plugin.builders.structure.createModel(trajectory);
       const structure = await plugin.builders.structure.createStructure(model);
 
@@ -253,11 +250,7 @@ export default function ProteinViewer() {
       await applyVisualization(structure.ref, selectedRepresentation, selectedColorScheme);
 
       // Auto-focus on structure
-      const state = plugin.state.data;
-      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
-      if (reprs.length > 0) {
-        await PluginCommands.Camera.Focus(plugin, { target: reprs[0] });
-      }
+      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
 
       // Extract structure info
       const info = extractProteinInfo(plugin);
@@ -337,17 +330,34 @@ export default function ProteinViewer() {
 
     try {
       const plugin = pluginRef.current;
-      const state = plugin.state.data;
 
-      // Remove existing representations
-      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
-      for (const repr of reprs) {
-        await PluginCommands.State.RemoveObject(plugin, { state, ref: repr.transform.ref });
+      // Clear and rebuild - simplest approach
+      await plugin.clear();
+
+      // Reload structure data from currentStructure
+      if (currentStructure!.data) {
+        const format = currentStructure!.format || 'pdb';
+
+        const data = await plugin.builders.data.rawData({ data: currentStructure!.data, label: currentStructure!.name });
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, format as any);
+        const model = await plugin.builders.structure.createModel(trajectory);
+        const structure = await plugin.builders.structure.createStructure(model);
+
+        structureRef.current = structure.ref;
+        await applyVisualization(structure.ref, representation, selectedColorScheme);
+      } else if (currentStructure!.url) {
+        const data = await plugin.builders.data.download({ url: currentStructure!.url });
+        const format = currentStructure!.format || 'pdb';
+
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, format as any);
+        const model = await plugin.builders.structure.createModel(trajectory);
+        const structure = await plugin.builders.structure.createStructure(model);
+
+        structureRef.current = structure.ref;
+        await applyVisualization(structure.ref, representation, selectedColorScheme);
       }
 
-      // Add new representation with current color scheme
-      await applyVisualization(structureRef.current, representation, selectedColorScheme);
-
+      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
       showToast('success', `Changed to ${representation} representation`);
     } catch (error) {
       console.error('Error changing representation:', error);
@@ -366,17 +376,34 @@ export default function ProteinViewer() {
 
     try {
       const plugin = pluginRef.current;
-      const state = plugin.state.data;
 
-      // Remove existing representations
-      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
-      for (const repr of reprs) {
-        await PluginCommands.State.RemoveObject(plugin, { state, ref: repr.transform.ref });
+      // Clear and rebuild - simplest approach
+      await plugin.clear();
+
+      // Reload structure data from currentStructure
+      if (currentStructure!.data) {
+        const format = currentStructure!.format || 'pdb';
+
+        const data = await plugin.builders.data.rawData({ data: currentStructure!.data, label: currentStructure!.name });
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, format as any);
+        const model = await plugin.builders.structure.createModel(trajectory);
+        const structure = await plugin.builders.structure.createStructure(model);
+
+        structureRef.current = structure.ref;
+        await applyVisualization(structure.ref, selectedRepresentation, colorScheme);
+      } else if (currentStructure!.url) {
+        const data = await plugin.builders.data.download({ url: currentStructure!.url });
+        const format = currentStructure!.format || 'pdb';
+
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, format as any);
+        const model = await plugin.builders.structure.createModel(trajectory);
+        const structure = await plugin.builders.structure.createStructure(model);
+
+        structureRef.current = structure.ref;
+        await applyVisualization(structure.ref, selectedRepresentation, colorScheme);
       }
 
-      // Add new representation with new color scheme
-      await applyVisualization(structureRef.current, selectedRepresentation, colorScheme);
-
+      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
       showToast('success', `Applied ${colorScheme} color scheme`);
     } catch (error) {
       console.error('Error changing color scheme:', error);
@@ -492,13 +519,8 @@ export default function ProteinViewer() {
   // Center and focus
   const centerAndFocus = () => {
     if (pluginRef.current && structureRef.current) {
-      const plugin = pluginRef.current;
-      const state = plugin.state.data;
-      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
-      if (reprs.length > 0) {
-        PluginCommands.Camera.Focus(plugin, { target: reprs[0] });
-        showToast('success', 'Structure centered');
-      }
+      PluginCommands.Camera.Reset(pluginRef.current, { durationMs: 250 });
+      showToast('success', 'Structure centered');
     }
   };
 
@@ -645,7 +667,7 @@ export default function ProteinViewer() {
                     <div className="flex-1">
                       <p className="font-medium text-sm">{structure.name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {new Date(structure.savedAt).toLocaleString()}
+                        {structure.savedAt ? new Date(structure.savedAt).toLocaleString() : 'No date'}
                       </p>
                     </div>
                     <div className="flex gap-1">
