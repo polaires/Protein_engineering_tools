@@ -55,11 +55,6 @@ export default function ProteinViewer() {
   const [showIons, setShowIons] = useState(true);
   const [showWater, setShowWater] = useState(false);
 
-  // Chain and sequence information
-  const [chainInfo, setChainInfo] = useState<Array<{ id: string; color: string }>>([]);
-  const [sequence, setSequence] = useState<string>('');
-  const [selectedResidue, setSelectedResidue] = useState<number | null>(null);
-
   // Ref to prevent drag overlay from showing during/after file load
   const allowDragOverlayRef = useRef(true);
 
@@ -98,6 +93,12 @@ export default function ProteinViewer() {
             initial: {
               isExpanded: false,
               showControls: false,
+              regionState: {
+                top: 'full',      // Show sequence panel in top region
+                left: 'hidden',
+                right: 'hidden',
+                bottom: 'hidden',
+              },
             },
           },
           components: {
@@ -236,7 +237,7 @@ export default function ProteinViewer() {
           type: 'ball-and-stick',
           color: 'element-symbol' as any,
           typeParams: {
-            sizeFactor: 0.3,
+            sizeFactor: 0.2,  // Smaller size for ligands
             alpha: 1
           },
         }, { tag: 'ligand' });
@@ -248,7 +249,7 @@ export default function ProteinViewer() {
           type: 'ball-and-stick',
           color: 'element-symbol' as any,
           typeParams: {
-            sizeFactor: 1,
+            sizeFactor: 0.4,  // Smaller size for ions
             alpha: 1
           },
         }, { tag: 'ion' });
@@ -332,77 +333,6 @@ export default function ProteinViewer() {
     }
   };
 
-  // Extract sequence and chain information from structure
-  const extractSequenceInfo = (structure: any) => {
-    try {
-      if (!structure || !structure.data) return;
-
-      const structureData = structure.data;
-      const models = structureData.models;
-
-      if (!models || models.length === 0) return;
-
-      const model = models[0];
-
-      // Extract sequence from the first chain
-      let seq = '';
-      const residues = model.atomicHierarchy?.residues;
-
-      if (residues) {
-        const residueCount = residues.count;
-        for (let i = 0; i < residueCount; i++) {
-          const compId = residues.label_comp_id.value(i);
-          // Convert 3-letter code to 1-letter code (simplified)
-          const oneLetterCode = convertToOneLetterCode(compId);
-          seq += oneLetterCode;
-        }
-      }
-
-      setSequence(seq);
-      console.log('Extracted sequence:', seq.substring(0, 50) + '...');
-
-      // Extract chain colors (this is a placeholder - actual implementation would query Mol* theme)
-      const chainIds = ['A', 'B', 'C', 'D'];
-      const colors = [
-        'rgb(100, 149, 237)',
-        'rgb(255, 182, 193)',
-        'rgb(144, 238, 144)',
-        'rgb(255, 218, 185)'
-      ];
-
-      const extractedChains = chainIds.slice(0, 2).map((id, idx) => ({
-        id,
-        color: colors[idx]
-      }));
-
-      setChainInfo(extractedChains);
-    } catch (error) {
-      console.error('Failed to extract sequence:', error);
-    }
-  };
-
-  // Convert 3-letter amino acid code to 1-letter code
-  const convertToOneLetterCode = (threeLetterCode: string): string => {
-    const codes: { [key: string]: string } = {
-      'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
-      'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
-      'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
-      'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
-    };
-    return codes[threeLetterCode] || 'X';
-  };
-
-  // Highlight residue in 3D view
-  const highlightResidue = async (residueIndex: number) => {
-    if (!pluginRef.current || !structureRef.current) return;
-
-    setSelectedResidue(residueIndex);
-
-    // This would use Mol* selection API to highlight the residue
-    // Placeholder for now
-    console.log('Highlighting residue:', residueIndex);
-  };
-
   // Load structure from PDB ID
   const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
     if (!pluginRef.current) return;
@@ -433,9 +363,6 @@ export default function ProteinViewer() {
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
-
-      // Extract sequence and chain information
-      extractSequenceInfo(structure);
 
       // Fetch protein info from RCSB API (only on initial load)
       if (shouldSave) {
@@ -535,9 +462,6 @@ export default function ProteinViewer() {
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
-
-      // Extract sequence and chain information
-      extractSequenceInfo(structure);
 
       // Only save structure on initial load, not when changing representation/color
       if (shouldSave) {
@@ -644,17 +568,13 @@ export default function ProteinViewer() {
   const getColorLegend = () => {
     switch (selectedColorScheme) {
       case 'chain-id':
-        // Use actual chain info if available, otherwise show generic legend
-        if (chainInfo.length > 0) {
-          return chainInfo.map((chain: { id: string; color: string }) => ({
-            label: `Chain ${chain.id}`,
-            color: chain.color
-          }));
-        }
-        // Generic fallback - show common chain colors used by Mol*
+        // Show typical chain colors used by Mol*
         return [
-          { label: 'Chain colors vary', color: 'rgb(100, 149, 237)' },
-          { label: 'Load a structure to see actual chains', color: 'rgb(211, 211, 211)' },
+          { label: 'Chain A', color: 'rgb(100, 149, 237)' }, // Cornflower blue
+          { label: 'Chain B', color: 'rgb(255, 182, 193)' }, // Light pink
+          { label: 'Chain C', color: 'rgb(144, 238, 144)' }, // Light green
+          { label: 'Chain D', color: 'rgb(255, 218, 185)' }, // Peach
+          { label: 'Additional chains follow pattern', color: 'rgb(211, 211, 211)' },
         ];
       case 'secondary-structure':
         return [
@@ -1138,7 +1058,7 @@ export default function ProteinViewer() {
             {/* Display Options */}
             {currentStructure && (
               <div className="mt-4">
-                <label className="label mb-2">Display Options</label>
+                <label className="label mb-2">Additional Components</label>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1150,7 +1070,10 @@ export default function ProteinViewer() {
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Show Ligands</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Ligands & Small Molecules</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Bound molecules, substrates, drugs</span>
+                    </div>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1162,7 +1085,10 @@ export default function ProteinViewer() {
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Show Ions</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Ions & Metal Centers</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Metal ions (Ca²⁺, Mg²⁺, Zn²⁺, etc.)</span>
+                    </div>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1174,9 +1100,15 @@ export default function ProteinViewer() {
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Show Water</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Water Molecules</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Crystallographic water</span>
+                    </div>
                   </label>
                 </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
+                  Note: Components displayed only if present in structure
+                </p>
               </div>
             )}
           </div>
@@ -1223,37 +1155,6 @@ export default function ProteinViewer() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Sequence Viewer */}
-        {sequence && currentStructure && (
-          <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-              <Database className="w-5 h-5" />
-              Protein Sequence ({sequence.length} residues)
-            </h3>
-            <div className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-600 max-h-48 overflow-y-auto">
-              <div className="font-mono text-xs leading-relaxed break-all select-text">
-                {sequence.split('').map((aa, index) => (
-                  <span
-                    key={index}
-                    onClick={() => highlightResidue(index)}
-                    className={`cursor-pointer hover:bg-primary-200 dark:hover:bg-primary-700 px-0.5 rounded transition-colors ${
-                      selectedResidue === index
-                        ? 'bg-primary-400 dark:bg-primary-600 text-white font-bold'
-                        : 'text-slate-700 dark:text-slate-300'
-                    }`}
-                    title={`Residue ${index + 1}: ${aa}`}
-                  >
-                    {aa}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-              Click on any amino acid to highlight it in the 3D view
-            </p>
           </div>
         )}
 
