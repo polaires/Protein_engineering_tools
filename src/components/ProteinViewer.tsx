@@ -93,7 +93,12 @@ export default function ProteinViewer() {
             initial: {
               isExpanded: false,
               showControls: false,
-              showSequence: true,  // Enable built-in sequence panel
+              regionState: {
+                top: 'full',      // Show sequence panel in top region
+                left: 'hidden',
+                right: 'hidden',
+                bottom: 'hidden',
+              },
             },
           },
           components: {
@@ -232,7 +237,7 @@ export default function ProteinViewer() {
           type: 'ball-and-stick',
           color: 'element-symbol' as any,
           typeParams: {
-            sizeFactor: 0.3,
+            sizeFactor: 0.2,  // Smaller size for ligands
             alpha: 1
           },
         }, { tag: 'ligand' });
@@ -244,7 +249,7 @@ export default function ProteinViewer() {
           type: 'ball-and-stick',
           color: 'element-symbol' as any,
           typeParams: {
-            sizeFactor: 1,
+            sizeFactor: 0.4,  // Smaller size for ions
             alpha: 1
           },
         }, { tag: 'ion' });
