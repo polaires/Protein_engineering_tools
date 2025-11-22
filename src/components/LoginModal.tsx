@@ -19,7 +19,7 @@ interface LoginModalProps {
 type AuthMode = 'login' | 'register';
 
 export default function LoginModal({ isOpen, onClose, onSuccess, message }: LoginModalProps) {
-  const { register, login } = useApp();
+  const { register, login, showToast } = useApp();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [username, setUsername] = useState('');
@@ -70,6 +70,10 @@ export default function LoginModal({ isOpen, onClose, onSuccess, message }: Logi
       }
 
       if (result.success) {
+        // Show verification reminder after registration
+        if (mode === 'register') {
+          showToast('info', 'Account created! Please check your email to verify your account');
+        }
         onSuccess?.();
         onClose();
       }

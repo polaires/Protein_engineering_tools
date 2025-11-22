@@ -88,6 +88,10 @@ async function initDatabase() {
                       WHERE table_name='users' AND column_name='reset_token_expiry') THEN
           ALTER TABLE users ADD COLUMN reset_token_expiry TIMESTAMP;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='verification_email_sent_at') THEN
+          ALTER TABLE users ADD COLUMN verification_email_sent_at TIMESTAMP;
+        END IF;
       END $$;
     `);
 
@@ -357,8 +361,8 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Create user with verification token
     const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash, verification_token, verification_token_expiry)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (username, email, password_hash, verification_token, verification_token_expiry, verification_email_sent_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
        RETURNING id, username, email, email_verified, created_at`,
       [username, email, passwordHash, verificationToken, tokenExpiry]
     );
@@ -523,7 +527,7 @@ app.post('/api/auth/verify-email', async (req, res) => {
 app.post('/api/auth/resend-verification', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, email, email_verified FROM users WHERE id = $1',
+      'SELECT id, username, email, email_verified, verification_email_sent_at FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -543,6 +547,22 @@ app.post('/api/auth/resend-verification', authenticateToken, async (req, res) =>
       });
     }
 
+    // Check cooldown period (60 seconds)
+    const COOLDOWN_SECONDS = 60;
+    if (user.verification_email_sent_at) {
+      const lastSentAt = new Date(user.verification_email_sent_at);
+      const secondsSinceLastSent = Math.floor((Date.now() - lastSentAt.getTime()) / 1000);
+
+      if (secondsSinceLastSent < COOLDOWN_SECONDS) {
+        const remainingSeconds = COOLDOWN_SECONDS - secondsSinceLastSent;
+        return res.json({
+          success: false,
+          message: `Please wait ${remainingSeconds} seconds before requesting another verification email.`,
+          remainingSeconds: remainingSeconds
+        });
+      }
+    }
+
     // Generate new verification token
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
@@ -550,7 +570,8 @@ app.post('/api/auth/resend-verification', authenticateToken, async (req, res) =>
     await pool.query(
       `UPDATE users
        SET verification_token = $1,
-           verification_token_expiry = $2
+           verification_token_expiry = $2,
+           verification_email_sent_at = NOW()
        WHERE id = $3`,
       [verificationToken, tokenExpiry, user.id]
     );
@@ -560,7 +581,8 @@ app.post('/api/auth/resend-verification', authenticateToken, async (req, res) =>
 
     res.json({
       success: true,
-      message: 'Verification email sent! Please check your inbox.'
+      message: 'Verification email sent! Please check your inbox.',
+      cooldownSeconds: COOLDOWN_SECONDS
     });
   } catch (error) {
     console.error('Resend verification error:', error);

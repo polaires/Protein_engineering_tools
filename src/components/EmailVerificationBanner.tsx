@@ -3,14 +3,31 @@
  * Shows reminder for unverified users
  */
 
-import { useState } from 'react';
-import { Mail, X, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, X, AlertCircle, Clock } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 
 export default function EmailVerificationBanner() {
   const { currentUser, showToast } = useApp();
   const [isDismissed, setIsDismissed] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (cooldownSeconds > 0) {
+      const timer = setInterval(() => {
+        setCooldownSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [cooldownSeconds]);
 
   // Don't show if user is not logged in, email is verified, or banner is dismissed
   if (!currentUser || currentUser.email_verified || isDismissed) {
@@ -35,8 +52,16 @@ export default function EmailVerificationBanner() {
 
       if (data.success) {
         showToast('success', data.message || 'Verification email sent!');
+        // Set cooldown if provided by backend
+        if (data.cooldownSeconds) {
+          setCooldownSeconds(data.cooldownSeconds);
+        }
       } else {
         showToast('error', data.message || 'Failed to send verification email');
+        // Set cooldown if user tried too soon
+        if (data.remainingSeconds) {
+          setCooldownSeconds(data.remainingSeconds);
+        }
       }
     } catch (error) {
       console.error('Resend verification error:', error);
@@ -69,13 +94,18 @@ export default function EmailVerificationBanner() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleResend}
-              disabled={isResending}
+              disabled={isResending || cooldownSeconds > 0}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-amber-900 dark:text-amber-100 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isResending ? (
                 <>
                   <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
                   Sending...
+                </>
+              ) : cooldownSeconds > 0 ? (
+                <>
+                  <Clock className="w-4 h-4" />
+                  Wait {cooldownSeconds}s
                 </>
               ) : (
                 <>
