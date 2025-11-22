@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { X, UserPlus, LogIn, Mail, Lock, User as UserIcon } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import * as cloudApi from '@/services/cloudApi';
+import ForgotPassword from './ForgotPassword';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export default function LoginModal({ isOpen, onClose, onSuccess, message }: Logi
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   if (!isOpen) return null;
 
@@ -158,10 +160,21 @@ export default function LoginModal({ isOpen, onClose, onSuccess, message }: Logi
 
           {/* Password */}
           <div>
-            <label className="input-label flex items-center gap-2">
-              <Lock className="w-4 h-4" />
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="input-label flex items-center gap-2">
+                <Lock className="w-4 h-4" />
+                Password
+              </label>
+              {mode === 'login' && (
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium"
+                >
+                  Forgot Password?
+                </button>
+              )}
+            </div>
             <input
               type="password"
               className={`input-field ${errors.password ? 'border-red-500' : ''}`}
@@ -244,6 +257,11 @@ export default function LoginModal({ isOpen, onClose, onSuccess, message }: Logi
           </div>
         </form>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <ForgotPassword onClose={() => setShowForgotPassword(false)} />
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 import VerifyEmail from '@/components/VerifyEmail';
 import EmailVerificationBanner from '@/components/EmailVerificationBanner';
+import ResetPassword from '@/components/ResetPassword';
 
 type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'about';
 
@@ -20,15 +21,37 @@ function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('solution');
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
-  // Check for email verification token in URL
+  // Check for email verification token or password reset token in URL
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
+    const reset = urlParams.get('reset-token');
+
     if (token) {
       setVerificationToken(token);
     }
+
+    if (reset) {
+      setResetToken(reset);
+    }
   }, []);
+
+  // Show password reset page if reset token is present
+  if (resetToken) {
+    return (
+      <ResetPassword
+        token={resetToken}
+        onComplete={() => {
+          // Clear token from URL and reload
+          window.history.replaceState({}, '', '/');
+          setResetToken(null);
+          window.location.reload();
+        }}
+      />
+    );
+  }
 
   // Show email verification page if token is present
   if (verificationToken) {
