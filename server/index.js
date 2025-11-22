@@ -48,7 +48,7 @@ app.use(express.json({ limit: '10mb' }));
 async function initDatabase() {
   const client = await pool.connect();
   try {
-    // Create users table with email verification fields
+    // Create users table with email verification and password reset fields
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -58,11 +58,13 @@ async function initDatabase() {
         email_verified BOOLEAN DEFAULT FALSE,
         verification_token VARCHAR(255),
         verification_token_expiry TIMESTAMP,
+        reset_token VARCHAR(255),
+        reset_token_expiry TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Add email verification columns if they don't exist (for existing tables)
+    // Add columns if they don't exist (for existing tables)
     await client.query(`
       DO $$
       BEGIN
@@ -77,6 +79,14 @@ async function initDatabase() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                       WHERE table_name='users' AND column_name='verification_token_expiry') THEN
           ALTER TABLE users ADD COLUMN verification_token_expiry TIMESTAMP;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='reset_token') THEN
+          ALTER TABLE users ADD COLUMN reset_token VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='reset_token_expiry') THEN
+          ALTER TABLE users ADD COLUMN reset_token_expiry TIMESTAMP;
         END IF;
       END $$;
     `);
@@ -202,6 +212,80 @@ async function sendVerificationEmail(email, token, username) {
     return true;
   } catch (error) {
     console.error('Error sending verification email:', error);
+    throw error;
+  }
+}
+
+async function sendPasswordResetEmail(email, token, username) {
+  try {
+    const resetUrl = `${FRONTEND_URL}/?reset-token=${token}`;
+
+    const { data, error } = await resend.emails.send({
+      from: 'Biochem Space <noreply@biochem.space>',
+      to: email,
+      subject: 'Reset your password',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">🔐 Password Reset</h1>
+          </div>
+
+          <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
+            <h2 style="color: #1f2937; margin-top: 0;">Hi ${username}! 👋</h2>
+
+            <p style="font-size: 16px; color: #4b5563;">
+              We received a request to reset your password for your Protein Engineering Tools account.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}"
+                 style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                Reset Password
+              </a>
+            </div>
+
+            <p style="font-size: 14px; color: #6b7280;">
+              Or copy and paste this link into your browser:
+            </p>
+            <p style="background: #fff; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-family: monospace; font-size: 13px; word-break: break-all; color: #667eea;">
+              ${resetUrl}
+            </p>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+              <p style="font-size: 13px; color: #9ca3af; margin: 5px 0;">
+                ⏰ This link will expire in 1 hour
+              </p>
+              <p style="font-size: 13px; color: #9ca3af; margin: 5px 0;">
+                🔒 If you didn't request a password reset, you can safely ignore this email
+              </p>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin-top: 20px; padding: 20px; color: #9ca3af; font-size: 12px;">
+            <p>
+              © ${new Date().getFullYear()} Protein Engineering Tools. All rights reserved.
+            </p>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      throw new Error('Failed to send password reset email');
+    }
+
+    console.log('Password reset email sent:', data);
+    return true;
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
     throw error;
   }
 }
@@ -483,6 +567,132 @@ app.post('/api/auth/resend-verification', authenticateToken, async (req, res) =>
     res.status(500).json({
       success: false,
       message: 'Failed to resend verification email'
+    });
+  }
+});
+
+// Request password reset
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Check if user exists
+    const result = await pool.query(
+      'SELECT id, username, email FROM users WHERE email = $1',
+      [email]
+    );
+
+    // For security, always return success even if email doesn't exist
+    // This prevents email enumeration attacks
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'If an account exists with that email, a password reset link has been sent.'
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Save reset token to database
+    await pool.query(
+      `UPDATE users
+       SET reset_token = $1,
+           reset_token_expiry = $2
+       WHERE id = $3`,
+      [resetToken, tokenExpiry, user.id]
+    );
+
+    // Send password reset email
+    await sendPasswordResetEmail(user.email, resetToken, user.username);
+
+    res.json({
+      success: true,
+      message: 'If an account exists with that email, a password reset link has been sent.'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process password reset request'
+    });
+  }
+});
+
+// Reset password with token
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and new password are required'
+      });
+    }
+
+    // Validate password
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Find user with valid reset token
+    const result = await pool.query(
+      `SELECT id, username, email FROM users
+       WHERE reset_token = $1
+       AND reset_token_expiry > NOW()`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: 'Invalid or expired reset token. Please request a new password reset.'
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear reset token
+    await pool.query(
+      `UPDATE users
+       SET password_hash = $1,
+           reset_token = NULL,
+           reset_token_expiry = NULL
+       WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Password has been reset successfully! You can now login with your new password.',
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during password reset'
     });
   }
 });
