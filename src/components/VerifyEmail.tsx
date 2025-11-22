@@ -122,7 +122,7 @@ export default function VerifyEmail({ token, onVerified }: VerifyEmailProps) {
         <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <Mail className="w-4 h-4" />
-            <span>Need help? Contact support</span>
+            <span>Need help? <a href="mailto:oneweiway@gmail.com" className="text-primary-600 dark:text-primary-400 hover:underline">Contact support</a></span>
           </div>
         </div>
       </div>
