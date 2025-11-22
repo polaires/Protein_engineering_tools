@@ -163,19 +163,20 @@ async function sendVerificationEmail(email, token, username) {
         </head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🧬 Protein Engineering Tools</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">🧬 Biochem Space</h1>
+            <p style="color: rgba(255, 255, 255, 0.9); margin: 8px 0 0 0; font-size: 14px;">Protein Engineering Tools</p>
           </div>
 
           <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
             <h2 style="color: #1f2937; margin-top: 0;">Hi ${username}! 👋</h2>
 
             <p style="font-size: 16px; color: #4b5563;">
-              Welcome to Protein Engineering Tools! To get started, please verify your email address.
+              Welcome to Biochem Space! To get started, please verify your email address.
             </p>
 
             <div style="text-align: center; margin: 30px 0;">
               <a href="${verificationUrl}"
-                 style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                 style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer;">
                 Verify Email Address
               </a>
             </div>
@@ -199,7 +200,7 @@ async function sendVerificationEmail(email, token, username) {
 
           <div style="text-align: center; margin-top: 20px; padding: 20px; color: #9ca3af; font-size: 12px;">
             <p>
-              © ${new Date().getFullYear()} Protein Engineering Tools. All rights reserved.
+              © ${new Date().getFullYear()} Biochem Space. All rights reserved.
             </p>
           </div>
         </body>
@@ -237,14 +238,15 @@ async function sendPasswordResetEmail(email, token, username) {
         </head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🔐 Password Reset</h1>
+            <h1 style="color: white; margin: 0; font-size: 28px;">🔐 Biochem Space</h1>
+            <p style="color: rgba(255, 255, 255, 0.9); margin: 8px 0 0 0; font-size: 14px;">Password Reset</p>
           </div>
 
           <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
             <h2 style="color: #1f2937; margin-top: 0;">Hi ${username}! 👋</h2>
 
             <p style="font-size: 16px; color: #4b5563;">
-              We received a request to reset your password for your Protein Engineering Tools account.
+              We received a request to reset your password for your Biochem Space account.
             </p>
 
             <div style="text-align: center; margin: 30px 0;">
@@ -273,7 +275,7 @@ async function sendPasswordResetEmail(email, token, username) {
 
           <div style="text-align: center; margin-top: 20px; padding: 20px; color: #9ca3af; font-size: 12px;">
             <p>
-              © ${new Date().getFullYear()} Protein Engineering Tools. All rights reserved.
+              © ${new Date().getFullYear()} Biochem Space. All rights reserved.
             </p>
           </div>
         </body>
@@ -478,6 +480,26 @@ app.post('/api/auth/verify-email', async (req, res) => {
   }
 
   try {
+    console.log('Verifying email with token:', token.substring(0, 10) + '...');
+
+    // First, check if the token exists at all
+    const tokenCheck = await pool.query(
+      `SELECT id, username, email, email_verified, verification_token_expiry,
+              verification_token_expiry > NOW() as is_not_expired
+       FROM users
+       WHERE verification_token = $1`,
+      [token]
+    );
+
+    console.log('Token check result:', {
+      found: tokenCheck.rows.length > 0,
+      details: tokenCheck.rows.length > 0 ? {
+        email_verified: tokenCheck.rows[0].email_verified,
+        is_not_expired: tokenCheck.rows[0].is_not_expired,
+        expiry: tokenCheck.rows[0].verification_token_expiry
+      } : 'No matching token found'
+    });
+
     const result = await pool.query(
       `SELECT id, username, email FROM users
        WHERE verification_token = $1
@@ -487,6 +509,32 @@ app.post('/api/auth/verify-email', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      // Provide more specific error message
+      if (tokenCheck.rows.length === 0) {
+        console.log('Token not found in database');
+        return res.json({
+          success: false,
+          message: 'Invalid verification token. Please request a new verification email.'
+        });
+      }
+
+      const user = tokenCheck.rows[0];
+      if (user.email_verified) {
+        console.log('Email already verified');
+        return res.json({
+          success: false,
+          message: 'Email has already been verified. You can now log in.'
+        });
+      }
+
+      if (!user.is_not_expired) {
+        console.log('Token expired');
+        return res.json({
+          success: false,
+          message: 'Verification token has expired. Please request a new verification email.'
+        });
+      }
+
       return res.json({
         success: false,
         message: 'Invalid or expired verification token'
@@ -494,6 +542,7 @@ app.post('/api/auth/verify-email', async (req, res) => {
     }
 
     const user = result.rows[0];
+    console.log('Email verification successful for user:', user.username);
 
     // Mark email as verified and clear token
     await pool.query(
