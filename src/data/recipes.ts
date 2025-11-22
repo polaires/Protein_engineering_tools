@@ -172,99 +172,8 @@ export const CURATED_RECIPES: Recipe[] = [
   },
 
   // ============================================================================
-  // HEPES Buffers
+  // TE Buffer (DNA Storage)
   // ============================================================================
-  {
-    id: 'hepes-buffer',
-    name: 'HEPES Buffer (1 M stock)',
-    description: '1 M HEPES buffer stock, pH 7.4',
-    category: RecipeCategory.BUFFER,
-    components: [
-      {
-        chemicalId: 'hepes',
-        concentration: 1,
-        concentrationUnit: ConcentrationUnit.MOLAR,
-      },
-    ],
-    totalVolume: 1000,
-    volumeUnit: VolumeUnit.MILLILITER,
-    pH: 7.4,
-    instructions: [
-      'Dissolve 238.3 g HEPES in ~800 mL distilled water',
-      'Adjust pH to 7.4 with NaOH (requires ~4-5 g NaOH)',
-      'Bring final volume to 1000 mL',
-      'Filter sterilize (0.22 μm)',
-      'Store at 4°C',
-    ],
-    notes: 'Stock solution. Dilute as needed for working concentrations (typically 10-50 mM).',
-    isCustom: false,
-    createdAt: new Date('2024-01-01'),
-    modifiedAt: new Date('2024-01-01'),
-    tags: ['hepes', 'stock', 'cell culture'],
-  },
-  {
-    id: 'hepes-saline',
-    name: 'HEPES-Buffered Saline',
-    description: 'HEPES-buffered saline for cell culture',
-    category: RecipeCategory.BUFFER,
-    components: [
-      {
-        chemicalId: 'hepes',
-        concentration: 20,
-        concentrationUnit: ConcentrationUnit.MILLIMOLAR,
-      },
-      {
-        chemicalId: 'nacl',
-        concentration: 150,
-        concentrationUnit: ConcentrationUnit.MILLIMOLAR,
-      },
-    ],
-    totalVolume: 1000,
-    volumeUnit: VolumeUnit.MILLILITER,
-    pH: 7.4,
-    instructions: [
-      'Dissolve HEPES and NaCl in ~800 mL distilled water',
-      'Adjust pH to 7.4 with NaOH',
-      'Bring final volume to 1000 mL',
-      'Filter sterilize',
-    ],
-    notes: 'Good buffer for cell culture work. More stable than bicarbonate-based systems.',
-    isCustom: false,
-    createdAt: new Date('2024-01-01'),
-    modifiedAt: new Date('2024-01-01'),
-    tags: ['hepes', 'cell culture', 'physiological'],
-  },
-
-  // ============================================================================
-  // Tris Buffers
-  // ============================================================================
-  {
-    id: 'tris-hcl-1m',
-    name: 'Tris-HCl (1 M stock)',
-    description: '1 M Tris-HCl buffer stock',
-    category: RecipeCategory.BUFFER,
-    components: [
-      {
-        chemicalId: 'tris-base',
-        concentration: 1,
-        concentrationUnit: ConcentrationUnit.MOLAR,
-      },
-    ],
-    totalVolume: 1000,
-    volumeUnit: VolumeUnit.MILLILITER,
-    pH: 7.5,
-    instructions: [
-      'Dissolve 121.1 g Tris base in ~800 mL distilled water',
-      'Adjust pH to desired value (7.0-9.0) with concentrated HCl',
-      'Bring final volume to 1000 mL',
-      'Autoclave for sterilization',
-    ],
-    notes: 'Stock solution. pH decreases with temperature (~0.03 pH units per °C).',
-    isCustom: false,
-    createdAt: new Date('2024-01-01'),
-    modifiedAt: new Date('2024-01-01'),
-    tags: ['tris', 'stock', 'buffer'],
-  },
   {
     id: 'te-buffer',
     name: 'TE Buffer (10 mM Tris, 1 mM EDTA)',
@@ -347,52 +256,6 @@ export const CURATED_RECIPES: Recipe[] = [
     createdAt: new Date('2024-01-01'),
     modifiedAt: new Date('2024-01-01'),
     tags: ['lysis', 'ripa', 'protein extraction'],
-  },
-
-  // ============================================================================
-  // SDS-PAGE Buffers
-  // ============================================================================
-  {
-    id: 'sds-sample-buffer',
-    name: 'SDS Sample Buffer (2×)',
-    description: 'Laemmli sample buffer for SDS-PAGE',
-    category: RecipeCategory.BUFFER,
-    components: [
-      {
-        chemicalId: 'tris-hcl',
-        concentration: 100,
-        concentrationUnit: ConcentrationUnit.MILLIMOLAR,
-      },
-      {
-        chemicalId: 'sds',
-        concentration: 4,
-        concentrationUnit: ConcentrationUnit.PERCENT_W_V,
-      },
-      {
-        chemicalId: 'glycerol',
-        concentration: 20,
-        concentrationUnit: ConcentrationUnit.PERCENT_V_V,
-      },
-      {
-        chemicalId: 'bromophenol-blue',
-        concentration: 0.2,
-        concentrationUnit: ConcentrationUnit.PERCENT_W_V,
-      },
-    ],
-    totalVolume: 100,
-    volumeUnit: VolumeUnit.MILLILITER,
-    pH: 6.8,
-    instructions: [
-      'Mix all components except β-mercaptoethanol',
-      'Adjust pH to 6.8',
-      'Aliquot and store at -20°C',
-      'Add β-mercaptoethanol (5-10%) just before use',
-    ],
-    notes: 'Mix 1:1 with protein sample. Boil 5 min before loading on gel.',
-    isCustom: false,
-    createdAt: new Date('2024-01-01'),
-    modifiedAt: new Date('2024-01-01'),
-    tags: ['sds-page', 'sample buffer', 'electrophoresis'],
   },
 
   // ============================================================================

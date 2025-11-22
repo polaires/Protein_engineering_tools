@@ -3,14 +3,14 @@
  */
 
 import { useState, useMemo } from 'react';
-import { Beaker, Star, Search, FileText } from 'lucide-react';
+import { Beaker, Star, Search, FileText, AlertTriangle, Download } from 'lucide-react';
 import { Recipe, RecipeCategory, RecipeListProps } from '@/types';
 import { useApp } from '@/contexts/AppContext';
 import { calculateMass } from '@/utils/calculations';
 import RecipeLabel from './RecipeLabel';
 
 export default function RecipeList({ category, onSelectRecipe }: RecipeListProps) {
-  const { recipes, preferences, toggleFavoriteRecipe, getChemicalById } = useApp();
+  const { recipes, preferences, toggleFavoriteRecipe, getChemicalById, addRecipe, isAuthenticated, promptLogin, showToast } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<RecipeCategory | 'all'>(
@@ -18,6 +18,11 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
   );
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [showLabel, setShowLabel] = useState(false);
+
+  // Recipe scaling state
+  const [scaleFactor, setScaleFactor] = useState<number>(1);
+  const [customScale, setCustomScale] = useState<string>('');
+  const [showCustomScale, setShowCustomScale] = useState(false);
 
   // Filter and search recipes
   const filteredRecipes = useMemo(() => {
@@ -48,14 +53,15 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
     });
   }, [recipes, filterCategory, searchQuery, preferences]);
 
-  // Calculate component masses for a recipe
-  const calculateRecipeComponents = (recipe: Recipe) => {
+  // Calculate component masses for a recipe with scaling
+  const calculateRecipeComponents = (recipe: Recipe, scale: number = 1) => {
     return recipe.components.map((component) => {
       const chemical = getChemicalById(component.chemicalId);
       if (!chemical) return component;
 
       const molarityInM = component.concentration / 1000; // Convert mM to M
-      const mass = calculateMass(molarityInM, recipe.totalVolume, chemical.molecularWeight);
+      const scaledVolume = recipe.totalVolume * scale;
+      const mass = calculateMass(molarityInM, scaledVolume, chemical.molecularWeight);
 
       return {
         ...component,
@@ -65,10 +71,86 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
     });
   };
 
+  // Check solubility for scaled recipe
+  const checkScaledSolubility = (recipe: Recipe, scale: number): { warning: string; component: string } | null => {
+    const components = calculateRecipeComponents(recipe, scale);
+    const scaledVolume = recipe.totalVolume * scale;
+
+    for (const component of components) {
+      if (!component.mass || !component.chemical) continue;
+
+      const concentrationMgML = (component.mass / scaledVolume) * 1000;
+
+      // General solubility limits (approximate)
+      if (concentrationMgML > 500) {
+        return {
+          warning: `Very high concentration (${concentrationMgML.toFixed(0)} mg/mL). May exceed solubility limit.`,
+          component: component.chemical.commonName
+        };
+      } else if (concentrationMgML > 200) {
+        return {
+          warning: `High concentration (${concentrationMgML.toFixed(0)} mg/mL). Check solubility data.`,
+          component: component.chemical.commonName
+        };
+      }
+    }
+
+    return null;
+  };
+
   // Handle recipe selection
   const handleSelectRecipe = (recipe: Recipe) => {
     setSelectedRecipe(recipe);
+    setScaleFactor(1); // Reset scale factor
+    setCustomScale('');
+    setShowCustomScale(false);
     onSelectRecipe(recipe);
+  };
+
+  // Handle scale factor change
+  const handleScaleChange = (value: string) => {
+    if (value === 'custom') {
+      setShowCustomScale(true);
+    } else {
+      setShowCustomScale(false);
+      setScaleFactor(parseFloat(value));
+      setCustomScale('');
+    }
+  };
+
+  // Handle custom scale input
+  const handleCustomScaleChange = (value: string) => {
+    setCustomScale(value);
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue > 0) {
+      setScaleFactor(numValue);
+    }
+  };
+
+  // Save recipe to My Recipes
+  const handleSaveToMyRecipes = async (recipe: Recipe) => {
+    if (!isAuthenticated) {
+      promptLogin('Login to save recipes to your collection');
+      return;
+    }
+
+    try {
+      // Create a copy of the recipe with a new ID
+      const newRecipe: Recipe = {
+        ...recipe,
+        id: `custom-${Date.now()}`,
+        name: `${recipe.name} (Copy)`,
+        isCustom: true,
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+      };
+
+      await addRecipe(newRecipe);
+      showToast('success', 'Recipe saved to My Recipes!');
+    } catch (error) {
+      console.error('Failed to save recipe:', error);
+      showToast('error', 'Failed to save recipe');
+    }
   };
 
   // Toggle favorite
@@ -209,6 +291,16 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
                 )}
               </div>
               <div className="flex gap-2 ml-4">
+                {!selectedRecipe.isCustom && (
+                  <button
+                    onClick={() => handleSaveToMyRecipes(selectedRecipe)}
+                    className="btn-secondary flex items-center gap-2"
+                    title="Save to My Recipes"
+                  >
+                    <Download className="w-4 h-4" />
+                    Save to My Recipes
+                  </button>
+                )}
                 <button
                   onClick={() => setShowLabel(true)}
                   className="btn-secondary flex items-center gap-2"
@@ -239,7 +331,12 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
                   Volume
                 </div>
                 <div className="font-semibold">
-                  {selectedRecipe.totalVolume} {selectedRecipe.volumeUnit}
+                  {(selectedRecipe.totalVolume * scaleFactor).toFixed(1)} {selectedRecipe.volumeUnit}
+                  {scaleFactor !== 1 && (
+                    <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
+                      ({scaleFactor}×)
+                    </span>
+                  )}
                 </div>
               </div>
               {selectedRecipe.pH && (
@@ -252,13 +349,67 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
               )}
             </div>
 
+            {/* Recipe Scaling Controls */}
+            <div className="mb-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+              <h3 className="text-sm font-semibold mb-3 text-primary-900 dark:text-primary-100">
+                Recipe Scaling
+              </h3>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  className="select-field flex-1 min-w-[200px]"
+                  value={showCustomScale ? 'custom' : scaleFactor.toString()}
+                  onChange={(e) => handleScaleChange(e.target.value)}
+                >
+                  <option value="1">1× (Original)</option>
+                  <option value="2">2× (Double)</option>
+                  <option value="5">5× (5 times)</option>
+                  <option value="10">10× (10 times)</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {showCustomScale && (
+                  <input
+                    type="number"
+                    className="input-field w-32"
+                    placeholder="Enter scale"
+                    step="0.1"
+                    min="0.1"
+                    value={customScale}
+                    onChange={(e) => handleCustomScaleChange(e.target.value)}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Solubility Warning */}
+            {scaleFactor > 1 && (() => {
+              const solubilityCheck = checkScaledSolubility(selectedRecipe, scaleFactor);
+              return solubilityCheck ? (
+                <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+                        Solubility Warning
+                      </h4>
+                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                        <strong>{solubilityCheck.component}:</strong> {solubilityCheck.warning}
+                      </p>
+                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                        Consider using a larger volume or heating/stirring to improve dissolution.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
             <div className="divider" />
 
             {/* Components */}
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4">Components</h3>
               <div className="space-y-4">
-                {calculateRecipeComponents(selectedRecipe).map(
+                {calculateRecipeComponents(selectedRecipe, scaleFactor).map(
                   (component, idx) => (
                     <div
                       key={idx}
@@ -333,7 +484,8 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
         <RecipeLabel
           recipe={{
             ...selectedRecipe,
-            components: calculateRecipeComponents(selectedRecipe)
+            totalVolume: selectedRecipe.totalVolume * scaleFactor,
+            components: calculateRecipeComponents(selectedRecipe, scaleFactor)
           }}
           onClose={() => setShowLabel(false)}
         />
