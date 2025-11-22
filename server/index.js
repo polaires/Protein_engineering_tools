@@ -4,12 +4,18 @@ import pg from 'pg';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
+import { Resend } from 'resend';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:1420';
+
+// Initialize Resend with API key
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Database connection
 const pool = new pg.Pool({
@@ -42,15 +48,37 @@ app.use(express.json({ limit: '10mb' }));
 async function initDatabase() {
   const client = await pool.connect();
   try {
-    // Create users table
+    // Create users table with email verification fields
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(255) UNIQUE NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
+        email_verified BOOLEAN DEFAULT FALSE,
+        verification_token VARCHAR(255),
+        verification_token_expiry TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add email verification columns if they don't exist (for existing tables)
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='email_verified') THEN
+          ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='verification_token') THEN
+          ALTER TABLE users ADD COLUMN verification_token VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='verification_token_expiry') THEN
+          ALTER TABLE users ADD COLUMN verification_token_expiry TIMESTAMP;
+        END IF;
+      END $$;
     `);
 
     // Create user_recipes table
@@ -97,6 +125,84 @@ async function initDatabase() {
     console.error('Error initializing database:', error);
   } finally {
     client.release();
+  }
+}
+
+// ============================================================================
+// Email Service
+// ============================================================================
+
+async function sendVerificationEmail(email, token, username) {
+  try {
+    const verificationUrl = `${FRONTEND_URL}/verify-email?token=${token}`;
+
+    const { data, error } = await resend.emails.send({
+      from: 'Biochem Space <noreply@biochem.space>',
+      to: email,
+      subject: 'Verify your email address',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">🧬 Protein Engineering Tools</h1>
+          </div>
+
+          <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
+            <h2 style="color: #1f2937; margin-top: 0;">Hi ${username}! 👋</h2>
+
+            <p style="font-size: 16px; color: #4b5563;">
+              Welcome to Protein Engineering Tools! To get started, please verify your email address.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${verificationUrl}"
+                 style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                Verify Email Address
+              </a>
+            </div>
+
+            <p style="font-size: 14px; color: #6b7280;">
+              Or copy and paste this link into your browser:
+            </p>
+            <p style="background: #fff; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-family: monospace; font-size: 13px; word-break: break-all; color: #667eea;">
+              ${verificationUrl}
+            </p>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+              <p style="font-size: 13px; color: #9ca3af; margin: 5px 0;">
+                ⏰ This link will expire in 24 hours
+              </p>
+              <p style="font-size: 13px; color: #9ca3af; margin: 5px 0;">
+                🔒 If you didn't create an account, you can safely ignore this email
+              </p>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin-top: 20px; padding: 20px; color: #9ca3af; font-size: 12px;">
+            <p>
+              © ${new Date().getFullYear()} Protein Engineering Tools. All rights reserved.
+            </p>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      throw new Error('Failed to send verification email');
+    }
+
+    console.log('Verification email sent:', data);
+    return true;
+  } catch (error) {
+    console.error('Error sending verification email:', error);
+    throw error;
   }
 }
 
@@ -161,13 +267,24 @@ app.post('/api/auth/register', async (req, res) => {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Create user with verification token
     const result = await pool.query(
-      'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, created_at',
-      [username, email, passwordHash]
+      `INSERT INTO users (username, email, password_hash, verification_token, verification_token_expiry)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, username, email, email_verified, created_at`,
+      [username, email, passwordHash, verificationToken, tokenExpiry]
     );
 
     const user = result.rows[0];
+
+    // Send verification email (don't wait for it to complete)
+    sendVerificationEmail(email, verificationToken, username).catch(err => {
+      console.error('Failed to send verification email:', err);
+    });
 
     // Generate JWT token
     const token = jwt.sign(
@@ -178,11 +295,12 @@ app.post('/api/auth/register', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Registration successful',
+      message: 'Registration successful! Please check your email to verify your account.',
       user: {
         id: user.id,
         username: user.username,
         email: user.email,
+        email_verified: user.email_verified,
         created_at: user.created_at
       },
       token
@@ -209,7 +327,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT id, username, email, password_hash, created_at FROM users WHERE username = $1',
+      'SELECT id, username, email, password_hash, email_verified, created_at FROM users WHERE username = $1',
       [username]
     );
 
@@ -246,6 +364,7 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
+        email_verified: user.email_verified,
         created_at: user.created_at
       },
       token
@@ -259,11 +378,120 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Verify email with token
+app.post('/api/auth/verify-email', async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.json({
+      success: false,
+      message: 'Verification token is required'
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, username, email FROM users
+       WHERE verification_token = $1
+       AND verification_token_expiry > NOW()
+       AND email_verified = FALSE`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: 'Invalid or expired verification token'
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Mark email as verified and clear token
+    await pool.query(
+      `UPDATE users
+       SET email_verified = TRUE,
+           verification_token = NULL,
+           verification_token_expiry = NULL
+       WHERE id = $1`,
+      [user.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Email verified successfully!',
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('Verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during verification'
+    });
+  }
+});
+
+// Resend verification email
+app.post('/api/auth/resend-verification', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, username, email, email_verified FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = result.rows[0];
+
+    if (user.email_verified) {
+      return res.json({
+        success: false,
+        message: 'Email is already verified'
+      });
+    }
+
+    // Generate new verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await pool.query(
+      `UPDATE users
+       SET verification_token = $1,
+           verification_token_expiry = $2
+       WHERE id = $3`,
+      [verificationToken, tokenExpiry, user.id]
+    );
+
+    // Send verification email
+    await sendVerificationEmail(user.email, verificationToken, user.username);
+
+    res.json({
+      success: true,
+      message: 'Verification email sent! Please check your inbox.'
+    });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend verification email'
+    });
+  }
+});
+
 // Get current user (verify token)
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, email, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, email_verified, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
 
