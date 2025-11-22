@@ -523,6 +523,8 @@ export default function ProteinViewer() {
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Immediately clear drag state
     setIsDraggingOver(false);
 
     const files = Array.from(e.dataTransfer.files);
@@ -544,7 +546,7 @@ export default function ProteinViewer() {
       return;
     }
 
-    // Load the file
+    // Load the file (isLoading will be set to true, hiding the overlay)
     await loadFromFile(file);
   };
 
@@ -693,7 +695,7 @@ export default function ProteinViewer() {
           />
 
           {/* Drag Overlay */}
-          {isDraggingOver && (
+          {isDraggingOver && !isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-primary-500 bg-opacity-10 backdrop-blur-sm rounded-lg pointer-events-none">
               <div className="text-center">
                 <Upload className="w-16 h-16 mx-auto mb-4 text-primary-600 dark:text-primary-400 animate-bounce" />
