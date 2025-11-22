@@ -128,6 +128,13 @@ export default function ProteinViewer() {
     };
   }, []);
 
+  // Ensure drag overlay clears when loading starts
+  useEffect(() => {
+    if (isLoading) {
+      setIsDraggingOver(false);
+    }
+  }, [isLoading]);
+
   // Apply representation and color scheme
   const applyVisualization = async (structureRefToUse: StateObjectRef<any>, representation: string, colorScheme: string) => {
     if (!pluginRef.current) return;
@@ -190,7 +197,7 @@ export default function ProteinViewer() {
   };
 
   // Load structure from PDB ID
-  const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string) => {
+  const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
     if (!pluginRef.current) return;
 
     setIsLoading(true);
@@ -220,40 +227,44 @@ export default function ProteinViewer() {
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
 
-      // Fetch protein info from RCSB API
-      try {
-        const infoResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId.toUpperCase()}`);
-        if (infoResponse.ok) {
-          const info = await infoResponse.json();
-          setProteinInfo({
-            title: info.struct?.title,
-            experimentalMethod: info.exptl?.[0]?.method,
-            resolution: info.rcsb_entry_info?.resolution_combined?.[0],
-            depositionDate: info.rcsb_accession_info?.deposit_date,
-            organism: info.rcsb_entity_source_organism?.[0]?.ncbi_scientific_name,
-          });
+      // Fetch protein info from RCSB API (only on initial load)
+      if (shouldSave) {
+        try {
+          const infoResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId.toUpperCase()}`);
+          if (infoResponse.ok) {
+            const info = await infoResponse.json();
+            setProteinInfo({
+              title: info.struct?.title,
+              experimentalMethod: info.exptl?.[0]?.method,
+              resolution: info.rcsb_entry_info?.resolution_combined?.[0],
+              depositionDate: info.rcsb_accession_info?.deposit_date,
+              organism: info.rcsb_entity_source_organism?.[0]?.ncbi_scientific_name,
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to fetch PDB metadata:', err);
         }
-      } catch (err) {
-        console.warn('Failed to fetch PDB metadata:', err);
       }
 
-      // Save structure
-      const newStructure: ProteinStructure = {
-        id: generateStructureId(),
-        name: pdbId.toUpperCase(),
-        source: 'pdb',
-        pdbId: pdbId.toUpperCase(),
-        uploadDate: new Date(),
-      };
+      // Only save structure on initial load, not when changing representation/color
+      if (shouldSave) {
+        const newStructure: ProteinStructure = {
+          id: generateStructureId(),
+          name: pdbId.toUpperCase(),
+          source: 'pdb',
+          pdbId: pdbId.toUpperCase(),
+          uploadDate: new Date(),
+        };
 
-      await saveStructure(newStructure);
-      setCurrentStructure(newStructure);
+        await saveStructure(newStructure);
+        setCurrentStructure(newStructure);
 
-      const structures = await getAllStructures();
-      setSavedStructures(structures);
+        const structures = await getAllStructures();
+        setSavedStructures(structures);
 
-      showToast('success', `Loaded ${pdbId.toUpperCase()} from PDB`);
-      setPdbSearchQuery('');
+        showToast('success', `Loaded ${pdbId.toUpperCase()} from PDB`);
+        setPdbSearchQuery('');
+      }
     } catch (error) {
       console.error('Failed to load PDB:', error);
       showToast('error', `Failed to load ${pdbId}. Please check the PDB ID.`);
@@ -263,7 +274,7 @@ export default function ProteinViewer() {
   };
 
   // Load structure from file
-  const loadFromFile = async (file: File, representation?: string, colorScheme?: string) => {
+  const loadFromFile = async (file: File, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
     if (!pluginRef.current) return;
 
     setIsLoading(true);
@@ -295,24 +306,26 @@ export default function ProteinViewer() {
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
 
-      // Save structure
-      const newStructure: ProteinStructure = {
-        id: generateStructureId(),
-        name: file.name,
-        source: 'file',
-        data: text,
-        uploadDate: new Date(),
-        fileSize: file.size,
-      };
+      // Only save structure on initial load, not when changing representation/color
+      if (shouldSave) {
+        const newStructure: ProteinStructure = {
+          id: generateStructureId(),
+          name: file.name,
+          source: 'file',
+          data: text,
+          uploadDate: new Date(),
+          fileSize: file.size,
+        };
 
-      await saveStructure(newStructure);
-      setCurrentStructure(newStructure);
+        await saveStructure(newStructure);
+        setCurrentStructure(newStructure);
 
-      const structures = await getAllStructures();
-      setSavedStructures(structures);
+        const structures = await getAllStructures();
+        setSavedStructures(structures);
 
-      setProteinInfo({ title: file.name });
-      showToast('success', `Loaded ${file.name}`);
+        setProteinInfo({ title: file.name });
+        showToast('success', `Loaded ${file.name}`);
+      }
     } catch (error) {
       console.error('Failed to load file:', error);
       showToast('error', 'Failed to load structure file');
@@ -328,13 +341,13 @@ export default function ProteinViewer() {
     setSelectedRepresentation(repId);
 
     try {
-      // Reload structure with new representation (pass it directly to avoid state update delay)
+      // Reload structure with new representation (don't save a new structure, just update visualization)
       if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        await loadFromPDB(currentStructure.pdbId, repId, selectedColorScheme);
+        await loadFromPDB(currentStructure.pdbId, repId, selectedColorScheme, false);
       } else if (currentStructure.data) {
         const blob = new Blob([currentStructure.data], { type: 'text/plain' });
         const file = new File([blob], currentStructure.name);
-        await loadFromFile(file, repId, selectedColorScheme);
+        await loadFromFile(file, repId, selectedColorScheme, false);
       }
 
       showToast('success', `Representation changed to ${repId}`);
@@ -351,13 +364,13 @@ export default function ProteinViewer() {
     setSelectedColorScheme(schemeId);
 
     try {
-      // Reload structure with new color scheme (pass it directly to avoid state update delay)
+      // Reload structure with new color scheme (don't save a new structure, just update visualization)
       if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        await loadFromPDB(currentStructure.pdbId, selectedRepresentation, schemeId);
+        await loadFromPDB(currentStructure.pdbId, selectedRepresentation, schemeId, false);
       } else if (currentStructure.data) {
         const blob = new Blob([currentStructure.data], { type: 'text/plain' });
         const file = new File([blob], currentStructure.name);
-        await loadFromFile(file, selectedRepresentation, schemeId);
+        await loadFromFile(file, selectedRepresentation, schemeId, false);
       }
 
       showToast('success', `Color scheme changed to ${schemeId}`);
