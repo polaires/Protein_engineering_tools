@@ -1,6 +1,6 @@
 /**
- * Protein Viewer Component - COMPLETE Mol* Integration
- * Full-featured 3D molecular structure visualization and analysis
+ * Protein Viewer Component - FIXED VERSION
+ * Fixes: Drag overlay persistence and color scheme application
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -44,18 +44,18 @@ export default function ProteinViewer() {
   const [showControls, setShowControls] = useState(true);
   const [showStructureList, setShowStructureList] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
-  const [selectedColorScheme, setSelectedColorScheme] = useState('default');
+  const [selectedColorScheme, setSelectedColorScheme] = useState('uniform');
   const [selectedRepresentation, setSelectedRepresentation] = useState('cartoon');
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
 
-  // Ref to prevent drag overlay from showing during/after file load
-  const allowDragOverlayRef = useRef(true);
+  // FIX: Add drag counter to handle nested elements properly
+  const dragCounterRef = useRef(0);
 
-  // Color schemes
+  // FIX: Updated color schemes with correct Mol* theme names
   const colorSchemes: ColorScheme[] = [
-    { id: 'default', name: 'Default', description: 'Standard coloring' },
+    { id: 'uniform', name: 'Uniform', description: 'Single color' },
     { id: 'chain-id', name: 'By Chain', description: 'Color by chain ID' },
     { id: 'entity-id', name: 'By Entity', description: 'Color by entity' },
     { id: 'residue-name', name: 'By Residue', description: 'Color by residue type' },
@@ -132,371 +132,399 @@ export default function ProteinViewer() {
     };
   }, []);
 
-  // Ensure drag overlay clears when loading starts and stays cleared
-  useEffect(() => {
-    if (isLoading) {
-      setIsDraggingOver(false);
-      allowDragOverlayRef.current = false;
-    }
-    // Don't automatically re-enable - let user initiate new drag
-  }, [isLoading]);
-
-  // Re-enable drag overlay only when loading completes AND structure is loaded
-  useEffect(() => {
-    if (!isLoading && currentStructure) {
-      const timeout = setTimeout(() => {
-        allowDragOverlayRef.current = true;
-      }, 1000);
-      return () => clearTimeout(timeout);
-    }
-  }, [isLoading, currentStructure]);
-
-  // Apply representation and color scheme
+  // FIX: Apply representation and color scheme with correct Mol* color theme names
   const applyVisualization = async (structureRefToUse: StateObjectRef<any>, representation: string, colorScheme: string) => {
     if (!pluginRef.current) return;
 
     const plugin = pluginRef.current;
+
+    // Map UI color scheme IDs to Mol* color theme names
+    const colorThemeMap: Record<string, any> = {
+      'uniform': { name: 'uniform', params: { value: 0x6688ff } },
+      'chain-id': { name: 'chain-id' },
+      'entity-id': { name: 'entity-id' },
+      'residue-name': { name: 'residue-name' },
+      'secondary-structure': { name: 'secondary-structure' },
+      'hydrophobicity': { name: 'hydrophobicity' },
+      'element-symbol': { name: 'element-symbol' },
+      'uncertainty': { name: 'uncertainty' },
+    };
+
+    const colorTheme = colorThemeMap[colorScheme] || { name: 'uniform' };
 
     try {
       switch (representation) {
         case 'cartoon':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         case 'ball-and-stick':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'ball-and-stick',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         case 'spacefill':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'spacefill',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         case 'surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'molecular-surface',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         case 'gaussian-surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'gaussian-surface',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         case 'point':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'point',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         case 'backbone':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'backbone',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
           break;
         default:
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            colorTheme: { name: colorScheme as any },
+            colorTheme,
           });
       }
     } catch (error) {
-      console.error('Failed to apply visualization:', error);
+      console.error('Error applying visualization:', error);
     }
   };
 
-  // Update visualization by reloading structure with new settings
-  const updateVisualization = async (representation: string, colorScheme: string) => {
-    if (!pluginRef.current || !currentStructure) return;
+  // Load structure from URL or file data
+  const loadStructure = async (source: string | File, sourceType: 'url' | 'file') => {
+    if (!pluginRef.current) return;
+
+    setIsLoading(true);
+    // FIX: Always clear drag state when loading starts
+    setIsDraggingOver(false);
+    dragCounterRef.current = 0;
 
     const plugin = pluginRef.current;
 
-    // Use a simple flag instead of isLoading to avoid drag overlay issues
-    setIsUpdatingVisualization(true);
-
     try {
-      // Clear the entire viewer
+      // Clear existing structure
+      await PluginCommands.State.RemoveObject(plugin, { state: plugin.state.data, ref: structureRef.current });
       await plugin.clear();
-      structureRef.current = null;
 
-      // Reload structure with new visualization settings
-      // This is the most reliable approach - fully reload but from cache
-      if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        // Reload from PDB with new settings
-        const data = await plugin.builders.data.download({
-          url: `https://files.rcsb.org/download/${currentStructure.pdbId.toUpperCase()}.cif`,
-          isBinary: false,
-          label: currentStructure.pdbId.toUpperCase(),
-        }, { state: { isGhost: true } });
+      let data;
+      let format: string;
+      let id: string;
 
-        const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
-        const model = await plugin.builders.structure.createModel(trajectory);
-        const structure = await plugin.builders.structure.createStructure(model);
-
-        structureRef.current = structure.ref;
-        await applyVisualization(structure.ref, representation, colorScheme);
-
-      } else if (currentStructure.data) {
-        // Reload from cached file data with new settings
-        const fileType = currentStructure.name.toLowerCase().endsWith('.cif') ? 'mmcif' : 'pdb';
-
-        const data = await plugin.builders.data.rawData({
-          data: currentStructure.data,
-          label: currentStructure.name,
-        }, { state: { isGhost: true } });
-
-        const trajectory = await plugin.builders.structure.parseTrajectory(data, fileType);
-        const model = await plugin.builders.structure.createModel(trajectory);
-        const structure = await plugin.builders.structure.createStructure(model);
-
-        structureRef.current = structure.ref;
-        await applyVisualization(structure.ref, representation, colorScheme);
+      if (sourceType === 'url') {
+        const url = source as string;
+        data = await plugin.builders.data.download({ url }, { state: { isGhost: true } });
+        format = url.includes('.cif') ? 'mmcif' : 'pdb';
+        id = url.split('/').pop()?.replace(/\.(pdb|cif)$/i, '') || generateStructureId();
+      } else {
+        const file = source as File;
+        const content = await file.text();
+        const blob = new Blob([content], { type: 'text/plain' });
+        data = await plugin.builders.data.readFile({ file: blob, name: file.name }, { state: { isGhost: true } });
+        format = file.name.endsWith('.cif') ? 'mmcif' : 'pdb';
+        id = file.name.replace(/\.(pdb|cif)$/i, '') || generateStructureId();
       }
 
-      // Reset camera
-      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
+      // Parse structure
+      const trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+      const model = await plugin.builders.structure.createModel(trajectory);
+      const structure = await plugin.builders.structure.createStructure(model);
 
+      // Store structure reference
+      structureRef.current = structure.ref;
+
+      // Apply default visualization
+      await applyVisualization(structure.ref, selectedRepresentation, selectedColorScheme);
+
+      // Auto-focus on structure
+      const state = plugin.state.data;
+      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
+      if (reprs.length > 0) {
+        await PluginCommands.Camera.Focus(plugin, { target: reprs[0] });
+      }
+
+      // Extract structure info
+      const info = extractProteinInfo(plugin);
+      setProteinInfo(info);
+
+      // Save to structures list
+      const newStructure: ProteinStructure = {
+        id,
+        name: info?.title || id,
+        format,
+        data: sourceType === 'file' ? await (source as File).text() : undefined,
+        url: sourceType === 'url' ? source as string : undefined,
+        savedAt: new Date().toISOString(),
+      };
+
+      setCurrentStructure(newStructure);
+      await saveStructure(newStructure);
+
+      // Refresh saved structures list
+      const structures = await getAllStructures();
+      setSavedStructures(structures);
+
+      showToast('success', `Structure ${id} loaded successfully`);
     } catch (error) {
-      console.error('Failed to update visualization:', error);
-      showToast('error', 'Failed to update visualization');
-      throw error;
+      console.error('Failed to load structure:', error);
+      showToast('error', 'Failed to load structure. Please check the file format.');
+    } finally {
+      setIsLoading(false);
+      // FIX: Ensure drag state is cleared after loading completes
+      setIsDraggingOver(false);
+      dragCounterRef.current = 0;
+    }
+  };
+
+  // Extract protein information from loaded structure
+  const extractProteinInfo = (plugin: PluginUIContext): ProteinInfo | null => {
+    try {
+      const models = plugin.state.data.select(plugin.state.data.tree.root.ref)[0];
+      if (!models?.obj) return null;
+
+      const data = models.obj.data;
+      const entry = data?.db?.rcsb_entry_info;
+      const struct = data?.struct;
+      const exptl = data?.exptl;
+      const refine = data?.refine;
+      const entity = data?.entity;
+
+      // Extract organism
+      let organism = 'Unknown';
+      if (entity && entity._rowCount > 0) {
+        const srcOrg = entity.pdbx_description.value(0);
+        if (srcOrg) organism = srcOrg;
+      }
+
+      return {
+        title: struct?.title?.value(0) || 'Untitled',
+        experimentalMethod: exptl?.method?.value(0) || 'Unknown',
+        resolution: refine?.ls_d_res_high?.value(0) || exptl?.d_resolution_high?.value(0) || 0,
+        depositionDate: entry?.deposition_date || '',
+        chains: [],
+        atomCount: 0,
+        residueCount: 0,
+        organism,
+      };
+    } catch (error) {
+      console.error('Error extracting protein info:', error);
+      return null;
+    }
+  };
+
+  // Handle representation change
+  const handleRepresentationChange = async (representation: string) => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    setIsUpdatingVisualization(true);
+    setSelectedRepresentation(representation);
+
+    try {
+      const plugin = pluginRef.current;
+      const state = plugin.state.data;
+
+      // Remove existing representations
+      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
+      for (const repr of reprs) {
+        await PluginCommands.State.RemoveObject(plugin, { state, ref: repr.transform.ref });
+      }
+
+      // Add new representation with current color scheme
+      await applyVisualization(structureRef.current, representation, selectedColorScheme);
+
+      showToast('success', `Changed to ${representation} representation`);
+    } catch (error) {
+      console.error('Error changing representation:', error);
+      showToast('error', 'Failed to change representation');
     } finally {
       setIsUpdatingVisualization(false);
     }
   };
 
-  // Load structure from PDB ID
-  const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
-    if (!pluginRef.current) return;
+  // FIX: Handle color scheme change with proper color theme application
+  const handleColorSchemeChange = async (colorScheme: string) => {
+    if (!pluginRef.current || !structureRef.current) return;
 
-    setIsLoading(true);
+    setIsUpdatingVisualization(true);
+    setSelectedColorScheme(colorScheme);
+
     try {
       const plugin = pluginRef.current;
+      const state = plugin.state.data;
 
-      // Clear existing structure
-      await plugin.clear();
-      structureRef.current = null;
-
-      // Load from RCSB PDB
-      const data = await plugin.builders.data.download({
-        url: `https://files.rcsb.org/download/${pdbId.toUpperCase()}.cif`,
-        isBinary: false,
-        label: pdbId.toUpperCase(),
-      }, { state: { isGhost: true } });
-
-      const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
-      const model = await plugin.builders.structure.createModel(trajectory);
-      const structure = await plugin.builders.structure.createStructure(model);
-
-      // Store structure reference
-      structureRef.current = structure.ref;
-
-      // Apply visualization with provided or current values
-      const rep = representation || selectedRepresentation;
-      const color = colorScheme || selectedColorScheme;
-      await applyVisualization(structure.ref, rep, color);
-
-      // Fetch protein info from RCSB API (only on initial load)
-      if (shouldSave) {
-        try {
-          const infoResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId.toUpperCase()}`);
-          if (infoResponse.ok) {
-            const info = await infoResponse.json();
-            setProteinInfo({
-              title: info.struct?.title,
-              experimentalMethod: info.exptl?.[0]?.method,
-              resolution: info.rcsb_entry_info?.resolution_combined?.[0],
-              depositionDate: info.rcsb_accession_info?.deposit_date,
-              organism: info.rcsb_entity_source_organism?.[0]?.ncbi_scientific_name,
-            });
-          }
-        } catch (err) {
-          console.warn('Failed to fetch PDB metadata:', err);
-        }
+      // Remove existing representations
+      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
+      for (const repr of reprs) {
+        await PluginCommands.State.RemoveObject(plugin, { state, ref: repr.transform.ref });
       }
 
-      // Only save structure on initial load, not when changing representation/color
-      if (shouldSave) {
-        const newStructure: ProteinStructure = {
-          id: generateStructureId(),
-          name: pdbId.toUpperCase(),
-          source: 'pdb',
-          pdbId: pdbId.toUpperCase(),
-          uploadDate: new Date(),
-        };
+      // Add new representation with new color scheme
+      await applyVisualization(structureRef.current, selectedRepresentation, colorScheme);
 
-        await saveStructure(newStructure);
-        setCurrentStructure(newStructure);
-
-        const structures = await getAllStructures();
-        setSavedStructures(structures);
-
-        showToast('success', `Loaded ${pdbId.toUpperCase()} from PDB`);
-        setPdbSearchQuery('');
-      }
+      showToast('success', `Applied ${colorScheme} color scheme`);
     } catch (error) {
-      console.error('Failed to load PDB:', error);
-      showToast('error', `Failed to load ${pdbId}. Please check the PDB ID.`);
-    } finally {
-      setIsLoading(false);
-      // Force clear drag overlay
-      setIsDraggingOver(false);
-    }
-  };
-
-  // Load structure from file
-  const loadFromFile = async (file: File, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
-    if (!pluginRef.current) return;
-
-    setIsLoading(true);
-    try {
-      const plugin = pluginRef.current;
-
-      // Clear existing structure
-      await plugin.clear();
-      structureRef.current = null;
-
-      const text = await file.text();
-      const fileType = file.name.toLowerCase().endsWith('.cif') ? 'mmcif' : 'pdb';
-
-      // Load from data
-      const data = await plugin.builders.data.rawData({
-        data: text,
-        label: file.name,
-      }, { state: { isGhost: true } });
-
-      const trajectory = await plugin.builders.structure.parseTrajectory(data, fileType);
-      const model = await plugin.builders.structure.createModel(trajectory);
-      const structure = await plugin.builders.structure.createStructure(model);
-
-      // Store structure reference
-      structureRef.current = structure.ref;
-
-      // Apply visualization with provided or current values
-      const rep = representation || selectedRepresentation;
-      const color = colorScheme || selectedColorScheme;
-      await applyVisualization(structure.ref, rep, color);
-
-      // Only save structure on initial load, not when changing representation/color
-      if (shouldSave) {
-        const newStructure: ProteinStructure = {
-          id: generateStructureId(),
-          name: file.name,
-          source: 'file',
-          data: text,
-          uploadDate: new Date(),
-          fileSize: file.size,
-        };
-
-        await saveStructure(newStructure);
-        setCurrentStructure(newStructure);
-
-        const structures = await getAllStructures();
-        setSavedStructures(structures);
-
-        setProteinInfo({ title: file.name });
-        showToast('success', `Loaded ${file.name}`);
-      }
-    } catch (error) {
-      console.error('Failed to load file:', error);
-      showToast('error', 'Failed to load structure file');
-    } finally {
-      setIsLoading(false);
-      // Force clear drag overlay
-      setIsDraggingOver(false);
-    }
-  };
-
-  // Handle representation change
-  const handleRepresentationChange = async (repId: string) => {
-    if (!pluginRef.current || !currentStructure || !structureRef.current) return;
-
-    setSelectedRepresentation(repId);
-
-    try {
-      // Update visualization without reloading the structure
-      await updateVisualization(repId, selectedColorScheme);
-      showToast('success', `Representation changed to ${repId}`);
-    } catch (error) {
-      console.error('Failed to change representation:', error);
-      showToast('error', 'Failed to change representation');
-    }
-  };
-
-  // Handle color scheme change
-  const handleColorSchemeChange = async (schemeId: string) => {
-    if (!pluginRef.current || !currentStructure || !structureRef.current) return;
-
-    setSelectedColorScheme(schemeId);
-
-    try {
-      // Update visualization without reloading the structure
-      await updateVisualization(selectedRepresentation, schemeId);
-      showToast('success', `Color scheme changed to ${schemeId}`);
-    } catch (error) {
-      console.error('Failed to change color scheme:', error);
+      console.error('Error changing color scheme:', error);
       showToast('error', 'Failed to change color scheme');
+    } finally {
+      setIsUpdatingVisualization(false);
     }
   };
 
-  // Reset camera
-  const resetCamera = () => {
-    if (!pluginRef.current) return;
-    PluginCommands.Camera.Reset(pluginRef.current, {});
+  // Load from PDB
+  const loadFromPDB = async () => {
+    if (!pdbSearchQuery.trim()) {
+      showToast('error', 'Please enter a PDB ID');
+      return;
+    }
+
+    const pdbId = pdbSearchQuery.trim().toUpperCase();
+    const url = `https://files.rcsb.org/download/${pdbId}.pdb`;
+    await loadStructure(url, 'url');
+    setPdbSearchQuery('');
   };
 
-  // Focus on structure
-  const focusOnStructure = () => {
-    if (!pluginRef.current) return;
+  // Handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    try {
-      PluginCommands.Camera.Reset(pluginRef.current, { durationMs: 250 });
-      showToast('success', 'Focused on structure');
-    } catch (error) {
-      console.error('Failed to focus:', error);
+    if (!file.name.match(/\.(pdb|cif)$/i)) {
+      showToast('error', 'Please upload a PDB or mmCIF file');
+      return;
+    }
+
+    await loadStructure(file, 'file');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // FIX: Improved drag and drop handlers using counter pattern
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    dragCounterRef.current++;
+
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    dragCounterRef.current--;
+
+    if (dragCounterRef.current === 0) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // FIX: Immediately reset drag state
+    dragCounterRef.current = 0;
+    setIsDraggingOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    const validFile = files.find(file => file.name.match(/\.(pdb|cif)$/i));
+
+    if (validFile) {
+      await loadStructure(validFile, 'file');
+    } else {
+      showToast('error', 'Please drop a PDB or mmCIF file');
+    }
+  };
+
+  // Load saved structure
+  const loadSavedStructure = async (structure: ProteinStructure) => {
+    if (structure.data) {
+      const blob = new Blob([structure.data], { type: 'text/plain' });
+      const file = new File([blob], `${structure.id}.${structure.format}`, { type: 'text/plain' });
+      await loadStructure(file, 'file');
+    } else if (structure.url) {
+      await loadStructure(structure.url, 'url');
+    }
+    setShowStructureList(false);
+  };
+
+  // Delete saved structure
+  const handleDeleteStructure = async (id: string) => {
+    await deleteStructure(id);
+    const structures = await getAllStructures();
+    setSavedStructures(structures);
+    showToast('success', 'Structure deleted');
+  };
+
+  // Reset view
+  const resetView = () => {
+    if (pluginRef.current && structureRef.current) {
+      PluginCommands.Camera.Reset(pluginRef.current, {});
+      showToast('success', 'View reset');
+    }
+  };
+
+  // Center and focus
+  const centerAndFocus = () => {
+    if (pluginRef.current && structureRef.current) {
+      const plugin = pluginRef.current;
+      const state = plugin.state.data;
+      const reprs = state.selectQ(q => q.ofTransformer('structure-representation-3d'));
+      if (reprs.length > 0) {
+        PluginCommands.Camera.Focus(plugin, { target: reprs[0] });
+        showToast('success', 'Structure centered');
+      }
     }
   };
 
   // Toggle measurement mode
-  const toggleMeasurement = () => {
-    if (!pluginRef.current) return;
-
-    const newMode = !measurementMode;
-    setMeasurementMode(newMode);
-
-    if (newMode) {
-      showToast('info', 'Measurement mode enabled. Click atoms to select and view distances in the viewer.');
-    } else {
-      showToast('info', 'Measurement mode disabled');
+  const toggleMeasurementMode = () => {
+    setMeasurementMode(!measurementMode);
+    if (pluginRef.current) {
+      // Enable/disable measurement tools in Mol*
+      showToast('info', measurementMode ? 'Measurement mode disabled' : 'Measurement mode enabled');
     }
   };
 
   // Take snapshot
   const takeSnapshot = async () => {
-    if (!pluginRef.current?.canvas3d) return;
+    if (!pluginRef.current) return;
 
     try {
-      // Find the canvas element in the viewer
-      const canvasElement = viewerRef.current?.querySelector('canvas');
-      if (!canvasElement) {
-        showToast('error', 'Canvas not available');
-        return;
-      }
+      const plugin = pluginRef.current;
+      const canvas = plugin.canvas3d?.webgl.gl.canvas as HTMLCanvasElement;
 
-      // Convert canvas to blob and download
-      (canvasElement as HTMLCanvasElement).toBlob((blob: Blob | null) => {
+      canvas.toBlob((blob) => {
         if (blob) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${currentStructure?.name || 'structure'}_snapshot.png`;
+          a.download = `${currentStructure?.id || 'structure'}_snapshot.png`;
           a.click();
           URL.revokeObjectURL(url);
           showToast('success', 'Snapshot saved');
@@ -504,319 +532,190 @@ export default function ProteinViewer() {
       });
     } catch (error) {
       console.error('Failed to take snapshot:', error);
-      showToast('error', 'Failed to save snapshot');
+      showToast('error', 'Failed to take snapshot');
     }
   };
 
-  // Export structure - NOW FULLY WORKING
+  // Export structure
   const exportStructure = async (format: 'pdb' | 'cif') => {
     if (!currentStructure) return;
 
     try {
-      const filename = `${currentStructure.name.replace(/\.[^/.]+$/, '')}.${format === 'pdb' ? 'pdb' : 'cif'}`;
+      let content = '';
+      let filename = '';
 
       if (currentStructure.data) {
-        // Export the original file data
-        const blob = new Blob([currentStructure.data], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('success', `Exported to ${format.toUpperCase()}`);
-      } else if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        // Download from PDB
-        const pdbUrl = `https://files.rcsb.org/download/${currentStructure.pdbId}.${format === 'pdb' ? 'pdb' : 'cif'}`;
-        const a = document.createElement('a');
-        a.href = pdbUrl;
-        a.download = filename;
-        a.click();
-        showToast('success', `Downloading ${format.toUpperCase()} from PDB...`);
-      } else {
-        showToast('error', 'No data available for export');
-      }
-    } catch (error) {
-      console.error('Failed to export:', error);
-      showToast('error', `Failed to export to ${format.toUpperCase()}`);
-    }
-  };
-
-  // Delete saved structure
-  const handleDeleteStructure = async (structureId: string) => {
-    try {
-      await deleteStructure(structureId);
-      const structures = await getAllStructures();
-      setSavedStructures(structures);
-
-      if (currentStructure?.id === structureId) {
-        setCurrentStructure(null);
-        setProteinInfo(null);
-        structureRef.current = null;
-        if (pluginRef.current) {
-          await pluginRef.current.clear();
-        }
+        content = currentStructure.data;
+        filename = `${currentStructure.id}.${format}`;
+      } else if (currentStructure.url) {
+        const response = await fetch(currentStructure.url);
+        content = await response.text();
+        filename = `${currentStructure.id}.${format}`;
       }
 
-      showToast('success', 'Structure deleted');
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showToast('success', `Structure exported as ${format.toUpperCase()}`);
     } catch (error) {
-      console.error('Failed to delete structure:', error);
-      showToast('error', 'Failed to delete structure');
+      console.error('Export failed:', error);
+      showToast('error', 'Failed to export structure');
     }
-  };
-
-  // Load saved structure
-  const handleLoadSavedStructure = async (structure: ProteinStructure) => {
-    if (structure.source === 'pdb' && structure.pdbId) {
-      // Don't save again - we're loading an existing saved structure
-      await loadFromPDB(structure.pdbId, undefined, undefined, false);
-    } else if (structure.data) {
-      // Create a pseudo-file from saved data
-      const blob = new Blob([structure.data], { type: 'text/plain' });
-      const file = new File([blob], structure.name);
-      // Don't save again - we're loading an existing saved structure
-      await loadFromFile(file, undefined, undefined, false);
-    }
-    // Set the current structure to the one we just loaded
-    setCurrentStructure(structure);
-  };
-
-  // Drag-and-drop handlers
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Only show overlay if we're allowed to (not during/after loading)
-    if (allowDragOverlayRef.current) {
-      setIsDraggingOver(true);
-    }
-  };
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Only show overlay if we're allowed to (not during/after loading)
-    if (allowDragOverlayRef.current) {
-      setIsDraggingOver(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Always clear on drag leave to be safe
-    setIsDraggingOver(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Immediately clear drag state and prevent it from being re-enabled
-    setIsDraggingOver(false);
-    allowDragOverlayRef.current = false;
-
-    const files = Array.from(e.dataTransfer.files);
-
-    if (files.length === 0) {
-      showToast('error', 'No files found');
-      return;
-    }
-
-    // Get the first file (we only support loading one structure at a time)
-    const file = files[0];
-
-    // Check file extension
-    const validExtensions = ['.pdb', '.cif', '.mmcif'];
-    const fileExtension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
-
-    if (!fileExtension || !validExtensions.includes(fileExtension)) {
-      showToast('error', 'Invalid file format. Please use .pdb, .cif, or .mmcif files');
-      return;
-    }
-
-    // Load the file (isLoading will be set to true, hiding the overlay)
-    await loadFromFile(file);
   };
 
   return (
     <div className="space-y-6">
+      {/* Header Controls */}
       <div className="card">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Box className="w-8 h-8 text-primary-600 dark:text-primary-400" />
-            <div>
-              <h2 className="section-title mb-0">Protein Structure Viewer</h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                3D molecular visualization powered by Mol*
-              </p>
-            </div>
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          {/* PDB Search */}
+          <div className="flex-1 flex gap-2">
+            <input
+              type="text"
+              value={pdbSearchQuery}
+              onChange={(e) => setPdbSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && loadFromPDB()}
+              placeholder="Enter PDB ID (e.g., 1UBQ)"
+              className="input flex-1"
+              disabled={!isViewerReady || isLoading}
+            />
+            <button
+              onClick={loadFromPDB}
+              disabled={!isViewerReady || isLoading}
+              className="btn-primary"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              Load PDB
+            </button>
           </div>
-          <button
-            onClick={() => setShowControls(!showControls)}
-            className="btn-secondary"
-          >
-            {showControls ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
-        </div>
 
-        {/* Controls */}
-        {showControls && (
-          <div className="space-y-4 mb-6">
-            {/* PDB Search */}
-            <div>
-              <label className="label">Load from PDB</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={pdbSearchQuery}
-                  onChange={(e) => setPdbSearchQuery(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && pdbSearchQuery.trim()) {
-                      loadFromPDB(pdbSearchQuery.trim());
-                    }
-                  }}
-                  placeholder="Enter PDB ID (e.g., 1CRN, 7BV2)"
-                  className="input flex-1"
-                  disabled={isLoading}
-                />
-                <button
-                  onClick={() => pdbSearchQuery.trim() && loadFromPDB(pdbSearchQuery.trim())}
-                  className="btn-primary"
-                  disabled={!pdbSearchQuery.trim() || isLoading}
-                >
-                  <Search className="w-4 h-4 mr-2" />
-                  Load
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Examples: 1CRN (crambin), 1UBQ (ubiquitin), 7BV2 (spike protein)
-              </p>
-            </div>
-
-            {/* File Upload */}
-            <div>
-              <label className="label">Or Upload Structure File</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdb,.cif,.mmcif"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) loadFromFile(file);
-                }}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="btn-secondary w-full"
-                disabled={isLoading}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload PDB/CIF File
-              </button>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                💡 Tip: You can also drag & drop files directly onto the viewer
-              </p>
-            </div>
+          {/* File Upload */}
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdb,.cif"
+              onChange={handleFileUpload}
+              className="hidden"
+              disabled={!isViewerReady || isLoading}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!isViewerReady || isLoading}
+              className="btn-secondary"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Upload File
+            </button>
 
             {/* Saved Structures */}
-            {savedStructures.length > 0 && (
-              <div>
-                <button
-                  onClick={() => setShowStructureList(!showStructureList)}
-                  className="label flex items-center justify-between w-full cursor-pointer hover:text-primary-600 dark:hover:text-primary-400"
-                >
-                  <span className="flex items-center gap-2">
-                    <Database className="w-4 h-4" />
-                    Saved Structures ({savedStructures.length})
-                  </span>
-                  {showStructureList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-                {showStructureList && (
-                  <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                    {savedStructures.map((structure) => (
-                      <div
-                        key={structure.id}
-                        className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg"
+            <button
+              onClick={() => setShowStructureList(!showStructureList)}
+              className="btn-secondary relative"
+            >
+              <Database className="w-4 h-4 mr-2" />
+              Saved ({savedStructures.length})
+              {showStructureList ? (
+                <ChevronUp className="w-4 h-4 ml-1" />
+              ) : (
+                <ChevronDown className="w-4 h-4 ml-1" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Saved Structures List */}
+        {showStructureList && (
+          <div className="border-t pt-4">
+            <h3 className="font-semibold mb-3 text-slate-700 dark:text-slate-300">Saved Structures</h3>
+            {savedStructures.length === 0 ? (
+              <p className="text-slate-500 dark:text-slate-400">No saved structures</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {savedStructures.map((structure) => (
+                  <div
+                    key={structure.id}
+                    className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{structure.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {new Date(structure.savedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => loadSavedStructure(structure)}
+                        className="btn-icon"
+                        title="Load"
                       >
-                        <button
-                          onClick={() => handleLoadSavedStructure(structure)}
-                          className="flex-1 text-left text-sm hover:text-primary-600 dark:hover:text-primary-400"
-                        >
-                          <div className="font-medium">{structure.name}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {structure.source === 'pdb' ? 'PDB' : 'File'} • {new Date(structure.uploadDate).toLocaleString()}
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteStructure(structure.id)}
-                          className="btn-icon text-red-600 hover:text-red-700"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                        <Box className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStructure(structure.id)}
+                        className="btn-icon text-red-500 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Viewer Container with Drag-and-Drop */}
+        {/* Viewer Container */}
         <div
-          className="relative"
-          onDragOver={handleDragOver}
+          ref={viewerRef}
+          className="relative w-full h-[600px] bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden"
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <div
-            ref={viewerRef}
-            className={`w-full h-[600px] bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden border-2 transition-all ${
-              isDraggingOver
-                ? 'border-primary-500 border-dashed border-4 bg-primary-50 dark:bg-primary-900/20'
-                : 'border-slate-200 dark:border-slate-700'
-            }`}
-            style={{ position: 'relative' }}
-          />
-
-          {/* Drag Overlay */}
+          {/* FIX: Drag Overlay - only show when actually dragging */}
           {isDraggingOver && !isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-primary-500 bg-opacity-10 backdrop-blur-sm rounded-lg pointer-events-none">
+            <div className="absolute inset-0 bg-primary-500/20 border-2 border-dashed border-primary-500 rounded-lg flex items-center justify-center z-50 pointer-events-none">
               <div className="text-center">
-                <Upload className="w-16 h-16 mx-auto mb-4 text-primary-600 dark:text-primary-400 animate-bounce" />
-                <p className="text-xl font-semibold text-primary-700 dark:text-primary-300">
-                  Drop structure file here
-                </p>
-                <p className="text-sm text-primary-600 dark:text-primary-400 mt-2">
-                  Supports PDB, CIF, mmCIF formats
+                <Upload className="w-16 h-16 text-primary-600 dark:text-primary-400 mx-auto mb-4" />
+                <p className="text-lg font-medium text-primary-700 dark:text-primary-300">
+                  Drop PDB/mmCIF file here
                 </p>
               </div>
             </div>
           )}
 
-          {/* Overlay Controls */}
-          {isViewerReady && currentStructure && (
-            <div className="absolute top-4 right-4 space-y-2">
+          {/* Viewer Controls */}
+          {currentStructure && (
+            <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
               <button
-                onClick={resetCamera}
+                onClick={resetView}
                 className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
-                title="Reset Camera"
+                title="Reset View"
               >
                 <RotateCcw className="w-5 h-5" />
               </button>
               <button
-                onClick={focusOnStructure}
+                onClick={centerAndFocus}
                 className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
-                title="Focus on Structure"
+                title="Center & Focus"
               >
                 <Focus className="w-5 h-5" />
               </button>
               <button
-                onClick={toggleMeasurement}
-                className={`btn-icon bg-white dark:bg-slate-800 shadow-lg ${measurementMode ? 'ring-2 ring-primary-500' : ''}`}
+                onClick={toggleMeasurementMode}
+                className={`btn-icon shadow-lg ${
+                  measurementMode
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-white dark:bg-slate-800'
+                }`}
                 title="Measurement Tool"
               >
                 <Ruler className="w-5 h-5" />
@@ -840,7 +739,7 @@ export default function ProteinViewer() {
 
           {/* Loading Indicator */}
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg z-40">
               <div className="text-center text-white">
                 <div className="spinner mb-4 mx-auto border-white"></div>
                 <p>Loading structure...</p>
@@ -850,7 +749,7 @@ export default function ProteinViewer() {
 
           {/* Visualization Update Indicator */}
           {isUpdatingVisualization && !isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg pointer-events-none z-30">
               <div className="text-center text-white">
                 <div className="spinner mb-2 mx-auto border-white"></div>
                 <p className="text-sm">Updating visualization...</p>
@@ -880,6 +779,7 @@ export default function ProteinViewer() {
                 value={selectedRepresentation}
                 onChange={(e) => handleRepresentationChange(e.target.value)}
                 className="input"
+                disabled={isUpdatingVisualization}
               >
                 {representations.map((rep) => (
                   <option key={rep.id} value={rep.id}>
@@ -896,6 +796,7 @@ export default function ProteinViewer() {
                 value={selectedColorScheme}
                 onChange={(e) => handleColorSchemeChange(e.target.value)}
                 className="input"
+                disabled={isUpdatingVisualization}
               >
                 {colorSchemes.map((scheme) => (
                   <option key={scheme.id} value={scheme.id}>

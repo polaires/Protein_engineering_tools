@@ -5,10 +5,13 @@
 export interface ProteinStructure {
   id: string;
   name: string;
-  source: 'pdb' | 'file' | 'alphafold';
+  source?: 'pdb' | 'file' | 'alphafold';
   pdbId?: string;
   data?: string;
-  uploadDate: Date;
+  url?: string;
+  format?: string;
+  uploadDate?: Date;
+  savedAt?: string;
   fileSize?: number;
   chain?: string;
 }
