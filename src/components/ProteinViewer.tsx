@@ -190,7 +190,7 @@ export default function ProteinViewer() {
   };
 
   // Load structure from PDB ID
-  const loadFromPDB = async (pdbId: string) => {
+  const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string) => {
     if (!pluginRef.current) return;
 
     setIsLoading(true);
@@ -215,8 +215,10 @@ export default function ProteinViewer() {
       // Store structure reference
       structureRef.current = structure.ref;
 
-      // Apply visualization
-      await applyVisualization(structure.ref, selectedRepresentation, selectedColorScheme);
+      // Apply visualization with provided or current values
+      const rep = representation || selectedRepresentation;
+      const color = colorScheme || selectedColorScheme;
+      await applyVisualization(structure.ref, rep, color);
 
       // Fetch protein info from RCSB API
       try {
@@ -261,7 +263,7 @@ export default function ProteinViewer() {
   };
 
   // Load structure from file
-  const loadFromFile = async (file: File) => {
+  const loadFromFile = async (file: File, representation?: string, colorScheme?: string) => {
     if (!pluginRef.current) return;
 
     setIsLoading(true);
@@ -288,8 +290,10 @@ export default function ProteinViewer() {
       // Store structure reference
       structureRef.current = structure.ref;
 
-      // Apply visualization
-      await applyVisualization(structure.ref, selectedRepresentation, selectedColorScheme);
+      // Apply visualization with provided or current values
+      const rep = representation || selectedRepresentation;
+      const color = colorScheme || selectedColorScheme;
+      await applyVisualization(structure.ref, rep, color);
 
       // Save structure
       const newStructure: ProteinStructure = {
@@ -317,20 +321,20 @@ export default function ProteinViewer() {
     }
   };
 
-  // Handle representation change - NOW FULLY WORKING
+  // Handle representation change
   const handleRepresentationChange = async (repId: string) => {
     if (!pluginRef.current || !currentStructure) return;
 
     setSelectedRepresentation(repId);
 
     try {
-      // Reload structure with new representation
+      // Reload structure with new representation (pass it directly to avoid state update delay)
       if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        await loadFromPDB(currentStructure.pdbId);
+        await loadFromPDB(currentStructure.pdbId, repId, selectedColorScheme);
       } else if (currentStructure.data) {
         const blob = new Blob([currentStructure.data], { type: 'text/plain' });
         const file = new File([blob], currentStructure.name);
-        await loadFromFile(file);
+        await loadFromFile(file, repId, selectedColorScheme);
       }
 
       showToast('success', `Representation changed to ${repId}`);
@@ -340,20 +344,20 @@ export default function ProteinViewer() {
     }
   };
 
-  // Handle color scheme change - NOW FULLY WORKING
+  // Handle color scheme change
   const handleColorSchemeChange = async (schemeId: string) => {
     if (!pluginRef.current || !currentStructure) return;
 
     setSelectedColorScheme(schemeId);
 
     try {
-      // Reload structure with new color scheme
+      // Reload structure with new color scheme (pass it directly to avoid state update delay)
       if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        await loadFromPDB(currentStructure.pdbId);
+        await loadFromPDB(currentStructure.pdbId, selectedRepresentation, schemeId);
       } else if (currentStructure.data) {
         const blob = new Blob([currentStructure.data], { type: 'text/plain' });
         const file = new File([blob], currentStructure.name);
-        await loadFromFile(file);
+        await loadFromFile(file, selectedRepresentation, schemeId);
       }
 
       showToast('success', `Color scheme changed to ${schemeId}`);
@@ -553,7 +557,7 @@ export default function ProteinViewer() {
             <div>
               <h2 className="section-title mb-0">Protein Structure Viewer</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                3D molecular visualization powered by Mol* • All features working
+                3D molecular visualization powered by Mol*
               </p>
             </div>
           </div>
@@ -766,12 +770,12 @@ export default function ProteinViewer() {
           )}
         </div>
 
-        {/* Visualization Controls - NOW FULLY WORKING */}
+        {/* Visualization Controls */}
         {currentStructure && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             {/* Representation */}
             <div>
-              <label className="label">Representation ✅ Working</label>
+              <label className="label">Representation</label>
               <select
                 value={selectedRepresentation}
                 onChange={(e) => handleRepresentationChange(e.target.value)}
@@ -787,7 +791,7 @@ export default function ProteinViewer() {
 
             {/* Color Scheme */}
             <div>
-              <label className="label">Color Scheme ✅ Working</label>
+              <label className="label">Color Scheme</label>
               <select
                 value={selectedColorScheme}
                 onChange={(e) => handleColorSchemeChange(e.target.value)}
@@ -847,12 +851,12 @@ export default function ProteinViewer() {
           </div>
         )}
 
-        {/* Export Options - NOW FULLY WORKING */}
+        {/* Export Options */}
         {currentStructure && (
           <div className="mt-6">
             <div className="flex items-center gap-2 mb-2">
               <FileDown className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-              <span className="label mb-0">Export Structure ✅ Working</span>
+              <span className="label mb-0">Export Structure</span>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => exportStructure('pdb')} className="btn-secondary">
@@ -882,7 +886,7 @@ export default function ProteinViewer() {
             </ul>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-            <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">✅ Working Features</h4>
+            <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Features</h4>
             <ul className="space-y-1 text-slate-600 dark:text-slate-400">
               <li>• <strong>Drag & drop:</strong> File upload</li>
               <li>• <strong>Representations:</strong> All 7 styles</li>
