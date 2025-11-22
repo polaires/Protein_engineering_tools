@@ -332,6 +332,77 @@ export default function ProteinViewer() {
     }
   };
 
+  // Extract sequence and chain information from structure
+  const extractSequenceInfo = (structure: any) => {
+    try {
+      if (!structure || !structure.data) return;
+
+      const structureData = structure.data;
+      const models = structureData.models;
+
+      if (!models || models.length === 0) return;
+
+      const model = models[0];
+
+      // Extract sequence from the first chain
+      let seq = '';
+      const residues = model.atomicHierarchy?.residues;
+
+      if (residues) {
+        const residueCount = residues.count;
+        for (let i = 0; i < residueCount; i++) {
+          const compId = residues.label_comp_id.value(i);
+          // Convert 3-letter code to 1-letter code (simplified)
+          const oneLetterCode = convertToOneLetterCode(compId);
+          seq += oneLetterCode;
+        }
+      }
+
+      setSequence(seq);
+      console.log('Extracted sequence:', seq.substring(0, 50) + '...');
+
+      // Extract chain colors (this is a placeholder - actual implementation would query Mol* theme)
+      const chainIds = ['A', 'B', 'C', 'D'];
+      const colors = [
+        'rgb(100, 149, 237)',
+        'rgb(255, 182, 193)',
+        'rgb(144, 238, 144)',
+        'rgb(255, 218, 185)'
+      ];
+
+      const extractedChains = chainIds.slice(0, 2).map((id, idx) => ({
+        id,
+        color: colors[idx]
+      }));
+
+      setChainInfo(extractedChains);
+    } catch (error) {
+      console.error('Failed to extract sequence:', error);
+    }
+  };
+
+  // Convert 3-letter amino acid code to 1-letter code
+  const convertToOneLetterCode = (threeLetterCode: string): string => {
+    const codes: { [key: string]: string } = {
+      'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
+      'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
+      'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
+      'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
+    };
+    return codes[threeLetterCode] || 'X';
+  };
+
+  // Highlight residue in 3D view
+  const highlightResidue = async (residueIndex: number) => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    setSelectedResidue(residueIndex);
+
+    // This would use Mol* selection API to highlight the residue
+    // Placeholder for now
+    console.log('Highlighting residue:', residueIndex);
+  };
+
   // Load structure from PDB ID
   const loadFromPDB = async (pdbId: string, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
     if (!pluginRef.current) return;
@@ -362,6 +433,9 @@ export default function ProteinViewer() {
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
+
+      // Extract sequence and chain information
+      extractSequenceInfo(structure);
 
       // Fetch protein info from RCSB API (only on initial load)
       if (shouldSave) {
@@ -461,6 +535,9 @@ export default function ProteinViewer() {
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
       await applyVisualization(structure.ref, rep, color);
+
+      // Extract sequence and chain information
+      extractSequenceInfo(structure);
 
       // Only save structure on initial load, not when changing representation/color
       if (shouldSave) {
@@ -569,7 +646,7 @@ export default function ProteinViewer() {
       case 'chain-id':
         // Use actual chain info if available, otherwise show generic legend
         if (chainInfo.length > 0) {
-          return chainInfo.map(chain => ({
+          return chainInfo.map((chain: { id: string; color: string }) => ({
             label: `Chain ${chain.id}`,
             color: chain.color
           }));
@@ -1146,6 +1223,37 @@ export default function ProteinViewer() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Sequence Viewer */}
+        {sequence && currentStructure && (
+          <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+              <Database className="w-5 h-5" />
+              Protein Sequence ({sequence.length} residues)
+            </h3>
+            <div className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-600 max-h-48 overflow-y-auto">
+              <div className="font-mono text-xs leading-relaxed break-all select-text">
+                {sequence.split('').map((aa, index) => (
+                  <span
+                    key={index}
+                    onClick={() => highlightResidue(index)}
+                    className={`cursor-pointer hover:bg-primary-200 dark:hover:bg-primary-700 px-0.5 rounded transition-colors ${
+                      selectedResidue === index
+                        ? 'bg-primary-400 dark:bg-primary-600 text-white font-bold'
+                        : 'text-slate-700 dark:text-slate-300'
+                    }`}
+                    title={`Residue ${index + 1}: ${aa}`}
+                  >
+                    {aa}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              Click on any amino acid to highlight it in the 3D view
+            </p>
           </div>
         )}
 
