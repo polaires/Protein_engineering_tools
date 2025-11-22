@@ -148,7 +148,7 @@ async function initDatabase() {
 
 async function sendVerificationEmail(email, token, username) {
   try {
-    const verificationUrl = `${FRONTEND_URL}/verify-email?token=${token}`;
+    const verificationUrl = `${FRONTEND_URL}/?token=${token}`;
 
     const { data, error } = await resend.emails.send({
       from: 'Biochem Space <noreply@biochem.space>',
