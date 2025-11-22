@@ -235,7 +235,7 @@ function AppContent() {
                         Solution
                       </h4>
                       <p className="text-sm text-slate-700 dark:text-slate-300">
-                        Molarity calculator with multiple modes, 50+ chemical database, buffer recipes, and custom recipe builder
+                        Molarity calculator with multiple modes, 50+ chemical database, buffer recipes, custom recipe builder with cloud sync, and serial dilution calculator
                       </p>
                     </div>
 
@@ -265,7 +265,7 @@ function AppContent() {
                         Element
                       </h4>
                       <p className="text-sm text-slate-700 dark:text-slate-300">
-                        Interactive periodic table with two modes: Standard view with detailed element information from PubChem, and Solubility view with metal salt solubility data from CRC Handbook (filter by anion, temperature, and units)
+                        Interactive periodic table with three modes: Standard view with detailed element information from PubChem, Solubility view with metal salt solubility data from CRC Handbook (filter by anion, temperature, and units), and Stability view with metal-ligand stability constants from NIST SRD 46 database
                       </p>
                     </div>
                   </div>
