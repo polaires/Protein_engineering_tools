@@ -213,16 +213,16 @@ export default function ProteinViewer() {
     const plugin = pluginRef.current;
 
     try {
-      // Remove all existing representations
-      const state = plugin.state.data;
-      const reprs = state.selectQ(q => q.ofType('representation'));
-
-      for (const repr of reprs) {
-        await PluginCommands.State.RemoveObject(plugin, { state, ref: repr.transform.ref });
+      // Clear canvas3d to remove all visual representations
+      if (plugin.canvas3d) {
+        plugin.canvas3d.clear();
       }
 
-      // Add new representation with the desired color scheme
+      // Rebuild representation with new settings
       await applyVisualization(structureRef.current, representation, colorScheme);
+
+      // Reset camera to ensure structure is visible
+      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
     } catch (error) {
       console.error('Failed to update visualization:', error);
       throw error;
