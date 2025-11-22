@@ -51,8 +51,7 @@ export default function ProteinViewer() {
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
 
   // Ligand, ion, water controls
-  const [showLigands, setShowLigands] = useState(true);
-  const [showIons, setShowIons] = useState(true);
+  const [showNonProtein, setShowNonProtein] = useState(true);  // Combined ligands + ions
   const [showWater, setShowWater] = useState(false);
 
   // Ref to prevent drag overlay from showing during/after file load
@@ -92,7 +91,7 @@ export default function ProteinViewer() {
           layout: {
             initial: {
               isExpanded: false,
-              showControls: false,
+              showControls: true,  // MUST be true for sequence panel to show!
               regionState: {
                 top: 'full',      // Show sequence panel in top region
                 left: 'hidden',
@@ -103,6 +102,12 @@ export default function ProteinViewer() {
           },
           components: {
             remoteState: 'none',
+            controls: {
+              top: 'reactive',  // Enable sequence panel (reactive = auto-show when data available)
+              bottom: 'none',
+              left: 'none',
+              right: 'none',
+            },
           },
           config: [
             [PluginConfig.Viewport.ShowExpand, false],
@@ -231,38 +236,51 @@ export default function ProteinViewer() {
         }
       }
 
-      // Add ligands if enabled
-      if (showLigands && ligand) {
-        await plugin.builders.structure.representation.addRepresentation(ligand, {
-          type: 'ball-and-stick',
-          color: 'element-symbol' as any,
-          typeParams: {
-            sizeFactor: 0.2,  // Smaller size for ligands
-            alpha: 1
-          },
-        }, { tag: 'ligand' });
-      }
+      // Add non-protein components (ligands + ions) if enabled
+      // Combining these avoids confusion about SO4, phosphates, etc.
+      if (showNonProtein) {
+        console.log('Adding non-protein components (ligands + ions)...');
 
-      // Add ions if enabled
-      if (showIons && ion) {
-        await plugin.builders.structure.representation.addRepresentation(ion, {
-          type: 'ball-and-stick',
-          color: 'element-symbol' as any,
-          typeParams: {
-            sizeFactor: 0.4,  // Smaller size for ions
-            alpha: 1
-          },
-        }, { tag: 'ion' });
+        // Try ligand component
+        if (ligand) {
+          console.log('Ligand component found, adding representation...');
+          await plugin.builders.structure.representation.addRepresentation(ligand, {
+            type: 'ball-and-stick',
+            color: 'element-symbol' as any,
+            typeParams: {
+              sizeFactor: 0.25,
+              alpha: 1
+            },
+          }, { tag: 'ligand' });
+        } else {
+          console.log('No ligand component found');
+        }
+
+        // Try ion component
+        if (ion) {
+          console.log('Ion component found, adding representation...');
+          await plugin.builders.structure.representation.addRepresentation(ion, {
+            type: 'ball-and-stick',
+            color: 'element-symbol' as any,
+            typeParams: {
+              sizeFactor: 0.33,
+              alpha: 1
+            },
+          }, { tag: 'ion' });
+        } else {
+          console.log('No ion component found');
+        }
       }
 
       // Add water if enabled
       if (showWater && water) {
+        console.log('Adding water molecules...');
         await plugin.builders.structure.representation.addRepresentation(water, {
           type: 'ball-and-stick',
           color: 'element-symbol' as any,
           typeParams: {
-            sizeFactor: 0.2,
-            alpha: 0.6
+            sizeFactor: 0.15,
+            alpha: 0.5
           },
         }, { tag: 'water' });
       }
@@ -1063,31 +1081,18 @@ export default function ProteinViewer() {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={showLigands}
+                      checked={showNonProtein}
                       onChange={(e) => {
-                        setShowLigands(e.target.checked);
+                        setShowNonProtein(e.target.checked);
                         if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
                     <div className="flex flex-col">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Ligands & Small Molecules</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Bound molecules, substrates, drugs</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showIons}
-                      onChange={(e) => {
-                        setShowIons(e.target.checked);
-                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Ions & Metal Centers</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Metal ions (Ca²⁺, Mg²⁺, Zn²⁺, etc.)</span>
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Non-Protein Components</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Ligands, substrates, ions, metals, SO₄, etc.
+                      </span>
                     </div>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -1102,12 +1107,12 @@ export default function ProteinViewer() {
                     />
                     <div className="flex flex-col">
                       <span className="text-sm text-slate-700 dark:text-slate-300">Water Molecules</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Crystallographic water</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Crystallographic water (H₂O)</span>
                     </div>
                   </label>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
-                  Note: Components displayed only if present in structure
+                  💡 Check browser console (F12) to see what components are found
                 </p>
               </div>
             )}
