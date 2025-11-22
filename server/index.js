@@ -523,7 +523,7 @@ app.post('/api/auth/verify-email', async (req, res) => {
   }
 });
 
-// Resend verification email
+// Resend verification email (authenticated - for logged in users)
 app.post('/api/auth/resend-verification', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
@@ -589,6 +589,89 @@ app.post('/api/auth/resend-verification', authenticateToken, async (req, res) =>
     res.status(500).json({
       success: false,
       message: 'Failed to resend verification email'
+    });
+  }
+});
+
+// Resend verification email (public - uses email address)
+app.post('/api/auth/resend-verification-public', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email address is required'
+      });
+    }
+
+    const result = await pool.query(
+      'SELECT id, username, email, email_verified, verification_email_sent_at FROM users WHERE email = $1',
+      [email]
+    );
+
+    // For security, always return success even if email doesn't exist
+    // This prevents email enumeration attacks
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'If an unverified account exists with that email, a verification link has been sent.',
+        cooldownSeconds: 60
+      });
+    }
+
+    const user = result.rows[0];
+
+    if (user.email_verified) {
+      return res.json({
+        success: true,
+        message: 'If an unverified account exists with that email, a verification link has been sent.',
+        cooldownSeconds: 60
+      });
+    }
+
+    // Check cooldown period (60 seconds)
+    const COOLDOWN_SECONDS = 60;
+    if (user.verification_email_sent_at) {
+      const lastSentAt = new Date(user.verification_email_sent_at);
+      const secondsSinceLastSent = Math.floor((Date.now() - lastSentAt.getTime()) / 1000);
+
+      if (secondsSinceLastSent < COOLDOWN_SECONDS) {
+        const remainingSeconds = COOLDOWN_SECONDS - secondsSinceLastSent;
+        return res.json({
+          success: false,
+          message: `Please wait ${remainingSeconds} seconds before requesting another verification email.`,
+          remainingSeconds: remainingSeconds
+        });
+      }
+    }
+
+    // Generate new verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await pool.query(
+      `UPDATE users
+       SET verification_token = $1,
+           verification_token_expiry = $2,
+           verification_email_sent_at = NOW()
+       WHERE id = $3`,
+      [verificationToken, tokenExpiry, user.id]
+    );
+
+    // Send verification email
+    await sendVerificationEmail(user.email, verificationToken, user.username);
+
+    res.json({
+      success: true,
+      message: 'If an unverified account exists with that email, a verification link has been sent.',
+      cooldownSeconds: COOLDOWN_SECONDS
+    });
+  } catch (error) {
+    console.error('Resend verification public error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process request'
     });
   }
 });
