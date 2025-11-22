@@ -23,6 +23,7 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [customScale, setCustomScale] = useState<string>('');
   const [showCustomScale, setShowCustomScale] = useState(false);
+  const [scalingMode, setScalingMode] = useState<'volume' | 'concentration'>('volume');
 
   // Filter and search recipes
   const filteredRecipes = useMemo(() => {
@@ -54,32 +55,44 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
   }, [recipes, filterCategory, searchQuery, preferences]);
 
   // Calculate component masses for a recipe with scaling
-  const calculateRecipeComponents = (recipe: Recipe, scale: number = 1) => {
+  const calculateRecipeComponents = (recipe: Recipe, scale: number = 1, mode: 'volume' | 'concentration' = 'volume') => {
     return recipe.components.map((component) => {
       const chemical = getChemicalById(component.chemicalId);
       if (!chemical) return component;
 
-      const molarityInM = component.concentration / 1000; // Convert mM to M
-      const scaledVolume = recipe.totalVolume * scale;
-      const mass = calculateMass(molarityInM, scaledVolume, chemical.molecularWeight);
+      let molarityInM: number;
+      let volumeInML: number;
+
+      if (mode === 'volume') {
+        // Volume scaling: scale the volume, keep concentration
+        molarityInM = component.concentration / 1000; // Convert mM to M
+        volumeInML = recipe.totalVolume * scale;
+      } else {
+        // Concentration scaling: scale the concentration, keep volume
+        molarityInM = (component.concentration * scale) / 1000; // Convert mM to M and scale
+        volumeInML = recipe.totalVolume;
+      }
+
+      const mass = calculateMass(molarityInM, volumeInML, chemical.molecularWeight);
 
       return {
         ...component,
         chemical,
         mass,
+        concentration: mode === 'concentration' ? component.concentration * scale : component.concentration,
       };
     });
   };
 
   // Check solubility for scaled recipe
-  const checkScaledSolubility = (recipe: Recipe, scale: number): { warning: string; component: string } | null => {
-    const components = calculateRecipeComponents(recipe, scale);
-    const scaledVolume = recipe.totalVolume * scale;
+  const checkScaledSolubility = (recipe: Recipe, scale: number, mode: 'volume' | 'concentration'): { warning: string; component: string } | null => {
+    const components = calculateRecipeComponents(recipe, scale, mode);
+    const volumeInML = mode === 'volume' ? recipe.totalVolume * scale : recipe.totalVolume;
 
     for (const component of components) {
       if (!component.mass || !component.chemical) continue;
 
-      const concentrationMgML = (component.mass / scaledVolume) * 1000;
+      const concentrationMgML = (component.mass / volumeInML) * 1000;
 
       // General solubility limits (approximate)
       if (concentrationMgML > 500) {
@@ -104,16 +117,17 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
     setScaleFactor(1); // Reset scale factor
     setCustomScale('');
     setShowCustomScale(false);
+    setScalingMode('volume'); // Reset to volume scaling
     onSelectRecipe(recipe);
   };
 
   // Handle scale factor change
-  const handleScaleChange = (value: string) => {
+  const handleScaleChange = (value: number | 'custom') => {
     if (value === 'custom') {
       setShowCustomScale(true);
     } else {
       setShowCustomScale(false);
-      setScaleFactor(parseFloat(value));
+      setScaleFactor(value);
       setCustomScale('');
     }
   };
@@ -331,8 +345,10 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
                   Volume
                 </div>
                 <div className="font-semibold">
-                  {(selectedRecipe.totalVolume * scaleFactor).toFixed(1)} {selectedRecipe.volumeUnit}
-                  {scaleFactor !== 1 && (
+                  {scalingMode === 'volume'
+                    ? `${(selectedRecipe.totalVolume * scaleFactor).toFixed(1)} ${selectedRecipe.volumeUnit}`
+                    : `${selectedRecipe.totalVolume} ${selectedRecipe.volumeUnit}`}
+                  {scaleFactor !== 1 && scalingMode === 'volume' && (
                     <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
                       ({scaleFactor}×)
                     </span>
@@ -354,22 +370,75 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
               <h3 className="text-sm font-semibold mb-3 text-primary-900 dark:text-primary-100">
                 Recipe Scaling
               </h3>
-              <div className="flex flex-wrap gap-2 items-center">
-                <select
-                  className="select-field flex-1 min-w-[200px]"
-                  value={showCustomScale ? 'custom' : scaleFactor.toString()}
-                  onChange={(e) => handleScaleChange(e.target.value)}
-                >
-                  <option value="1">1× (Original)</option>
-                  <option value="2">2× (Double)</option>
-                  <option value="5">5× (5 times)</option>
-                  <option value="10">10× (10 times)</option>
-                  <option value="custom">Custom</option>
-                </select>
+
+              {/* Scaling Mode Toggle */}
+              <div className="mb-4">
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Scaling Mode
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setScalingMode('volume')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      scalingMode === 'volume'
+                        ? 'bg-primary-600 text-white dark:bg-primary-500'
+                        : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    }`}
+                  >
+                    Scale Volume
+                  </button>
+                  <button
+                    onClick={() => setScalingMode('concentration')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      scalingMode === 'concentration'
+                        ? 'bg-primary-600 text-white dark:bg-primary-500'
+                        : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    }`}
+                  >
+                    Scale Concentration
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  {scalingMode === 'volume'
+                    ? 'Scale the total volume while keeping concentration constant'
+                    : 'Scale the concentration while keeping volume constant'}
+                </p>
+              </div>
+
+              {/* Scale Factor Buttons */}
+              <div>
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Scale Factor
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[0.2, 0.5, 1, 2, 5, 10].map((factor) => (
+                    <button
+                      key={factor}
+                      onClick={() => handleScaleChange(factor)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        scaleFactor === factor && !showCustomScale
+                          ? 'bg-primary-600 text-white dark:bg-primary-500'
+                          : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      {factor}×
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => handleScaleChange('custom')}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      showCustomScale
+                        ? 'bg-primary-600 text-white dark:bg-primary-500'
+                        : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+                    }`}
+                  >
+                    Custom
+                  </button>
+                </div>
                 {showCustomScale && (
                   <input
                     type="number"
-                    className="input-field w-32"
+                    className="input-field w-32 mt-2"
                     placeholder="Enter scale"
                     step="0.1"
                     min="0.1"
@@ -381,8 +450,8 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
             </div>
 
             {/* Solubility Warning */}
-            {scaleFactor > 1 && (() => {
-              const solubilityCheck = checkScaledSolubility(selectedRecipe, scaleFactor);
+            {((scalingMode === 'volume' && scaleFactor > 1) || (scalingMode === 'concentration' && scaleFactor !== 1)) && (() => {
+              const solubilityCheck = checkScaledSolubility(selectedRecipe, scaleFactor, scalingMode);
               return solubilityCheck ? (
                 <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg">
                   <div className="flex items-start gap-3">
@@ -395,7 +464,9 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
                         <strong>{solubilityCheck.component}:</strong> {solubilityCheck.warning}
                       </p>
                       <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-                        Consider using a larger volume or heating/stirring to improve dissolution.
+                        {scalingMode === 'concentration'
+                          ? 'Consider reducing the concentration or using techniques to improve solubility.'
+                          : 'Consider using a larger volume or heating/stirring to improve dissolution.'}
                       </p>
                     </div>
                   </div>
@@ -409,7 +480,7 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-4">Components</h3>
               <div className="space-y-4">
-                {calculateRecipeComponents(selectedRecipe, scaleFactor).map(
+                {calculateRecipeComponents(selectedRecipe, scaleFactor, scalingMode).map(
                   (component, idx) => (
                     <div
                       key={idx}
@@ -429,6 +500,11 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
                           )}
                           <div className="text-sm text-primary-600 dark:text-primary-400 mt-1">
                             {component.concentration} {component.concentrationUnit}
+                            {scalingMode === 'concentration' && scaleFactor !== 1 && (
+                              <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
+                                ({scaleFactor}×)
+                              </span>
+                            )}
                           </div>
                         </div>
                         {component.mass && (
@@ -484,8 +560,8 @@ export default function RecipeList({ category, onSelectRecipe }: RecipeListProps
         <RecipeLabel
           recipe={{
             ...selectedRecipe,
-            totalVolume: selectedRecipe.totalVolume * scaleFactor,
-            components: calculateRecipeComponents(selectedRecipe, scaleFactor)
+            totalVolume: scalingMode === 'volume' ? selectedRecipe.totalVolume * scaleFactor : selectedRecipe.totalVolume,
+            components: calculateRecipeComponents(selectedRecipe, scaleFactor, scalingMode)
           }}
           onClose={() => setShowLabel(false)}
         />

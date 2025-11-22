@@ -24,7 +24,8 @@ import RecipeBuilder from './RecipeBuilder';
 import SerialDilution from './SerialDilution';
 import MyRecipes from './MyRecipes';
 
-type CalculatorTab = 'calculator' | 'recipes' | 'builder' | 'myrecipes' | 'dilution';
+type CalculatorTab = 'calculator' | 'recipes' | 'dilution';
+type RecipeSubTab = 'browse' | 'builder' | 'myrecipes';
 
 const CALCULATION_MODES = [
   {
@@ -57,6 +58,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   const { preferences, addToRecentChemicals, showToast } = useApp();
 
   const [activeTab, setActiveTab] = useState<CalculatorTab>('calculator');
+  const [recipeSubTab, setRecipeSubTab] = useState<RecipeSubTab>('browse');
   const [selectedMode, setSelectedMode] = useState<CalculationMode>(
     initialMode || CalculationMode.MASS_FROM_MOLARITY
   );
@@ -630,20 +632,6 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
             Recipes
           </button>
           <button
-            onClick={() => setActiveTab('builder')}
-            className={`calc-mode-tab ${activeTab === 'builder' ? 'active' : ''}`}
-          >
-            <Sparkles className="w-4 h-4 inline mr-2" />
-            Recipe Builder
-          </button>
-          <button
-            onClick={() => setActiveTab('myrecipes')}
-            className={`calc-mode-tab ${activeTab === 'myrecipes' ? 'active' : ''}`}
-          >
-            <FolderHeart className="w-4 h-4 inline mr-2" />
-            My Recipes
-          </button>
-          <button
             onClick={() => setActiveTab('dilution')}
             className={`calc-mode-tab ${activeTab === 'dilution' ? 'active' : ''}`}
           >
@@ -870,24 +858,56 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
       {/* Recipes Tab */}
       {activeTab === 'recipes' && (
         <div>
-          <div className="mb-6">
-            <h2 className="section-title">Buffer & Solution Recipes</h2>
-            <p className="text-slate-600 dark:text-slate-400">
-              Browse pre-configured recipes for common laboratory solutions
-            </p>
+          {/* Recipe Sub-Navigation */}
+          <div className="card mb-6">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setRecipeSubTab('browse')}
+                className={`calc-mode-tab ${recipeSubTab === 'browse' ? 'active' : ''}`}
+              >
+                <BookOpen className="w-4 h-4 inline mr-2" />
+                Browse Recipes
+              </button>
+              <button
+                onClick={() => setRecipeSubTab('builder')}
+                className={`calc-mode-tab ${recipeSubTab === 'builder' ? 'active' : ''}`}
+              >
+                <Sparkles className="w-4 h-4 inline mr-2" />
+                Recipe Builder
+              </button>
+              <button
+                onClick={() => setRecipeSubTab('myrecipes')}
+                className={`calc-mode-tab ${recipeSubTab === 'myrecipes' ? 'active' : ''}`}
+              >
+                <FolderHeart className="w-4 h-4 inline mr-2" />
+                My Recipes
+              </button>
+            </div>
           </div>
-          <RecipeList onSelectRecipe={handleRecipeSelect} />
+
+          {/* Browse Recipes Sub-Tab */}
+          {recipeSubTab === 'browse' && (
+            <div>
+              <div className="mb-6">
+                <h2 className="section-title">Buffer & Solution Recipes</h2>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Browse pre-configured recipes for common laboratory solutions
+                </p>
+              </div>
+              <RecipeList onSelectRecipe={handleRecipeSelect} />
+            </div>
+          )}
+
+          {/* Recipe Builder Sub-Tab */}
+          {recipeSubTab === 'builder' && (
+            <RecipeBuilder />
+          )}
+
+          {/* My Recipes Sub-Tab */}
+          {recipeSubTab === 'myrecipes' && (
+            <MyRecipes />
+          )}
         </div>
-      )}
-
-      {/* Recipe Builder Tab */}
-      {activeTab === 'builder' && (
-        <RecipeBuilder />
-      )}
-
-      {/* My Recipes Tab */}
-      {activeTab === 'myrecipes' && (
-        <MyRecipes />
       )}
 
       {/* Serial Dilution Tab */}
