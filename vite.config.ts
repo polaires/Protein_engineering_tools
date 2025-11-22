@@ -23,12 +23,22 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     // Produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
+    // Optimize chunk sizes for Mol*
+    chunkSizeWarningLimit: 3000,
   },
 
   // Path aliases
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+    },
+  },
+
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ['molstar'],
+    esbuildOptions: {
+      target: 'esnext',
     },
   },
 });

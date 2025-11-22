@@ -3,19 +3,20 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom, Box } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
 import Element from '@/components/Element';
+import ProteinViewer from '@/components/ProteinViewer';
 import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 import VerifyEmail from '@/components/VerifyEmail';
 import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 import ResetPassword from '@/components/ResetPassword';
 
-type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'about';
+type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'protein-viewer' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
@@ -174,6 +175,13 @@ function AppContent() {
               Element
             </button>
             <button
+              onClick={() => setActiveTab('protein-viewer')}
+              className={`calc-mode-tab ${activeTab === 'protein-viewer' ? 'active' : ''}`}
+            >
+              <Box className="w-4 h-4 inline mr-2" />
+              3D Viewer
+            </button>
+            <button
               onClick={() => setActiveTab('about')}
               className={`calc-mode-tab ${activeTab === 'about' ? 'active' : ''}`}
             >
@@ -207,6 +215,12 @@ function AppContent() {
         {activeTab === 'element' && (
           <div className="animate-in">
             <Element />
+          </div>
+        )}
+
+        {activeTab === 'protein-viewer' && (
+          <div className="animate-in">
+            <ProteinViewer />
           </div>
         )}
 
@@ -268,6 +282,16 @@ function AppContent() {
                         Interactive periodic table with three modes: Standard view with detailed element information from PubChem, Solubility view with metal salt solubility data from CRC Handbook (filter by anion, temperature, and units), and Stability view with metal-ligand stability constants from NIST SRD 46 database
                       </p>
                     </div>
+
+                    <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                      <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                        <Box className="w-5 h-5" />
+                        3D Viewer
+                      </h4>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Professional 3D protein structure visualization powered by Mol*. Load structures from PDB database or upload local files. Features multiple representation styles (cartoon, surface, ball-and-stick), advanced coloring schemes (secondary structure, hydrophobicity, B-factor), structure persistence, snapshot export, and interactive controls for detailed molecular analysis
+                      </p>
+                    </div>
                   </div>
                 </section>
 
@@ -295,6 +319,9 @@ function AppContent() {
                     </span>
                     <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
                       Recharts
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Mol*
                     </span>
                   </div>
                 </section>
