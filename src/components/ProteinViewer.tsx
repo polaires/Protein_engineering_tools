@@ -695,13 +695,19 @@ export default function ProteinViewer() {
 
         {/* Viewer Container */}
         <div
-          ref={viewerRef}
           className="relative w-full h-[600px] bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden"
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
+          {/* Mol* Viewer */}
+          <div
+            ref={viewerRef}
+            className="absolute inset-0"
+            style={{ width: '100%', height: '100%' }}
+          />
+
           {/* FIX: Drag Overlay - only show when actually dragging */}
           {isDraggingOver && !isLoading && (
             <div className="absolute inset-0 bg-primary-500/20 border-2 border-dashed border-primary-500 rounded-lg flex items-center justify-center z-50 pointer-events-none">
