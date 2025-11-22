@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle, GitBranch } from 'lucide-react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle, GitBranch, FolderHeart } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -22,8 +22,9 @@ import ChemicalSearch from './ChemicalSearch';
 import RecipeList from './RecipeList';
 import RecipeBuilder from './RecipeBuilder';
 import SerialDilution from './SerialDilution';
+import MyRecipes from './MyRecipes';
 
-type CalculatorTab = 'calculator' | 'recipes' | 'builder' | 'dilution';
+type CalculatorTab = 'calculator' | 'recipes' | 'builder' | 'myrecipes' | 'dilution';
 
 const CALCULATION_MODES = [
   {
@@ -636,6 +637,13 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
             Recipe Builder
           </button>
           <button
+            onClick={() => setActiveTab('myrecipes')}
+            className={`calc-mode-tab ${activeTab === 'myrecipes' ? 'active' : ''}`}
+          >
+            <FolderHeart className="w-4 h-4 inline mr-2" />
+            My Recipes
+          </button>
+          <button
             onClick={() => setActiveTab('dilution')}
             className={`calc-mode-tab ${activeTab === 'dilution' ? 'active' : ''}`}
           >
@@ -875,6 +883,11 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
       {/* Recipe Builder Tab */}
       {activeTab === 'builder' && (
         <RecipeBuilder />
+      )}
+
+      {/* My Recipes Tab */}
+      {activeTab === 'myrecipes' && (
+        <MyRecipes />
       )}
 
       {/* Serial Dilution Tab */}
