@@ -49,6 +49,9 @@ export default function ProteinViewer() {
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
+  // Ref to prevent drag overlay from showing during/after file load
+  const allowDragOverlayRef = useRef(true);
+
   // Color schemes
   const colorSchemes: ColorScheme[] = [
     { id: 'default', name: 'Default', description: 'Standard coloring' },
@@ -128,10 +131,17 @@ export default function ProteinViewer() {
     };
   }, []);
 
-  // Ensure drag overlay clears when loading starts
+  // Ensure drag overlay clears when loading starts and stays cleared
   useEffect(() => {
     if (isLoading) {
       setIsDraggingOver(false);
+      allowDragOverlayRef.current = false;
+    } else {
+      // Re-enable drag overlay after a short delay to prevent race conditions
+      const timeout = setTimeout(() => {
+        allowDragOverlayRef.current = true;
+      }, 500);
+      return () => clearTimeout(timeout);
     }
   }, [isLoading]);
 
@@ -193,6 +203,29 @@ export default function ProteinViewer() {
       }
     } catch (error) {
       console.error('Failed to apply visualization:', error);
+    }
+  };
+
+  // Update visualization without reloading the structure
+  const updateVisualization = async (representation: string, colorScheme: string) => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    const plugin = pluginRef.current;
+
+    try {
+      // Remove all existing representations
+      const state = plugin.state.data;
+      const reprs = state.selectQ(q => q.ofType('representation'));
+
+      for (const repr of reprs) {
+        await PluginCommands.State.RemoveObject(plugin, { state, ref: repr.transform.ref });
+      }
+
+      // Add new representation with the desired color scheme
+      await applyVisualization(structureRef.current, representation, colorScheme);
+    } catch (error) {
+      console.error('Failed to update visualization:', error);
+      throw error;
     }
   };
 
@@ -336,20 +369,13 @@ export default function ProteinViewer() {
 
   // Handle representation change
   const handleRepresentationChange = async (repId: string) => {
-    if (!pluginRef.current || !currentStructure) return;
+    if (!pluginRef.current || !currentStructure || !structureRef.current) return;
 
     setSelectedRepresentation(repId);
 
     try {
-      // Reload structure with new representation (don't save a new structure, just update visualization)
-      if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        await loadFromPDB(currentStructure.pdbId, repId, selectedColorScheme, false);
-      } else if (currentStructure.data) {
-        const blob = new Blob([currentStructure.data], { type: 'text/plain' });
-        const file = new File([blob], currentStructure.name);
-        await loadFromFile(file, repId, selectedColorScheme, false);
-      }
-
+      // Update visualization without reloading the structure
+      await updateVisualization(repId, selectedColorScheme);
       showToast('success', `Representation changed to ${repId}`);
     } catch (error) {
       console.error('Failed to change representation:', error);
@@ -359,20 +385,13 @@ export default function ProteinViewer() {
 
   // Handle color scheme change
   const handleColorSchemeChange = async (schemeId: string) => {
-    if (!pluginRef.current || !currentStructure) return;
+    if (!pluginRef.current || !currentStructure || !structureRef.current) return;
 
     setSelectedColorScheme(schemeId);
 
     try {
-      // Reload structure with new color scheme (don't save a new structure, just update visualization)
-      if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-        await loadFromPDB(currentStructure.pdbId, selectedRepresentation, schemeId, false);
-      } else if (currentStructure.data) {
-        const blob = new Blob([currentStructure.data], { type: 'text/plain' });
-        const file = new File([blob], currentStructure.name);
-        await loadFromFile(file, selectedRepresentation, schemeId, false);
-      }
-
+      // Update visualization without reloading the structure
+      await updateVisualization(selectedRepresentation, schemeId);
       showToast('success', `Color scheme changed to ${schemeId}`);
     } catch (error) {
       console.error('Failed to change color scheme:', error);
@@ -515,13 +534,19 @@ export default function ProteinViewer() {
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingOver(true);
+    // Only show overlay if we're allowed to (not during/after loading)
+    if (allowDragOverlayRef.current) {
+      setIsDraggingOver(true);
+    }
   };
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDraggingOver(true);
+    // Only show overlay if we're allowed to (not during/after loading)
+    if (allowDragOverlayRef.current) {
+      setIsDraggingOver(true);
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
