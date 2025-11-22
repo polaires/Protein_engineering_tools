@@ -48,6 +48,7 @@ export default function ProteinViewer() {
   const [selectedRepresentation, setSelectedRepresentation] = useState('cartoon');
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
 
   // Ref to prevent drag overlay from showing during/after file load
   const allowDragOverlayRef = useRef(true);
@@ -208,24 +209,55 @@ export default function ProteinViewer() {
 
   // Update visualization without reloading the structure
   const updateVisualization = async (representation: string, colorScheme: string) => {
-    if (!pluginRef.current || !structureRef.current) return;
+    if (!pluginRef.current || !structureRef.current || !currentStructure) return;
 
     const plugin = pluginRef.current;
+    setIsUpdatingVisualization(true);
 
     try {
-      // Clear canvas3d to remove all visual representations
-      if (plugin.canvas3d) {
-        plugin.canvas3d.clear();
+      const state = plugin.state.data;
+
+      // Find and remove all representation objects from the state tree
+      // We need to collect refs first, then remove them
+      const toRemove: string[] = [];
+
+      // Iterate through all state objects
+      for (const [ref, cell] of state.cells.entries()) {
+        // Check if this is a representation object (visual component)
+        if (cell.obj && cell.obj.type &&
+            (cell.obj.type.name === 'structure-representation-3d' ||
+             cell.obj.label?.toLowerCase().includes('representation'))) {
+          toRemove.push(ref);
+        }
       }
 
-      // Rebuild representation with new settings
+      // Remove all representation objects
+      for (const ref of toRemove) {
+        await PluginCommands.State.RemoveObject(plugin, { state, ref });
+      }
+
+      // Add new representation with the desired color scheme
       await applyVisualization(structureRef.current, representation, colorScheme);
 
-      // Reset camera to ensure structure is visible
-      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
+      // Reset camera smoothly
+      PluginCommands.Camera.Reset(plugin, { durationMs: 250 });
     } catch (error) {
       console.error('Failed to update visualization:', error);
-      throw error;
+      // Fallback: reload from cached data if direct update fails
+      try {
+        if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
+          await loadFromPDB(currentStructure.pdbId, representation, colorScheme, false);
+        } else if (currentStructure.data) {
+          const blob = new Blob([currentStructure.data], { type: 'text/plain' });
+          const file = new File([blob], currentStructure.name);
+          await loadFromFile(file, representation, colorScheme, false);
+        }
+      } catch (fallbackError) {
+        console.error('Fallback reload also failed:', fallbackError);
+        throw fallbackError;
+      }
+    } finally {
+      setIsUpdatingVisualization(false);
     }
   };
 
@@ -521,13 +553,17 @@ export default function ProteinViewer() {
   // Load saved structure
   const handleLoadSavedStructure = async (structure: ProteinStructure) => {
     if (structure.source === 'pdb' && structure.pdbId) {
-      await loadFromPDB(structure.pdbId);
+      // Don't save again - we're loading an existing saved structure
+      await loadFromPDB(structure.pdbId, undefined, undefined, false);
     } else if (structure.data) {
       // Create a pseudo-file from saved data
       const blob = new Blob([structure.data], { type: 'text/plain' });
       const file = new File([blob], structure.name);
-      await loadFromFile(file);
+      // Don't save again - we're loading an existing saved structure
+      await loadFromFile(file, undefined, undefined, false);
     }
+    // Set the current structure to the one we just loaded
+    setCurrentStructure(structure);
   };
 
   // Drag-and-drop handlers
@@ -562,8 +598,9 @@ export default function ProteinViewer() {
     e.preventDefault();
     e.stopPropagation();
 
-    // Immediately clear drag state
+    // Immediately clear drag state and prevent it from being re-enabled
     setIsDraggingOver(false);
+    allowDragOverlayRef.current = false;
 
     const files = Array.from(e.dataTransfer.files);
 
@@ -695,7 +732,7 @@ export default function ProteinViewer() {
                         >
                           <div className="font-medium">{structure.name}</div>
                           <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {structure.source === 'pdb' ? 'PDB' : 'File'} • {new Date(structure.uploadDate).toLocaleDateString()}
+                            {structure.source === 'pdb' ? 'PDB' : 'File'} • {new Date(structure.uploadDate).toLocaleString()}
                           </div>
                         </button>
                         <button
@@ -794,6 +831,16 @@ export default function ProteinViewer() {
               <div className="text-center text-white">
                 <div className="spinner mb-4 mx-auto border-white"></div>
                 <p>Loading structure...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Visualization Update Indicator */}
+          {isUpdatingVisualization && !isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded-lg pointer-events-none">
+              <div className="text-center text-white">
+                <div className="spinner mb-2 mx-auto border-white"></div>
+                <p className="text-sm">Updating visualization...</p>
               </div>
             </div>
           )}
