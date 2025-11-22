@@ -102,12 +102,7 @@ export default function ProteinViewer() {
           },
           components: {
             remoteState: 'none',
-            controls: {
-              top: 'reactive',  // Enable sequence panel (reactive = auto-show when data available)
-              bottom: 'none',
-              left: 'none',
-              right: 'none',
-            },
+            // Let controls use default components (includes sequence panel in top)
           },
           config: [
             [PluginConfig.Viewport.ShowExpand, false],
