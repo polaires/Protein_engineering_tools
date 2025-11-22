@@ -40,13 +40,26 @@ export default function EmailVerificationBanner() {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const token = localStorage.getItem('token');
 
-      const response = await fetch(`${apiUrl}/api/auth/resend-verification`, {
+      // First, try the authenticated endpoint
+      let response = await fetch(`${apiUrl}/api/auth/resend-verification`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
+
+      // If token is invalid/expired (401 or 403), use public endpoint with email
+      if (response.status === 401 || response.status === 403) {
+        console.log('Token invalid, using public resend endpoint');
+        response = await fetch(`${apiUrl}/api/auth/resend-verification-public`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email: currentUser.email })
+        });
+      }
 
       const data = await response.json();
 
