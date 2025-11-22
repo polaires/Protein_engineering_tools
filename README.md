@@ -1,4 +1,4 @@
-# Molarity Calculator
+# Biochem space
 
 A comprehensive, professional-grade molarity calculator application built with React and Tauri for students and researchers across all academic levels.
 
