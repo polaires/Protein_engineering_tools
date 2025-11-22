@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
-  Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown
+  Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -44,7 +44,7 @@ export default function ProteinViewer() {
   const [showControls, setShowControls] = useState(true);
   const [showStructureList, setShowStructureList] = useState(false);
   const [showInfo, setShowInfo] = useState(true);
-  const [selectedColorScheme, setSelectedColorScheme] = useState('uniform');
+  const [selectedColorScheme, setSelectedColorScheme] = useState('chain-id');
   const [selectedRepresentation, setSelectedRepresentation] = useState('cartoon');
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -356,32 +356,50 @@ export default function ProteinViewer() {
 
   // Load structure from file
   const loadFromFile = async (file: File, representation?: string, colorScheme?: string, shouldSave: boolean = true) => {
-    if (!pluginRef.current) return;
+    if (!pluginRef.current) {
+      console.warn('Plugin not initialized');
+      return;
+    }
 
+    console.log('Starting file load:', file.name);
     setIsLoading(true);
+
+    // Immediately clear drag state
+    setIsDraggingOver(false);
+    allowDragOverlayRef.current = false;
+
     try {
       const plugin = pluginRef.current;
 
+      console.log('Clearing existing structure...');
       // Clear existing structure
       await plugin.clear();
       structureRef.current = null;
 
+      console.log('Reading file...');
       const text = await file.text();
       const fileType = file.name.toLowerCase().endsWith('.cif') ? 'mmcif' : 'pdb';
 
+      console.log('Parsing structure data...');
       // Load from data
       const data = await plugin.builders.data.rawData({
         data: text,
         label: file.name,
       }, { state: { isGhost: true } });
 
+      console.log('Building trajectory...');
       const trajectory = await plugin.builders.structure.parseTrajectory(data, fileType);
+
+      console.log('Creating model...');
       const model = await plugin.builders.structure.createModel(trajectory);
+
+      console.log('Creating structure...');
       const structure = await plugin.builders.structure.createStructure(model);
 
       // Store structure reference
       structureRef.current = structure.ref;
 
+      console.log('Applying visualization...');
       // Apply visualization with provided or current values
       const rep = representation || selectedRepresentation;
       const color = colorScheme || selectedColorScheme;
@@ -389,6 +407,7 @@ export default function ProteinViewer() {
 
       // Only save structure on initial load, not when changing representation/color
       if (shouldSave) {
+        console.log('Saving structure...');
         const newStructure: ProteinStructure = {
           id: generateStructureId(),
           name: file.name,
@@ -407,12 +426,18 @@ export default function ProteinViewer() {
         setProteinInfo({ title: file.name });
         showToast('success', `Loaded ${file.name}`);
       }
+      console.log('File load complete!');
     } catch (error) {
       console.error('Failed to load file:', error);
       showToast('error', 'Failed to load structure file');
+      // Re-enable drag overlay on error
+      setTimeout(() => {
+        allowDragOverlayRef.current = true;
+      }, 500);
     } finally {
+      console.log('Cleaning up, setting isLoading to false');
       setIsLoading(false);
-      // Force clear drag overlay
+      // Ensure drag overlay stays cleared
       setIsDraggingOver(false);
     }
   };
@@ -478,6 +503,48 @@ export default function ProteinViewer() {
       showToast('info', 'Measurement mode enabled. Click atoms to select and view distances in the viewer.');
     } else {
       showToast('info', 'Measurement mode disabled');
+    }
+  };
+
+  // Get color legend data based on selected color scheme
+  const getColorLegend = () => {
+    switch (selectedColorScheme) {
+      case 'chain-id':
+        return [
+          { label: 'Chain A', color: 'rgb(100, 149, 237)' }, // Cornflower blue
+          { label: 'Chain B', color: 'rgb(255, 182, 193)' }, // Light pink
+          { label: 'Chain C', color: 'rgb(144, 238, 144)' }, // Light green
+          { label: 'Chain D', color: 'rgb(255, 218, 185)' }, // Peach
+          { label: 'Additional chains...', color: 'rgb(211, 211, 211)' }, // Light gray
+        ];
+      case 'secondary-structure':
+        return [
+          { label: 'α-Helix', color: 'rgb(255, 0, 255)' }, // Magenta
+          { label: 'β-Sheet', color: 'rgb(255, 255, 0)' }, // Yellow
+          { label: 'Coil/Loop', color: 'rgb(220, 220, 220)' }, // Light gray
+        ];
+      case 'element-symbol':
+        return [
+          { label: 'Carbon (C)', color: 'rgb(144, 144, 144)' }, // Gray
+          { label: 'Nitrogen (N)', color: 'rgb(48, 80, 248)' }, // Blue
+          { label: 'Oxygen (O)', color: 'rgb(255, 13, 13)' }, // Red
+          { label: 'Sulfur (S)', color: 'rgb(255, 255, 48)' }, // Yellow
+          { label: 'Other', color: 'rgb(200, 200, 200)' }, // Light gray
+        ];
+      case 'hydrophobicity':
+        return [
+          { label: 'Hydrophobic', color: 'rgb(255, 255, 255)' }, // White
+          { label: 'Neutral', color: 'rgb(144, 238, 144)' }, // Light green
+          { label: 'Hydrophilic', color: 'rgb(0, 0, 255)' }, // Blue
+        ];
+      case 'uncertainty':
+        return [
+          { label: 'Low (confident)', color: 'rgb(0, 83, 214)' }, // Blue
+          { label: 'Medium', color: 'rgb(255, 219, 19)' }, // Yellow
+          { label: 'High (uncertain)', color: 'rgb(255, 125, 69)' }, // Orange
+        ];
+      default:
+        return null;
     }
   };
 
@@ -907,6 +974,27 @@ export default function ProteinViewer() {
                 ))}
               </select>
             </div>
+
+            {/* Color Legend */}
+            {getColorLegend() && (
+              <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-2 mb-2">
+                  <Palette className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Color Legend</span>
+                </div>
+                <div className="space-y-1.5">
+                  {getColorLegend()!.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600 flex-shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-xs text-slate-600 dark:text-slate-400">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
