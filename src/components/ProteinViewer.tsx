@@ -137,14 +137,19 @@ export default function ProteinViewer() {
     if (isLoading) {
       setIsDraggingOver(false);
       allowDragOverlayRef.current = false;
-    } else {
-      // Re-enable drag overlay after a short delay to prevent race conditions
+    }
+    // Don't automatically re-enable - let user initiate new drag
+  }, [isLoading]);
+
+  // Re-enable drag overlay only when loading completes AND structure is loaded
+  useEffect(() => {
+    if (!isLoading && currentStructure) {
       const timeout = setTimeout(() => {
         allowDragOverlayRef.current = true;
-      }, 500);
+      }, 1000);
       return () => clearTimeout(timeout);
     }
-  }, [isLoading]);
+  }, [isLoading, currentStructure]);
 
   // Apply representation and color scheme
   const applyVisualization = async (structureRefToUse: StateObjectRef<any>, representation: string, colorScheme: string) => {
@@ -207,55 +212,61 @@ export default function ProteinViewer() {
     }
   };
 
-  // Update visualization without reloading the structure
+  // Update visualization by reloading structure with new settings
   const updateVisualization = async (representation: string, colorScheme: string) => {
-    if (!pluginRef.current || !structureRef.current || !currentStructure) return;
+    if (!pluginRef.current || !currentStructure) return;
 
     const plugin = pluginRef.current;
+
+    // Use a simple flag instead of isLoading to avoid drag overlay issues
     setIsUpdatingVisualization(true);
 
     try {
-      const state = plugin.state.data;
+      // Clear the entire viewer
+      await plugin.clear();
+      structureRef.current = null;
 
-      // Find and remove all representation objects from the state tree
-      // We need to collect refs first, then remove them
-      const toRemove: string[] = [];
+      // Reload structure with new visualization settings
+      // This is the most reliable approach - fully reload but from cache
+      if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
+        // Reload from PDB with new settings
+        const data = await plugin.builders.data.download({
+          url: `https://files.rcsb.org/download/${currentStructure.pdbId.toUpperCase()}.cif`,
+          isBinary: false,
+          label: currentStructure.pdbId.toUpperCase(),
+        }, { state: { isGhost: true } });
 
-      // Iterate through all state objects
-      for (const [ref, cell] of state.cells.entries()) {
-        // Check if this is a representation object (visual component)
-        if (cell.obj && cell.obj.type &&
-            (cell.obj.type.name === 'structure-representation-3d' ||
-             cell.obj.label?.toLowerCase().includes('representation'))) {
-          toRemove.push(ref);
-        }
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
+        const model = await plugin.builders.structure.createModel(trajectory);
+        const structure = await plugin.builders.structure.createStructure(model);
+
+        structureRef.current = structure.ref;
+        await applyVisualization(structure.ref, representation, colorScheme);
+
+      } else if (currentStructure.data) {
+        // Reload from cached file data with new settings
+        const fileType = currentStructure.name.toLowerCase().endsWith('.cif') ? 'mmcif' : 'pdb';
+
+        const data = await plugin.builders.data.rawData({
+          data: currentStructure.data,
+          label: currentStructure.name,
+        }, { state: { isGhost: true } });
+
+        const trajectory = await plugin.builders.structure.parseTrajectory(data, fileType);
+        const model = await plugin.builders.structure.createModel(trajectory);
+        const structure = await plugin.builders.structure.createStructure(model);
+
+        structureRef.current = structure.ref;
+        await applyVisualization(structure.ref, representation, colorScheme);
       }
 
-      // Remove all representation objects
-      for (const ref of toRemove) {
-        await PluginCommands.State.RemoveObject(plugin, { state, ref });
-      }
+      // Reset camera
+      PluginCommands.Camera.Reset(plugin, { durationMs: 0 });
 
-      // Add new representation with the desired color scheme
-      await applyVisualization(structureRef.current, representation, colorScheme);
-
-      // Reset camera smoothly
-      PluginCommands.Camera.Reset(plugin, { durationMs: 250 });
     } catch (error) {
       console.error('Failed to update visualization:', error);
-      // Fallback: reload from cached data if direct update fails
-      try {
-        if (currentStructure.source === 'pdb' && currentStructure.pdbId) {
-          await loadFromPDB(currentStructure.pdbId, representation, colorScheme, false);
-        } else if (currentStructure.data) {
-          const blob = new Blob([currentStructure.data], { type: 'text/plain' });
-          const file = new File([blob], currentStructure.name);
-          await loadFromFile(file, representation, colorScheme, false);
-        }
-      } catch (fallbackError) {
-        console.error('Fallback reload also failed:', fallbackError);
-        throw fallbackError;
-      }
+      showToast('error', 'Failed to update visualization');
+      throw error;
     } finally {
       setIsUpdatingVisualization(false);
     }
@@ -335,6 +346,8 @@ export default function ProteinViewer() {
       showToast('error', `Failed to load ${pdbId}. Please check the PDB ID.`);
     } finally {
       setIsLoading(false);
+      // Force clear drag overlay
+      setIsDraggingOver(false);
     }
   };
 
@@ -396,6 +409,8 @@ export default function ProteinViewer() {
       showToast('error', 'Failed to load structure file');
     } finally {
       setIsLoading(false);
+      // Force clear drag overlay
+      setIsDraggingOver(false);
     }
   };
 
@@ -588,10 +603,8 @@ export default function ProteinViewer() {
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only set to false if we're leaving the drop zone entirely
-    if (e.currentTarget === e.target) {
-      setIsDraggingOver(false);
-    }
+    // Always clear on drag leave to be safe
+    setIsDraggingOver(false);
   };
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
