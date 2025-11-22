@@ -47,6 +47,7 @@ export default function ProteinViewer() {
   const [selectedColorScheme, setSelectedColorScheme] = useState('default');
   const [selectedRepresentation, setSelectedRepresentation] = useState('cartoon');
   const [measurementMode, setMeasurementMode] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Color schemes
   const colorSchemes: ColorScheme[] = [
@@ -493,6 +494,56 @@ export default function ProteinViewer() {
     }
   };
 
+  // Drag-and-drop handlers
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we're leaving the drop zone entirely
+    if (e.currentTarget === e.target) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+
+    if (files.length === 0) {
+      showToast('error', 'No files found');
+      return;
+    }
+
+    // Get the first file (we only support loading one structure at a time)
+    const file = files[0];
+
+    // Check file extension
+    const validExtensions = ['.pdb', '.cif', '.mmcif'];
+    const fileExtension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+
+    if (!fileExtension || !validExtensions.includes(fileExtension)) {
+      showToast('error', 'Invalid file format. Please use .pdb, .cif, or .mmcif files');
+      return;
+    }
+
+    // Load the file
+    await loadFromFile(file);
+  };
+
   return (
     <div className="space-y-6">
       <div className="card">
@@ -569,6 +620,9 @@ export default function ProteinViewer() {
                 <Upload className="w-4 h-4 mr-2" />
                 Upload PDB/CIF File
               </button>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                💡 Tip: You can also drag & drop files directly onto the viewer
+              </p>
             </div>
 
             {/* Saved Structures */}
@@ -616,13 +670,38 @@ export default function ProteinViewer() {
           </div>
         )}
 
-        {/* Viewer Container */}
-        <div className="relative">
+        {/* Viewer Container with Drag-and-Drop */}
+        <div
+          className="relative"
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <div
             ref={viewerRef}
-            className="w-full h-[600px] bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden border-2 border-slate-200 dark:border-slate-700"
+            className={`w-full h-[600px] bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden border-2 transition-all ${
+              isDraggingOver
+                ? 'border-primary-500 border-dashed border-4 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-slate-200 dark:border-slate-700'
+            }`}
             style={{ position: 'relative' }}
           />
+
+          {/* Drag Overlay */}
+          {isDraggingOver && (
+            <div className="absolute inset-0 flex items-center justify-center bg-primary-500 bg-opacity-10 backdrop-blur-sm rounded-lg pointer-events-none">
+              <div className="text-center">
+                <Upload className="w-16 h-16 mx-auto mb-4 text-primary-600 dark:text-primary-400 animate-bounce" />
+                <p className="text-xl font-semibold text-primary-700 dark:text-primary-300">
+                  Drop structure file here
+                </p>
+                <p className="text-sm text-primary-600 dark:text-primary-400 mt-2">
+                  Supports PDB, CIF, mmCIF formats
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Overlay Controls */}
           {isViewerReady && currentStructure && (
@@ -676,12 +755,12 @@ export default function ProteinViewer() {
           )}
 
           {/* Empty State */}
-          {!isLoading && !currentStructure && (
+          {!isLoading && !currentStructure && !isDraggingOver && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center text-slate-500 dark:text-slate-400">
                 <Microscope className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg font-medium">No structure loaded</p>
-                <p className="text-sm mt-2">Search for a PDB ID or upload a file to begin</p>
+                <p className="text-sm mt-2">Search for a PDB ID, upload a file, or drag & drop here</p>
               </div>
             </div>
           )}
@@ -805,10 +884,10 @@ export default function ProteinViewer() {
           <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
             <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">✅ Working Features</h4>
             <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+              <li>• <strong>Drag & drop:</strong> File upload</li>
               <li>• <strong>Representations:</strong> All 7 styles</li>
               <li>• <strong>Color schemes:</strong> All 8 themes</li>
               <li>• <strong>Export:</strong> PDB & mmCIF</li>
-              <li>• <strong>Measurements:</strong> Distance tool</li>
             </ul>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
