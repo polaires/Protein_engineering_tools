@@ -252,6 +252,7 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  email_verified: boolean;
   created_at: string;
 }
 

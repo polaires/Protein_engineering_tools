@@ -2,7 +2,7 @@
  * Main App component
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
@@ -11,12 +11,39 @@ import DNA from '@/components/DNA';
 import Element from '@/components/Element';
 import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
+import VerifyEmail from '@/components/VerifyEmail';
+import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 
 type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('solution');
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
+
+  // Check for email verification token in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+      setVerificationToken(token);
+    }
+  }, []);
+
+  // Show email verification page if token is present
+  if (verificationToken) {
+    return (
+      <VerifyEmail
+        token={verificationToken}
+        onVerified={() => {
+          // Clear token from URL and reload
+          window.history.replaceState({}, '', '/');
+          setVerificationToken(null);
+          window.location.reload();
+        }}
+      />
+    );
+  }
 
   // Loading state
   if (loadingChemicals.isLoading || loadingRecipes.isLoading) {
@@ -34,6 +61,9 @@ function AppContent() {
 
   return (
     <div className="min-h-screen">
+      {/* Email Verification Banner */}
+      <EmailVerificationBanner />
+
       {/* Header */}
       <header className="glass-card sticky top-0 z-40 mb-6">
         <div className="container mx-auto px-4 py-4">
