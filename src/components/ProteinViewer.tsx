@@ -164,49 +164,49 @@ export default function ProteinViewer() {
         case 'cartoon':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         case 'ball-and-stick':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'ball-and-stick',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         case 'spacefill':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'spacefill',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         case 'surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'molecular-surface',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         case 'gaussian-surface':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'gaussian-surface',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         case 'point':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'point',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         case 'backbone':
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'backbone',
-            color: colorScheme,
+            color: colorScheme as any,
           });
           break;
         default:
           await plugin.builders.structure.representation.addRepresentation(structureRefToUse, {
             type: 'cartoon',
-            color: colorScheme,
+            color: colorScheme as any,
           });
       }
       console.log('Visualization applied successfully');
