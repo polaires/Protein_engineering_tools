@@ -241,9 +241,12 @@ export default function ProteinViewer() {
           const distance = calculateDistance(first, second);
 
           if (distance !== null) {
-            // Add visual measurement label using Molstar's label system
-            addMeasurementLabel(plugin, first, second, distance);
-            showToast('success', `Distance: ${distance.toFixed(2)} Å`);
+            // Get atom info for better feedback
+            const atom1Info = getAtomInfo(first);
+            const atom2Info = getAtomInfo(second);
+            const measurementText = `${atom1Info} ↔ ${atom2Info}: ${distance.toFixed(2)} Å`;
+
+            showToast('success', measurementText, 5000); // Show for 5 seconds
           } else {
             showToast('error', 'Failed to calculate distance');
           }
@@ -253,14 +256,13 @@ export default function ProteinViewer() {
           return [];
         }
 
-        // For first atom: Highlight AND add a visual label marker
+        // For first atom: Highlight with stronger emphasis
         plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
 
-        // Add a label to mark the first selected atom
-        addAtomLabel(plugin, loci, '1');
-
+        // Get atom info for the toast
+        const atomInfo = getAtomInfo(loci);
         if (newLoci.length === 1) {
-          showToast('info', 'First atom selected (marked with "1"). Click another atom to measure distance.');
+          showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
         }
 
         return newLoci;
@@ -855,48 +857,60 @@ export default function ProteinViewer() {
       setSelectedLoci([]);
       showToast('info', 'Measurement mode enabled. Click two atoms to measure distance.');
     } else {
-      // Clear highlights and labels when disabling
+      // Clear highlights when disabling
       if (pluginRef.current.managers.interactivity?.lociHighlights) {
         pluginRef.current.managers.interactivity.lociHighlights.clearHighlights();
-      }
-      if (pluginRef.current.managers.interactivity?.lociLabels) {
-        pluginRef.current.managers.interactivity.lociLabels.clear();
       }
       setSelectedLoci([]);
       showToast('info', 'Measurement mode disabled');
     }
   };
 
-  // Add a visual label marker for selected atom
-  const addAtomLabel = (plugin: PluginUIContext, loci: any, text: string) => {
+  // Get atom information for display (works with all loci types)
+  const getAtomInfo = (loci: any): string => {
     try {
-      const position = getLociPosition(loci);
-      if (!position) return;
+      if (!loci || loci.kind === 'empty-loci') return 'Unknown';
 
-      // Create a label representation at the atom position
-      plugin.managers.interactivity.lociLabels.addLabel(loci, {
-        customText: text,
-      });
+      if (loci.kind === 'element-loci') {
+        const { structure, elements } = loci;
+
+        // Handle both array and single element cases
+        let element;
+        if (Array.isArray(elements)) {
+          element = elements[0];
+        } else {
+          element = elements;
+        }
+
+        if (!element) return 'Unknown';
+
+        // Get unit and element index
+        let unit, elementIndex;
+        if (typeof element.unit === 'number') {
+          unit = structure.units[element.unit];
+          elementIndex = element.indices?.[0] ?? element.element ?? 0;
+        } else {
+          unit = structure.units[0];
+          elementIndex = 0;
+        }
+
+        if (!unit) return 'Unknown';
+
+        // Create location and extract atom details
+        const l = StructureElement.Location.create(structure, unit, elementIndex);
+
+        const atomName = SP.atom.label_atom_id(l);
+        const resName = SP.residue.label_comp_id(l);
+        const resSeq = SP.residue.label_seq_id(l);
+        const chainId = SP.chain.label_asym_id(l);
+
+        return `${atomName} (${resName}${resSeq}, Chain ${chainId})`;
+      }
+
+      return 'Selected element';
     } catch (error) {
-      console.error('Error adding atom label:', error);
-    }
-  };
-
-  // Add a measurement label between two atoms
-  const addMeasurementLabel = (plugin: PluginUIContext, loci1: any, loci2: any, distance: number) => {
-    try {
-      // Create measurement label
-      const label = `${distance.toFixed(2)} Å`;
-
-      // Add labels to both loci
-      plugin.managers.interactivity.lociLabels.addLabel(loci1, {
-        customText: `● ${label}`,
-      });
-      plugin.managers.interactivity.lociLabels.addLabel(loci2, {
-        customText: `● ${label}`,
-      });
-    } catch (error) {
-      console.error('Error adding measurement label:', error);
+      console.error('Error getting atom info:', error);
+      return 'Unknown';
     }
   };
 
