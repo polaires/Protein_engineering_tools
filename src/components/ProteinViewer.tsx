@@ -264,10 +264,15 @@ export default function ProteinViewer() {
         return;
       }
 
-      // Store only the immutable data (position and atom info)
+      // Serialize loci to bundle immediately (prevents mutation issues)
+      const bundle = StructureElement.Bundle.fromLoci(loci);
+
+      // Store immutable data AND serialized bundle
       const atomData = {
         position,
-        atomInfo
+        atomInfo,
+        bundle: bundle,  // Serialized bundle (immutable)
+        structure: loci.structure  // Need structure reference for reconstruction
       };
 
       setSelectedLoci((prev: any[]) => {
@@ -285,9 +290,6 @@ export default function ProteinViewer() {
           console.log('First atom:', first);
           console.log('Second atom:', second);
 
-          // Highlight the second loci (first is already highlighted from previous click)
-          plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
-
           // Calculate distance from stored positions
           const dx = second.position[0] - first.position[0];
           const dy = second.position[1] - first.position[1];
@@ -300,10 +302,20 @@ export default function ProteinViewer() {
           const measurementText = `${first.atomInfo} ↔ ${second.atomInfo}: ${distance.toFixed(2)} Å`;
           showToast('success', measurementText, 6000); // Show for 6 seconds
 
-          // Keep highlights visible for a moment, then clear
-          setTimeout(() => {
-            plugin.managers.interactivity.lociHighlights.clearHighlights();
-          }, 5000); // Keep visible for 5 seconds after measurement
+          // Use Molstar's measurement manager to add visual distance label
+          try {
+            // Reconstruct Loci from stored bundles
+            const firstLoci = StructureElement.Bundle.toLoci(first.bundle, first.structure);
+            const secondLoci = StructureElement.Bundle.toLoci(second.bundle, second.structure);
+
+            console.log('Reconstructed loci:', { firstLoci, secondLoci });
+
+            // Add distance measurement to the 3D scene
+            plugin.managers.structure.measurement.addDistance(firstLoci, secondLoci);
+            console.log('Added distance measurement to scene');
+          } catch (error) {
+            console.error('Error adding measurement:', error);
+          }
 
           return [];
         }
