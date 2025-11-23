@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
-  Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette
+  Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
+  Droplet, Atom, Hexagon, HelpCircle, X
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -74,6 +75,9 @@ export default function ProteinViewer() {
   const [showLigands, setShowLigands] = useState(true);
   const [showIons, setShowIons] = useState(true);
   const [showWater, setShowWater] = useState(false);
+
+  // Help modal state
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Track when component visibility changes to update visualization
   const [componentsNeedUpdate, setComponentsNeedUpdate] = useState(false);
@@ -1215,6 +1219,13 @@ export default function ProteinViewer() {
               >
                 <Info className="w-5 h-5" />
               </button>
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
+                title="Help & Controls"
+              >
+                <HelpCircle className="w-5 h-5" />
+              </button>
             </div>
           )}
 
@@ -1250,100 +1261,110 @@ export default function ProteinViewer() {
           )}
         </div>
 
-        {/* Visualization Controls */}
+        {/* Unified Toolbar - Consolidated Controls */}
         {currentStructure && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            {/* Representation */}
-            <div>
-              <label className="label">Representation</label>
-              <select
-                value={selectedRepresentation}
-                onChange={(e) => handleRepresentationChange(e.target.value)}
-                className="input"
-              >
-                {representations.map((rep) => (
-                  <option key={rep.id} value={rep.id}>
-                    {rep.name} - {rep.description}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Color Scheme */}
-            <div>
-              <label className="label">Color Scheme</label>
-              <select
-                value={selectedColorScheme}
-                onChange={(e) => handleColorSchemeChange(e.target.value)}
-                className="input"
-              >
-                {colorSchemes.map((scheme) => (
-                  <option key={scheme.id} value={scheme.id}>
-                    {scheme.name} - {scheme.description}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Display Options */}
-            <div className="mt-4 md:col-span-2">
-              <label className="label mb-2">Additional Components</label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showLigands}
-                    onChange={(e) => {
-                      setShowLigands(e.target.checked);
-                      setComponentsNeedUpdate(true);
-                    }}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Ligands & Small Molecules</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Bound molecules, substrates, drugs</span>
-                  </div>
+          <div className="mt-6 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Representation Dropdown */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Representation:
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showIons}
-                    onChange={(e) => {
-                      setShowIons(e.target.checked);
-                      setComponentsNeedUpdate(true);
-                    }}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Ions & Metal Centers</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Metal ions (Ca²⁺, Mg²⁺, Zn²⁺, etc.)</span>
-                  </div>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showWater}
-                    onChange={(e) => {
-                      setShowWater(e.target.checked);
-                      setComponentsNeedUpdate(true);
-                    }}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Water Molecules</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Crystallographic water</span>
-                  </div>
-                </label>
+                <select
+                  value={selectedRepresentation}
+                  onChange={(e) => handleRepresentationChange(e.target.value)}
+                  className="text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                >
+                  {representations.map((rep) => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
-                Note: Components displayed only if present in structure
-              </p>
+
+              {/* Color Scheme Dropdown */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Color:
+                </label>
+                <select
+                  value={selectedColorScheme}
+                  onChange={(e) => handleColorSchemeChange(e.target.value)}
+                  className="text-sm border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                >
+                  {colorSchemes.map((scheme) => (
+                    <option key={scheme.id} value={scheme.id}>
+                      {scheme.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Vertical Separator */}
+              <div className="h-8 w-px bg-slate-300 dark:bg-slate-600" />
+
+              {/* Additional Components - Icon Toggles */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Components:
+                </span>
+                <div className="flex gap-1">
+                  {/* Ligands Toggle */}
+                  <button
+                    onClick={() => {
+                      setShowLigands(!showLigands);
+                      setComponentsNeedUpdate(true);
+                    }}
+                    className={`p-2 rounded transition-colors ${
+                      showLigands
+                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                    }`}
+                    title="Ligands & Small Molecules"
+                  >
+                    <Hexagon className="w-4 h-4" />
+                  </button>
+
+                  {/* Ions Toggle */}
+                  <button
+                    onClick={() => {
+                      setShowIons(!showIons);
+                      setComponentsNeedUpdate(true);
+                    }}
+                    className={`p-2 rounded transition-colors ${
+                      showIons
+                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                    }`}
+                    title="Ions & Metal Centers"
+                  >
+                    <Atom className="w-4 h-4" />
+                  </button>
+
+                  {/* Water Toggle */}
+                  <button
+                    onClick={() => {
+                      setShowWater(!showWater);
+                      setComponentsNeedUpdate(true);
+                    }}
+                    className={`p-2 rounded transition-colors ${
+                      showWater
+                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                    }`}
+                    title="Water Molecules"
+                  >
+                    <Droplet className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Color Legend - Full Width Below Grid */}
-        {currentStructure && getColorLegend() && (
+        {/* Color Legend - Horizontal Pills/Tags Layout */}
+        {currentStructure && selectedColorScheme !== 'uniform' && getColorLegend() && (
           <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-2 mb-2">
               <Palette className="w-4 h-4 text-slate-600 dark:text-slate-400" />
@@ -1356,17 +1377,21 @@ export default function ProteinViewer() {
                 )}
               </span>
             </div>
-            <div className="space-y-1.5">
+            {/* Horizontal Pill Layout */}
+            <div className="flex flex-wrap gap-2">
               {getColorLegend()!.map((item, index) => (
-                <div key={index} className="flex items-center gap-2">
+                <div
+                  key={index}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-700 rounded-full border border-slate-300 dark:border-slate-600"
+                >
                   <div
-                    className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600 flex-shrink-0"
+                    className="w-3 h-3 rounded-full border border-slate-400 dark:border-slate-500 flex-shrink-0"
                     style={{ backgroundColor: item.color }}
                   />
                   <div className="flex flex-col">
-                    <span className="text-xs text-slate-700 dark:text-slate-300">{item.label}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-300 whitespace-nowrap">{item.label}</span>
                     {(item as any).description && (
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="text-[9px] text-slate-500 dark:text-slate-400">
                         {(item as any).description}
                       </span>
                     )}
@@ -1636,39 +1661,75 @@ export default function ProteinViewer() {
         )}
       </div>
 
-      {/* Quick Guide */}
-      <div className="card">
-        <h3 className="section-title">Quick Guide & Features</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-            <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Mouse Controls</h4>
-            <ul className="space-y-1 text-slate-600 dark:text-slate-400">
-              <li>• <strong>Left drag:</strong> Rotate</li>
-              <li>• <strong>Right drag:</strong> Pan</li>
-              <li>• <strong>Scroll:</strong> Zoom</li>
-              <li>• <strong>Click:</strong> Select atom/residue</li>
-            </ul>
-          </div>
-          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-            <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Features</h4>
-            <ul className="space-y-1 text-slate-600 dark:text-slate-400">
-              <li>• <strong>Drag & drop:</strong> File upload</li>
-              <li>• <strong>Representations:</strong> All 7 styles</li>
-              <li>• <strong>Color schemes:</strong> All 8 themes</li>
-              <li>• <strong>Export:</strong> PDB & mmCIF</li>
-            </ul>
-          </div>
-          <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
-            <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Popular Examples</h4>
-            <ul className="space-y-1 text-slate-600 dark:text-slate-400">
-              <li>• <strong>1CRN:</strong> Crambin (small)</li>
-              <li>• <strong>1UBQ:</strong> Ubiquitin</li>
-              <li>• <strong>7BV2:</strong> Spike protein</li>
-              <li>• <strong>1HHO:</strong> Hemoglobin</li>
-            </ul>
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowHelpModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-3xl w-full m-4 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5" />
+                Quick Guide & Controls
+              </h3>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="btn-icon text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Mouse Controls</h4>
+                  <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                    <li>• <strong>Left drag:</strong> Rotate</li>
+                    <li>• <strong>Right drag:</strong> Pan</li>
+                    <li>• <strong>Scroll:</strong> Zoom</li>
+                    <li>• <strong>Click:</strong> Select atom/residue</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Features</h4>
+                  <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                    <li>• <strong>Drag & drop:</strong> File upload</li>
+                    <li>• <strong>Representations:</strong> 7 styles</li>
+                    <li>• <strong>Color schemes:</strong> 5 themes</li>
+                    <li>• <strong>Export:</strong> PDB, CIF, FASTA</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Popular Examples</h4>
+                  <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                    <li>• <strong>1CRN:</strong> Crambin (small)</li>
+                    <li>• <strong>1UBQ:</strong> Ubiquitin</li>
+                    <li>• <strong>7BV2:</strong> Spike protein</li>
+                    <li>• <strong>1HHO:</strong> Hemoglobin</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-4 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">Tips</h4>
+                <ul className="space-y-1 text-sm text-primary-600 dark:text-primary-400">
+                  <li>• Use the toolbar below the viewer to quickly change representation and color schemes</li>
+                  <li>• Toggle additional components (ligands, ions, water) with the icon buttons</li>
+                  <li>• Color legend only appears when relevant to the selected color scheme</li>
+                  <li>• For heteromers, use the chain selector to analyze different chains individually</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
