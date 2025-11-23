@@ -241,32 +241,72 @@ export default function ProteinViewer() {
       let fullSequence = '';
       const aminoAcidCounts: Record<string, number> = {};
 
+      // Iterate through all models in the structure
       for (const unit of units) {
+        if (!unit.model) continue;
+
         const { model } = unit;
         const { atomicHierarchy } = model;
 
-        // Get chain ID
+        if (!atomicHierarchy) continue;
+
+        // Extract chain information from this unit
+        const { chainAtomSegments, residues, chains } = atomicHierarchy;
+
+        // Get chain ID for this unit
         try {
-          if (unit.elements && unit.elements.length > 0) {
-            const chainId = atomicHierarchy.chainAtomSegments.label_asym_id.value(unit.elements[0]);
-            if (chainId) {
-              chainSet.add(chainId);
-              console.log('Found chain:', chainId);
+          // Method 1: Use unit.invariantId which contains chain info
+          if (unit.invariantId) {
+            const chainId = unit.invariantId;
+            chainSet.add(String(chainId));
+            console.log('Found chain (invariantId):', chainId);
+          }
+          // Method 2: Try getting from chainAtomSegments
+          else if (chainAtomSegments && chains && unit.elements && unit.elements.length > 0) {
+            const firstElement = unit.elements[0];
+            const segmentIndex = chainAtomSegments.index[firstElement];
+            if (segmentIndex !== undefined && chains.label_asym_id) {
+              const chainId = chains.label_asym_id.value(segmentIndex);
+              if (chainId) {
+                chainSet.add(String(chainId));
+                console.log('Found chain (label_asym_id):', chainId);
+              }
             }
+          }
+          // Method 3: Fallback to sequential naming
+          else {
+            const chainId = String.fromCharCode(65 + chainSet.size); // A, B, C...
+            chainSet.add(chainId);
+            console.log('Found chain (fallback):', chainId);
           }
         } catch (err) {
           console.warn('Could not extract chain ID:', err);
         }
 
-        // Extract sequence
+        // Extract residue sequence
         try {
-          const { residues } = atomicHierarchy;
           if (residues && residues._rowCount > 0) {
-            for (let i = 0; i < residues._rowCount; i++) {
-              const compId = residues.label_comp_id.value(i);
+            const seenResidues = new Set<string>();
+
+            for (let rI = 0; rI < residues._rowCount; rI++) {
+              // Get residue identifier to avoid duplicates
+              const seqId = residues.label_seq_id?.value(rI) || rI;
+              const residueKey = `${rI}_${seqId}`;
+
+              if (seenResidues.has(residueKey)) continue;
+              seenResidues.add(residueKey);
+
+              // Try multiple sources for residue name
+              let compId = null;
+              if (residues.label_comp_id) {
+                compId = residues.label_comp_id.value(rI);
+              } else if (residues.auth_comp_id) {
+                compId = residues.auth_comp_id.value(rI);
+              }
+
               if (compId) {
-                // Convert 3-letter code to 1-letter code
-                const oneLetterCode = threeToOne(String(compId));
+                const compIdStr = String(compId);
+                const oneLetterCode = threeToOne(compIdStr);
                 if (oneLetterCode) {
                   fullSequence += oneLetterCode;
                   aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
@@ -275,7 +315,7 @@ export default function ProteinViewer() {
             }
           }
         } catch (err) {
-          console.warn('Could not extract sequence from unit:', err);
+          console.warn('Could not extract sequence:', err);
         }
       }
 
@@ -733,7 +773,7 @@ export default function ProteinViewer() {
           '#ccebc5', '#ffed6f'
         ];
 
-        return structureMetadata.chains.slice(0, 10).map((chainId, index) => ({
+        return structureMetadata.chains.slice(0, 10).map((chainId: string, index: number) => ({
           label: `Chain ${chainId}`,
           color: molstarChainColors[index % molstarChainColors.length],
         }));
