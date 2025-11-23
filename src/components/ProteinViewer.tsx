@@ -21,6 +21,7 @@ import {
 } from '@/services/proteinViewer';
 import { ProteinStructure, ProteinInfo, ColorScheme, RepresentationStyle } from '@/types/protein-viewer';
 import { useApp } from '@/contexts/AppContext';
+import { analyzeProtein } from '@/utils/proteinAnalysis';
 
 // Import Mol* CSS
 import 'molstar/lib/mol-plugin-ui/skin/light.scss';
@@ -49,6 +50,17 @@ export default function ProteinViewer() {
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
+
+  // Store actual structure metadata for dynamic legends and analysis
+  const [structureMetadata, setStructureMetadata] = useState<{
+    chains?: string[];
+    residueCount?: number;
+    sequence?: string;
+    aminoAcidComposition?: Record<string, number>;
+  } | null>(null);
+
+  // Store protein analysis results
+  const [showProteinAnalysis, setShowProteinAnalysis] = useState(false);
 
   // Ligand, ion, water controls
   const [showLigands, setShowLigands] = useState(true);
@@ -185,9 +197,89 @@ export default function ProteinViewer() {
     }
   }, [componentsNeedUpdate, showLigands, showIons, showWater]);
 
+  // Extract structure metadata for dynamic legends and protein analysis
+  const extractStructureMetadata = (structureRefToUse: StateObjectRef<any>) => {
+    if (!pluginRef.current) return;
+
+    try {
+      const state = pluginRef.current.state.data;
+      // StateObjectRef can be used directly as the cells Map key
+      const cell = state.cells.get(structureRefToUse as any);
+      const structure = cell?.obj?.data;
+
+      if (structure) {
+        // Extract unique chain IDs
+        const chainSet = new Set<string>();
+        const { units } = structure;
+
+        // Extract sequence for protein analysis
+        let fullSequence = '';
+        const aminoAcidCounts: Record<string, number> = {};
+
+        for (const unit of units) {
+          const { model } = unit;
+          const { atomicHierarchy } = model;
+
+          // Get chain ID
+          const chainId = atomicHierarchy.chainAtomSegments.label_asym_id.value(unit.elements[0]);
+          if (chainId) chainSet.add(chainId);
+
+          // Extract sequence
+          try {
+            const { residues } = atomicHierarchy;
+            for (let i = 0; i < residues._rowCount; i++) {
+              const compId = residues.label_comp_id.value(i);
+              if (compId) {
+                // Convert 3-letter code to 1-letter code
+                const oneLetterCode = threeToOne(String(compId));
+                if (oneLetterCode) {
+                  fullSequence += oneLetterCode;
+                  aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Could not extract sequence:', err);
+          }
+        }
+
+        setStructureMetadata({
+          chains: Array.from(chainSet).sort(),
+          residueCount: structure.elementCount,
+          sequence: fullSequence,
+          aminoAcidComposition: aminoAcidCounts,
+        });
+
+        console.log('Structure metadata:', {
+          chains: Array.from(chainSet),
+          residueCount: structure.elementCount,
+          sequenceLength: fullSequence.length,
+        });
+      }
+    } catch (error) {
+      console.warn('Could not extract structure metadata:', error);
+      setStructureMetadata(null);
+    }
+  };
+
+  // Helper function to convert 3-letter amino acid code to 1-letter
+  const threeToOne = (three: string): string | null => {
+    const map: Record<string, string> = {
+      'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
+      'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
+      'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
+      'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
+      'SEC': 'U', 'PYL': 'O'
+    };
+    return map[three.toUpperCase()] || null;
+  };
+
   // Apply representation and color scheme
   const applyVisualization = async (structureRefToUse: StateObjectRef<any>, representation: string, colorScheme: string) => {
     if (!pluginRef.current) return;
+
+    // Extract structure metadata for dynamic legends
+    extractStructureMetadata(structureRefToUse);
 
     const plugin = pluginRef.current;
 
@@ -591,14 +683,22 @@ export default function ProteinViewer() {
   const getColorLegend = () => {
     switch (selectedColorScheme) {
       case 'chain-id':
-        // Show typical chain colors used by Mol*
-        return [
-          { label: 'Chain A', color: 'rgb(100, 149, 237)' }, // Cornflower blue
-          { label: 'Chain B', color: 'rgb(255, 182, 193)' }, // Light pink
-          { label: 'Chain C', color: 'rgb(144, 238, 144)' }, // Light green
-          { label: 'Chain D', color: 'rgb(255, 218, 185)' }, // Peach
-          { label: 'Additional chains follow pattern', color: 'rgb(211, 211, 211)' },
+        // DYNAMIC: Show only chains present in the loaded structure
+        if (!structureMetadata?.chains || structureMetadata.chains.length === 0) {
+          return null; // No chains info available
+        }
+
+        // Mol* default chain color palette (from ColorTheme)
+        const molstarChainColors = [
+          '#8dd3c7', '#ffffb3', '#bebada', '#fb8072', '#80b1d3',
+          '#fdb462', '#b3de69', '#fccde5', '#d9d9d9', '#bc80bd',
+          '#ccebc5', '#ffed6f'
         ];
+
+        return structureMetadata.chains.slice(0, 10).map((chainId, index) => ({
+          label: `Chain ${chainId}`,
+          color: molstarChainColors[index % molstarChainColors.length],
+        }));
       case 'secondary-structure':
         return [
           { label: 'α-Helix', color: 'rgb(255, 0, 255)' }, // Magenta
@@ -1057,12 +1157,19 @@ export default function ProteinViewer() {
               </select>
             </div>
 
-            {/* Color Legend */}
-            {getColorLegend() && (
+            {/* Color Legend - DYNAMIC */}
+            {currentStructure && getColorLegend() && (
               <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 mb-2">
                   <Palette className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Color Legend</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Color Legend
+                    {selectedColorScheme === 'chain-id' && structureMetadata?.chains && (
+                      <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
+                        ({structureMetadata.chains.length} {structureMetadata.chains.length === 1 ? 'chain' : 'chains'})
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <div className="space-y-1.5">
                   {getColorLegend()!.map((item, index) => (
@@ -1077,6 +1184,85 @@ export default function ProteinViewer() {
                 </div>
               </div>
             )}
+
+            {/* Protein Analysis */}
+            {currentStructure && structureMetadata?.sequence && (() => {
+              try {
+                const analysis = analyzeProtein(structureMetadata.sequence);
+                return (
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                    <button
+                      onClick={() => setShowProteinAnalysis(!showProteinAnalysis)}
+                      className="w-full flex items-center justify-between text-left"
+                    >
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                        <Info className="w-4 h-4" />
+                        Protein Analysis
+                      </span>
+                      {showProteinAnalysis ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+
+                    {showProteinAnalysis && (
+                      <div className="mt-3 space-y-3">
+                        {/* Basic Information */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Basic Information</h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div><span className="font-medium">Length:</span> {analysis.length} aa</div>
+                            <div><span className="font-medium">MW:</span> {analysis.molecularWeight.toFixed(2)} Da</div>
+                            <div><span className="font-medium">pI:</span> {analysis.theoreticalPI.toFixed(2)}</div>
+                            <div><span className="font-medium">Aromaticity:</span> {(analysis.aromaticity * 100).toFixed(1)}%</div>
+                          </div>
+                        </div>
+
+                        {/* Physicochemical Properties */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Physicochemical Properties</h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div><span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}</div>
+                            <div><span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}</div>
+                            <div><span className="font-medium">Instability:</span> {analysis.instabilityIndex.toFixed(2)}</div>
+                            <div><span className="font-medium">Status:</span> {analysis.instabilityIndex > 40 ? 'Unstable' : 'Stable'}</div>
+                          </div>
+                        </div>
+
+                        {/* Amino Acid Composition (Top 5) */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Amino Acid Composition (Top 5)</h4>
+                          <div className="space-y-1">
+                            {Object.entries(analysis.aminoAcidPercent)
+                              .filter(([_, percent]) => percent > 0)
+                              .sort((a, b) => b[1] - a[1])
+                              .slice(0, 5)
+                              .map(([aa, percent]) => (
+                                <div key={aa} className="flex justify-between text-xs">
+                                  <span className="font-mono">{aa}</span>
+                                  <div className="flex-1 mx-2">
+                                    <div className="bg-blue-200 dark:bg-blue-800 h-3 rounded-full overflow-hidden">
+                                      <div className="bg-blue-500 h-full" style={{ width: `${percent}%` }}></div>
+                                    </div>
+                                  </div>
+                                  <span className="font-medium">{percent.toFixed(1)}%</span>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+
+                        {/* Cleaned Sequence */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Cleaned Sequence</h4>
+                          <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-200 dark:border-blue-700 max-h-32 overflow-y-auto">
+                            <code className="text-xs font-mono break-all">{analysis.sequence}</code>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              } catch (err) {
+                return null;
+              }
+            })()}
 
             {/* Display Options */}
             {currentStructure && (
