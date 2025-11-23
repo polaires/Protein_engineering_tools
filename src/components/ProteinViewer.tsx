@@ -949,15 +949,11 @@ export default function ProteinViewer() {
       setSelectedLoci([]);
       showToast('info', 'Measurement mode enabled. Click two atoms to measure distance. Selected atoms will be highlighted.');
     } else {
-      // Clear highlights and all measurements when disabling
+      // Clear highlights when disabling measurement mode
+      // Note: Measurement visuals persist in the scene (as in Molstar's default behavior)
+      // Users can manage them through Molstar's UI or by reloading the structure
       if (pluginRef.current.managers.interactivity?.lociHighlights) {
         pluginRef.current.managers.interactivity.lociHighlights.clearHighlights();
-      }
-
-      // Clear all measurement visuals
-      if (pluginRef.current.managers.structure?.measurement) {
-        pluginRef.current.managers.structure.measurement.clear();
-        console.log('Cleared all measurements');
       }
 
       setSelectedLoci([]);
