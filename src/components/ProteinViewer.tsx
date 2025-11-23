@@ -325,6 +325,19 @@ export default function ProteinViewer() {
 
               if (result) {
                 console.log('Successfully added distance measurement to scene');
+
+                // Add order labels (1, 2) to show which atom was selected first and second
+                try {
+                  await plugin.managers.structure.measurement.addOrderLabels([firstLoci, secondLoci]);
+                  console.log('Added order labels (1, 2) to atoms');
+                } catch (labelError) {
+                  console.error('Error adding order labels:', labelError);
+                }
+
+                // Add persistent highlights to both atoms
+                plugin.managers.interactivity.lociHighlights.highlight({ loci: firstLoci }, false);
+                plugin.managers.interactivity.lociHighlights.highlight({ loci: secondLoci }, false);
+                console.log('Added persistent highlights to both atoms');
               } else {
                 console.warn('AddDistance returned undefined - measurement may have failed');
               }
@@ -936,10 +949,17 @@ export default function ProteinViewer() {
       setSelectedLoci([]);
       showToast('info', 'Measurement mode enabled. Click two atoms to measure distance. Selected atoms will be highlighted.');
     } else {
-      // Clear highlights when disabling
+      // Clear highlights and all measurements when disabling
       if (pluginRef.current.managers.interactivity?.lociHighlights) {
         pluginRef.current.managers.interactivity.lociHighlights.clearHighlights();
       }
+
+      // Clear all measurement visuals
+      if (pluginRef.current.managers.structure?.measurement) {
+        pluginRef.current.managers.structure.measurement.clear();
+        console.log('Cleared all measurements');
+      }
+
       setSelectedLoci([]);
       showToast('info', 'Measurement mode disabled');
     }
