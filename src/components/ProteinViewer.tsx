@@ -85,12 +85,9 @@ export default function ProteinViewer() {
   const colorSchemes: ColorScheme[] = [
     { id: 'uniform', name: 'Uniform', description: 'Single solid color' },
     { id: 'chain-id', name: 'By Chain', description: 'Color by chain ID' },
-    { id: 'entity-id', name: 'By Entity', description: 'Color by entity' },
-    { id: 'residue-name', name: 'By Residue', description: 'Color by residue type' },
+    { id: 'residue-name', name: 'By Residue Type', description: 'Color by amino acid type (Jmol colors)' },
     { id: 'secondary-structure', name: 'Secondary Structure', description: 'Helix, sheet, coil' },
-    { id: 'hydrophobicity', name: 'Hydrophobicity', description: 'Hydrophobic to hydrophilic' },
-    { id: 'element-symbol', name: 'By Element', description: 'Color by atom element' },
-    { id: 'uncertainty', name: 'B-factor/pLDDT', description: 'Crystallographic B-factor or AlphaFold confidence' },
+    { id: 'hydrophobicity', name: 'Hydrophobicity', description: 'Hydrophobic (red) to hydrophilic (green)' },
   ];
 
   // Representation styles
@@ -833,31 +830,28 @@ export default function ProteinViewer() {
             color: Color.toHexStyle(color),
           };
         });
+      case 'residue-name':
+        // Jmol standard amino acid colors (from Molstar)
+        return [
+          { label: 'Hydrophobic', color: '#8CFF8C', description: 'ALA, ILE, LEU, VAL' },
+          { label: 'Aromatic', color: '#534C52', description: 'PHE, TRP, TYR' },
+          { label: 'Polar', color: '#FF7042', description: 'SER, THR, CYS, MET' },
+          { label: 'Positive', color: '#4747B8', description: 'ARG, LYS, HIS' },
+          { label: 'Negative', color: '#660000', description: 'ASP, GLU' },
+          { label: 'Special', color: '#525252', description: 'GLY, PRO' },
+        ];
       case 'secondary-structure':
         return [
-          { label: 'α-Helix', color: 'rgb(255, 0, 255)' }, // Magenta
-          { label: 'β-Sheet', color: 'rgb(255, 255, 0)' }, // Yellow
-          { label: 'Coil/Loop', color: 'rgb(220, 220, 220)' }, // Light gray
-        ];
-      case 'element-symbol':
-        return [
-          { label: 'Carbon (C)', color: 'rgb(144, 144, 144)' }, // Gray
-          { label: 'Nitrogen (N)', color: 'rgb(48, 80, 248)' }, // Blue
-          { label: 'Oxygen (O)', color: 'rgb(255, 13, 13)' }, // Red
-          { label: 'Sulfur (S)', color: 'rgb(255, 255, 48)' }, // Yellow
-          { label: 'Phosphorus (P)', color: 'rgb(255, 128, 0)' }, // Orange
+          { label: 'α-Helix', color: '#FF00FF' }, // Magenta
+          { label: 'β-Sheet', color: '#FFFF00' }, // Yellow
+          { label: 'Coil/Loop', color: '#DCDCDC' }, // Light gray
         ];
       case 'hydrophobicity':
+        // Red-Yellow-Green diverging scale from Molstar
         return [
-          { label: 'Hydrophobic', color: 'rgb(255, 255, 255)' }, // White
-          { label: 'Neutral', color: 'rgb(144, 238, 144)' }, // Light green
-          { label: 'Hydrophilic', color: 'rgb(0, 0, 255)' }, // Blue
-        ];
-      case 'uncertainty':
-        return [
-          { label: 'Low (confident)', color: 'rgb(0, 83, 214)' }, // Blue
-          { label: 'Medium', color: 'rgb(255, 219, 19)' }, // Yellow
-          { label: 'High (uncertain)', color: 'rgb(255, 125, 69)' }, // Orange
+          { label: 'Hydrophobic', color: Color.toHexStyle(Color(0xa50026)) }, // Deep red
+          { label: 'Neutral', color: Color.toHexStyle(Color(0xffffbf)) }, // Yellow
+          { label: 'Hydrophilic', color: Color.toHexStyle(Color(0x006837)) }, // Green
         ];
       default:
         return null;
@@ -1369,7 +1363,14 @@ export default function ProteinViewer() {
                     className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600 flex-shrink-0"
                     style={{ backgroundColor: item.color }}
                   />
-                  <span className="text-xs text-slate-600 dark:text-slate-400">{item.label}</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-slate-700 dark:text-slate-300">{item.label}</span>
+                    {(item as any).description && (
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {(item as any).description}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
