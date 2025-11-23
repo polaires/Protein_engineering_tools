@@ -251,7 +251,7 @@ export default function ProteinViewer() {
         if (!atomicHierarchy) continue;
 
         // Extract chain information from this unit
-        const { chainAtomSegments, residues, chains } = atomicHierarchy;
+        const { chainAtomSegments, residues, chains, atoms, residueAtomSegments } = atomicHierarchy;
 
         // Get chain ID for this unit - prioritize proper letter labels
         try {
@@ -311,84 +311,57 @@ export default function ProteinViewer() {
           if (hasResidues) {
             console.log(`Unit has ${residues._rowCount} residues, isPolymer: ${isPolymer}`);
 
-            // Debug: Log available properties on residues
-            console.log('Residues object properties:', Object.keys(residues).filter(k => !k.startsWith('_')));
+            // Debug: Log available data structures
+            console.log('Available hierarchy objects:');
+            console.log('  - atoms exists?', !!atoms);
+            console.log('  - residueAtomSegments exists?', !!residueAtomSegments);
+
+            if (atoms) {
+              console.log('  - atoms.label_comp_id exists?', !!atoms.label_comp_id);
+            }
 
             let extractedInThisUnit = 0;
 
-            for (let rI = 0; rI < residues._rowCount; rI++) {
-              // Try to get residue name - check multiple properties
-              let compId = null;
+            // NEW APPROACH: Get comp_id from atoms table via residueAtomSegments
+            if (atoms && atoms.label_comp_id && residueAtomSegments) {
+              console.log('✓ Using atoms.label_comp_id via residueAtomSegments');
 
-              // Debug first residue in detail
-              if (rI === 0) {
-                console.log('First residue debug:');
-                console.log('  - label_comp_id exists?', !!residues.label_comp_id);
-                console.log('  - auth_comp_id exists?', !!residues.auth_comp_id);
-                console.log('  - comp_id exists?', !!(residues as any).comp_id);
+              for (let rI = 0; rI < residues._rowCount; rI++) {
+                try {
+                  // Get the first atom index for this residue
+                  const atomStart = residueAtomSegments.offsets[rI];
 
-                if (residues.label_comp_id) {
-                  try {
-                    const testValue = residues.label_comp_id.value(rI);
-                    console.log('  - label_comp_id.value(0):', testValue);
-                  } catch (e) {
-                    console.log('  - label_comp_id.value(0) ERROR:', e);
+                  if (atomStart !== undefined) {
+                    // Get comp_id from the first atom of this residue
+                    const compId = atoms.label_comp_id.value(atomStart);
+
+                    if (compId) {
+                      const compIdStr = String(compId);
+                      const oneLetterCode = threeToOne(compIdStr);
+
+                      if (oneLetterCode) {
+                        fullSequence += oneLetterCode;
+                        aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
+                        extractedInThisUnit++;
+                      } else if (rI === 0) {
+                        console.log(`Non-standard residue: ${compIdStr} (skipped)`);
+                      }
+                    }
                   }
-                }
-              }
-
-              // Try multiple ways to get composition ID
-              if (residues.label_comp_id) {
-                try {
-                  compId = residues.label_comp_id.value(rI);
                 } catch (e) {
-                  if (rI === 0) console.log('  - Failed to get label_comp_id:', e);
-                }
-              }
-
-              if (!compId && residues.auth_comp_id) {
-                try {
-                  compId = residues.auth_comp_id.value(rI);
-                } catch (e) {
-                  if (rI === 0) console.log('  - Failed to get auth_comp_id:', e);
-                }
-              }
-
-              // Try generic comp_id
-              if (!compId && (residues as any).comp_id) {
-                try {
-                  compId = (residues as any).comp_id.value(rI);
-                } catch (e) {
-                  if (rI === 0) console.log('  - Failed to get comp_id:', e);
-                }
-              }
-
-              if (compId) {
-                const compIdStr = String(compId);
-
-                // Only add if it's a standard amino acid
-                const oneLetterCode = threeToOne(compIdStr);
-                if (oneLetterCode) {
-                  fullSequence += oneLetterCode;
-                  aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
-                  extractedInThisUnit++;
-                } else {
-                  // Log non-standard residues
                   if (rI === 0) {
-                    console.log(`Non-standard residue: ${compIdStr} (skipped)`);
+                    console.error('Error extracting from atoms table:', e);
                   }
                 }
-              } else {
-                if (rI === 0) {
-                  console.log('Could not get compId for first residue - all methods failed');
-                }
               }
-            }
 
-            if (extractedInThisUnit > 0) {
-              console.log(`✓ Extracted ${extractedInThisUnit} amino acids from this unit`);
+              if (extractedInThisUnit > 0) {
+                console.log(`✓ Extracted ${extractedInThisUnit} amino acids from this unit`);
+              } else {
+                console.warn(`✗ No amino acids extracted from this unit (${residues._rowCount} residues found)`);
+              }
             } else {
-              console.warn(`✗ No amino acids extracted from this unit (${residues._rowCount} residues found)`);
+              console.warn('Cannot extract sequence: atoms.label_comp_id or residueAtomSegments not available');
             }
           }
         } catch (err) {
