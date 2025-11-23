@@ -1494,71 +1494,146 @@ export default function ProteinViewer() {
                       </div>
                     )}
 
-                    {/* Basic Information */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
-                        Basic Information
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                        <div title="Number of amino acids"><span className="font-medium">Length:</span> {analysis.length} aa</div>
-                        <div title="Molecular weight in Daltons"><span className="font-medium">MW:</span> {analysis.molecularWeight.toFixed(2)} Da</div>
-                        <div title="Theoretical isoelectric point"><span className="font-medium">pI:</span> {analysis.theoreticalPI.toFixed(2)}</div>
-                        <div title="Fraction of aromatic amino acids (Phe, Trp, Tyr)"><span className="font-medium">Aromaticity:</span> {(analysis.aromaticity * 100).toFixed(1)}%</div>
+                    {/* Key Properties - Highlighted */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg border border-blue-200 dark:border-blue-600">
+                      <div className="text-center">
+                        <div className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">Length</div>
+                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{analysis.length}</div>
+                        <div className="text-[9px] text-blue-500 dark:text-blue-400">amino acids</div>
+                      </div>
+                      <div className="text-center border-l border-blue-200 dark:border-blue-600">
+                        <div className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">Molecular Weight</div>
+                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{(analysis.molecularWeight / 1000).toFixed(2)}</div>
+                        <div className="text-[9px] text-blue-500 dark:text-blue-400">kDa</div>
+                      </div>
+                      <div className="text-center border-l border-blue-200 dark:border-blue-600">
+                        <div className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">Isoelectric Point</div>
+                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{analysis.theoreticalPI.toFixed(2)}</div>
+                        <div className="text-[9px] text-blue-500 dark:text-blue-400">pH units</div>
+                      </div>
+                      <div className="text-center border-l border-blue-200 dark:border-blue-600">
+                        <div className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wide mb-1">Aromaticity</div>
+                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{(analysis.aromaticity * 100).toFixed(1)}%</div>
+                        <div className="text-[9px] text-blue-500 dark:text-blue-400">Phe, Trp, Tyr</div>
                       </div>
                     </div>
 
-                    {/* Physicochemical Properties */}
+                    {/* Physicochemical Properties with Visual Gauges */}
                     <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-2">
                         Physicochemical Properties
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                      <div className="space-y-3">
+                        {/* GRAVY */}
                         <div>
-                          <span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}
-                          <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
-                            {analysis.gravy < 0 ? 'Hydrophilic' : 'Hydrophobic'}
-                          </span>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-blue-900 dark:text-blue-100">GRAVY (Hydrophobicity)</span>
+                            <span className="text-xs font-bold text-blue-900 dark:text-blue-100">{analysis.gravy.toFixed(3)}</span>
+                          </div>
+                          <div className="text-[9px] text-blue-600 dark:text-blue-400 mb-1">
+                            {analysis.gravy < 0 ? 'Hydrophilic (negative values)' : 'Hydrophobic (positive values)'}
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}
-                          <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
-                            {analysis.aliphaticIndex > 100 ? '✓ High thermostability' :
-                             analysis.aliphaticIndex > 80 ? '✓ Good thermostability' :
-                             analysis.aliphaticIndex > 60 ? 'Moderate thermostability' :
-                             '⚠️ Low thermostability'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="font-medium">Instability Index:</span> {analysis.instabilityIndex.toFixed(2)}
-                          <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
-                            {analysis.instabilityIndex > 40 ? '⚠️ Unstable in vitro' : '✓ Stable in vitro'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Amino Acid Composition - ALL in compact format */}
-                    <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
-                        Amino Acid Composition
-                      </h4>
-                      <div className="grid grid-cols-4 md:grid-cols-10 gap-1 text-xs font-mono">
-                        {Object.entries(analysis.aminoAcidPercent)
-                          .sort((a, b) => b[1] - a[1])
-                          .map(([aa, percent]) => (
+                        {/* Aliphatic Index with Gauge */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-blue-900 dark:text-blue-100">Aliphatic Index</span>
+                            <span className="text-xs font-bold text-blue-900 dark:text-blue-100">{analysis.aliphaticIndex.toFixed(2)}</span>
+                          </div>
+                          <div className="relative h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
                             <div
-                              key={aa}
-                              className="flex flex-col items-center p-1 bg-blue-100 dark:bg-blue-900/30 rounded"
-                              title={`${aa}: ${percent.toFixed(1)}%`}
-                            >
-                              <span className="font-bold text-blue-900 dark:text-blue-100">{aa}</span>
-                              <span className="text-[10px] text-blue-700 dark:text-blue-300">{percent.toFixed(1)}%</span>
-                            </div>
-                          ))}
+                              className="absolute h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(100, (analysis.aliphaticIndex / 120) * 100)}%`,
+                                background: analysis.aliphaticIndex > 100 ? '#10b981' :
+                                           analysis.aliphaticIndex > 80 ? '#3b82f6' :
+                                           analysis.aliphaticIndex > 60 ? '#f59e0b' : '#ef4444'
+                              }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[9px] text-blue-600 dark:text-blue-400 mt-1">
+                            <span>Low (0)</span>
+                            <span className="font-medium">
+                              {analysis.aliphaticIndex > 100 ? 'High thermostability' :
+                               analysis.aliphaticIndex > 80 ? 'Good thermostability' :
+                               analysis.aliphaticIndex > 60 ? 'Moderate' : 'Low'}
+                            </span>
+                            <span>High (120+)</span>
+                          </div>
+                        </div>
+
+                        {/* Instability Index with Gauge */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-blue-900 dark:text-blue-100">Instability Index</span>
+                            <span className="text-xs font-bold text-blue-900 dark:text-blue-100">{analysis.instabilityIndex.toFixed(2)}</span>
+                          </div>
+                          <div className="relative h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                            <div
+                              className="absolute h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(100, (analysis.instabilityIndex / 80) * 100)}%`,
+                                background: analysis.instabilityIndex < 40 ? '#10b981' : '#ef4444'
+                              }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-[9px] text-blue-600 dark:text-blue-400 mt-1">
+                            <span>Stable (0)</span>
+                            <span className="font-medium">
+                              {analysis.instabilityIndex > 40 ? 'Unstable in vitro' : 'Stable in vitro'}
+                            </span>
+                            <span>Unstable (80+)</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Sequence */}
+                    {/* Amino Acid Composition - Grouped by Property */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-2">
+                        Amino Acid Composition (Grouped by Property)
+                      </h4>
+                      <div className="space-y-2">
+                        {(() => {
+                          // Group amino acids by property type
+                          const groups = {
+                            'Hydrophobic': { aas: ['A', 'I', 'L', 'V'], color: '#8CFF8C' },
+                            'Aromatic': { aas: ['F', 'W', 'Y'], color: '#534C52' },
+                            'Polar': { aas: ['S', 'T', 'C', 'M', 'N', 'Q'], color: '#FF7042' },
+                            'Positive': { aas: ['R', 'K', 'H'], color: '#4747B8' },
+                            'Negative': { aas: ['D', 'E'], color: '#660000' },
+                            'Special': { aas: ['G', 'P'], color: '#525252' }
+                          };
+
+                          return Object.entries(groups).map(([groupName, { aas, color }]) => (
+                            <div key={groupName}>
+                              <div className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 mb-1">
+                                {groupName}
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {aas.map(aa => {
+                                  const percent = analysis.aminoAcidPercent[aa] || 0;
+                                  return (
+                                    <div
+                                      key={aa}
+                                      className="flex items-center gap-1 px-2 py-0.5 rounded"
+                                      style={{ backgroundColor: color + '40' }}
+                                      title={`${aa}: ${percent.toFixed(1)}%`}
+                                    >
+                                      <span className="font-bold text-xs font-mono" style={{ color }}>{aa}</span>
+                                      <span className="text-[10px] text-slate-700 dark:text-slate-300">{percent.toFixed(1)}%</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Sequence with Color Coding and Ruler */}
                     <div>
                       <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1 flex items-center justify-between">
                         <span>
@@ -1578,8 +1653,62 @@ export default function ProteinViewer() {
                           )}
                         </span>
                       </h4>
-                      <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-200 dark:border-blue-700 max-h-32 overflow-y-auto">
-                        <code className="text-xs font-mono break-all leading-relaxed">{seq}</code>
+                      <div className="bg-white dark:bg-slate-800 p-3 rounded border border-blue-200 dark:border-blue-700 max-h-40 overflow-y-auto">
+                        {/* Sequence with color coding */}
+                        <div className="font-mono text-xs leading-relaxed">
+                          {seq.split('').map((aa, index) => {
+                            // Get color based on residue type (Jmol colors)
+                            const getAAColor = (residue: string) => {
+                              const colors: Record<string, string> = {
+                                // Hydrophobic
+                                'A': '#8CFF8C', 'I': '#8CFF8C', 'L': '#8CFF8C', 'V': '#8CFF8C',
+                                // Aromatic
+                                'F': '#534C52', 'W': '#534C52', 'Y': '#534C52',
+                                // Polar
+                                'S': '#FF7042', 'T': '#FF7042', 'C': '#FF7042', 'M': '#FF7042', 'N': '#FF7042', 'Q': '#FF7042',
+                                // Positive
+                                'R': '#4747B8', 'K': '#4747B8', 'H': '#4747B8',
+                                // Negative
+                                'D': '#660000', 'E': '#660000',
+                                // Special
+                                'G': '#525252', 'P': '#525252'
+                              };
+                              return colors[residue] || '#888888';
+                            };
+
+                            const color = getAAColor(aa);
+                            const position = index + 1;
+
+                            return (
+                              <span
+                                key={index}
+                                className="inline-block cursor-default transition-all hover:scale-125 hover:font-bold"
+                                style={{ color }}
+                                title={`${aa}${position}`}
+                              >
+                                {aa}
+                                {/* Add ruler markers every 10 residues */}
+                                {position % 10 === 0 && (
+                                  <span className="relative">
+                                    <span className="absolute -top-3 -left-2 text-[8px] text-blue-500 dark:text-blue-400 font-sans">
+                                      {position}
+                                    </span>
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-600">
+                          <div className="text-[9px] text-blue-600 dark:text-blue-400 space-x-3">
+                            <span><span style={{ color: '#8CFF8C' }}>●</span> Hydrophobic</span>
+                            <span><span style={{ color: '#534C52' }}>●</span> Aromatic</span>
+                            <span><span style={{ color: '#FF7042' }}>●</span> Polar</span>
+                            <span><span style={{ color: '#4747B8' }}>●</span> Positive</span>
+                            <span><span style={{ color: '#660000' }}>●</span> Negative</span>
+                            <span><span style={{ color: '#525252' }}>●</span> Special</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
