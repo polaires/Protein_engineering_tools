@@ -50,6 +50,13 @@ export default function ProteinViewer() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
 
+  // Store actual structure metadata for dynamic legends
+  const [structureMetadata, setStructureMetadata] = useState<{
+    chains?: string[];
+    residueCount?: number;
+    entityTypes?: string[];
+  } | null>(null);
+
   // Ligand, ion, water controls
   const [showLigands, setShowLigands] = useState(true);
   const [showIons, setShowIons] = useState(true);
@@ -185,9 +192,48 @@ export default function ProteinViewer() {
     }
   }, [componentsNeedUpdate, showLigands, showIons, showWater]);
 
+  // Extract structure metadata for dynamic legends
+  const extractStructureMetadata = (structureRefToUse: StateObjectRef<any>) => {
+    if (!pluginRef.current) return;
+
+    try {
+      const state = pluginRef.current.state.data;
+      const structure = state.select(structureRefToUse)[0]?.obj?.data;
+
+      if (structure) {
+        // Extract unique chain IDs
+        const chainSet = new Set<string>();
+        const { units } = structure;
+
+        for (const unit of units) {
+          const chainId = unit.model.atomicHierarchy.chainAtomSegments.label_asym_id.value(
+            unit.elements[0]
+          );
+          if (chainId) chainSet.add(chainId);
+        }
+
+        setStructureMetadata({
+          chains: Array.from(chainSet).sort(),
+          residueCount: structure.elementCount,
+        });
+
+        console.log('Structure metadata:', {
+          chains: Array.from(chainSet),
+          residueCount: structure.elementCount,
+        });
+      }
+    } catch (error) {
+      console.warn('Could not extract structure metadata:', error);
+      setStructureMetadata(null);
+    }
+  };
+
   // Apply representation and color scheme
   const applyVisualization = async (structureRefToUse: StateObjectRef<any>, representation: string, colorScheme: string) => {
     if (!pluginRef.current) return;
+
+    // Extract structure metadata for dynamic legends
+    extractStructureMetadata(structureRefToUse);
 
     const plugin = pluginRef.current;
 
@@ -591,14 +637,22 @@ export default function ProteinViewer() {
   const getColorLegend = () => {
     switch (selectedColorScheme) {
       case 'chain-id':
-        // Show typical chain colors used by Mol*
-        return [
-          { label: 'Chain A', color: 'rgb(100, 149, 237)' }, // Cornflower blue
-          { label: 'Chain B', color: 'rgb(255, 182, 193)' }, // Light pink
-          { label: 'Chain C', color: 'rgb(144, 238, 144)' }, // Light green
-          { label: 'Chain D', color: 'rgb(255, 218, 185)' }, // Peach
-          { label: 'Additional chains follow pattern', color: 'rgb(211, 211, 211)' },
+        // DYNAMIC: Show only chains present in the loaded structure
+        if (!structureMetadata?.chains || structureMetadata.chains.length === 0) {
+          return null; // No chains info available
+        }
+
+        // Mol* default chain color palette (from ColorTheme)
+        const molstarChainColors = [
+          '#8dd3c7', '#ffffb3', '#bebada', '#fb8072', '#80b1d3',
+          '#fdb462', '#b3de69', '#fccde5', '#d9d9d9', '#bc80bd',
+          '#ccebc5', '#ffed6f'
         ];
+
+        return structureMetadata.chains.slice(0, 10).map((chainId, index) => ({
+          label: `Chain ${chainId}`,
+          color: molstarChainColors[index % molstarChainColors.length],
+        }));
       case 'secondary-structure':
         return [
           { label: 'α-Helix', color: 'rgb(255, 0, 255)' }, // Magenta
@@ -1057,12 +1111,19 @@ export default function ProteinViewer() {
               </select>
             </div>
 
-            {/* Color Legend */}
-            {getColorLegend() && (
+            {/* Color Legend - DYNAMIC */}
+            {currentStructure && getColorLegend() && (
               <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 mb-2">
                   <Palette className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Color Legend</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Color Legend
+                    {selectedColorScheme === 'chain-id' && structureMetadata?.chains && (
+                      <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
+                        ({structureMetadata.chains.length} {structureMetadata.chains.length === 1 ? 'chain' : 'chains'})
+                      </span>
+                    )}
+                  </span>
                 </div>
                 <div className="space-y-1.5">
                   {getColorLegend()!.map((item, index) => (
@@ -1075,6 +1136,11 @@ export default function ProteinViewer() {
                     </div>
                   ))}
                 </div>
+                {selectedColorScheme === 'chain-id' && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
+                    ✨ Dynamic legend showing actual chains in this structure
+                  </p>
+                )}
               </div>
             )}
 
