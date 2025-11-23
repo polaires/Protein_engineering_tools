@@ -207,19 +207,6 @@ export default function ProteinViewer() {
     }
   }, [componentsNeedUpdate, showLigands, showIons, showWater]);
 
-  // Clone loci data to avoid reference reuse issues
-  const cloneLoci = (loci: any) => {
-    if (!loci || loci.kind === 'empty-loci') return null;
-
-    // Create a deep clone of the loci structure to avoid reference mutation
-    return {
-      kind: loci.kind,
-      structure: loci.structure,
-      elements: loci.elements ? (Array.isArray(loci.elements) ? [...loci.elements] : loci.elements) : undefined,
-      bonds: loci.bonds ? [...loci.bonds] : undefined,
-    };
-  };
-
   // Setup measurement mode click handler
   useEffect(() => {
     if (!pluginRef.current || !measurementMode) {
@@ -236,58 +223,59 @@ export default function ProteinViewer() {
     const subscription = plugin.behaviors.interaction.click.subscribe((event: any) => {
       if (!measurementMode) return;
 
-      // Get the clicked loci and clone it to avoid reference issues
+      // Get the clicked loci
       const loci = event.current.loci;
 
       if (!loci || loci.kind === 'empty-loci') {
         return;
       }
 
-      // Clone the loci to avoid Molstar's reference reuse issues
-      const clonedLoci = cloneLoci(loci);
-      if (!clonedLoci) return;
+      // Extract immutable data IMMEDIATELY before Molstar mutates the reference
+      const position = getLociPosition(loci);
+      const atomInfo = getAtomInfo(loci);
 
-      // Add to selected loci
+      if (!position) {
+        showToast('error', 'Could not extract atom position');
+        return;
+      }
+
+      // Store only the immutable data (position and atom info)
+      const atomData = {
+        position,
+        atomInfo
+      };
+
       setSelectedLoci((prev: any[]) => {
-        const newLoci = [...prev, clonedLoci];
+        const newLoci = [...prev, atomData];
 
-        // If we have 2 or more loci, calculate and display distance
+        // If we have 2 or more atoms, calculate and display distance
         if (newLoci.length >= 2) {
           const first = newLoci[newLoci.length - 2];
           const second = newLoci[newLoci.length - 1];
 
-          // Highlight both loci
-          plugin.managers.interactivity.lociHighlights.highlight({ loci: first }, false);
-          plugin.managers.interactivity.lociHighlights.highlight({ loci: second }, false);
+          // Highlight the second loci (first is already highlighted from previous click)
+          plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
 
-          // Calculate distance manually (works for all loci types: atoms, ions, etc.)
-          const distance = calculateDistance(first, second);
+          // Calculate distance from stored positions
+          const dx = second.position[0] - first.position[0];
+          const dy = second.position[1] - first.position[1];
+          const dz = second.position[2] - first.position[2];
+          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-          if (distance !== null) {
-            // Get atom info for better feedback
-            const atom1Info = getAtomInfo(first);
-            const atom2Info = getAtomInfo(second);
-            const measurementText = `${atom1Info} ↔ ${atom2Info}: ${distance.toFixed(2)} Å`;
+          const measurementText = `${first.atomInfo} ↔ ${second.atomInfo}: ${distance.toFixed(2)} Å`;
+          showToast('success', measurementText, 6000); // Show for 6 seconds
 
-            showToast('success', measurementText, 6000); // Show for 6 seconds
-
-            // Keep highlights visible for a moment, then clear
-            setTimeout(() => {
-              plugin.managers.interactivity.lociHighlights.clearHighlights();
-            }, 5000); // Keep visible for 5 seconds after measurement
-          } else {
-            showToast('error', 'Failed to calculate distance');
+          // Keep highlights visible for a moment, then clear
+          setTimeout(() => {
             plugin.managers.interactivity.lociHighlights.clearHighlights();
-          }
+          }, 5000); // Keep visible for 5 seconds after measurement
 
           return [];
         }
 
-        // For first atom: Highlight
-        plugin.managers.interactivity.lociHighlights.highlightOnly({ loci: clonedLoci });
+        // For first atom: Highlight immediately (use loci directly, don't store it)
+        plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
 
-        // Get atom info for the toast
-        const atomInfo = getAtomInfo(clonedLoci);
         if (newLoci.length === 1) {
           showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
         }
