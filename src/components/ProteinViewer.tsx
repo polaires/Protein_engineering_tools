@@ -55,6 +55,7 @@ export default function ProteinViewer() {
   const [measurementMode, setMeasurementMode] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
+  const [selectedLoci, setSelectedLoci] = useState<any[]>([]);
 
   // Store actual structure metadata for dynamic legends and analysis
   const [structureMetadata, setStructureMetadata] = useState<{
@@ -205,6 +206,75 @@ export default function ProteinViewer() {
       setComponentsNeedUpdate(false);
     }
   }, [componentsNeedUpdate, showLigands, showIons, showWater]);
+
+  // Setup measurement mode click handler
+  useEffect(() => {
+    if (!pluginRef.current || !measurementMode) {
+      // Reset selected loci when measurement mode is disabled
+      if (!measurementMode) {
+        setSelectedLoci([]);
+      }
+      return;
+    }
+
+    const plugin = pluginRef.current;
+
+    // Subscribe to click events
+    const subscription = plugin.behaviors.interaction.click.subscribe((event: any) => {
+      if (!measurementMode) return;
+
+      // Get the clicked loci
+      const loci = event.current.loci;
+
+      if (!loci || loci.kind === 'empty-loci') return;
+
+      // Add to selected loci
+      setSelectedLoci((prev) => {
+        const newLoci = [...prev, loci];
+
+        // If we have 2 or more loci, calculate and display distance
+        if (newLoci.length >= 2) {
+          const first = newLoci[newLoci.length - 2];
+          const second = newLoci[newLoci.length - 1];
+
+          try {
+            // Add measurement using Molstar's structure measurement manager
+            if (plugin.managers.structure?.measurement) {
+              plugin.managers.structure.measurement.addDistance(first, second);
+              showToast('success', 'Distance measurement added');
+            } else {
+              // Fallback: manually calculate distance
+              const distance = calculateDistance(first, second, plugin);
+              if (distance !== null) {
+                showToast('success', `Distance: ${distance.toFixed(2)} Å`);
+              }
+            }
+
+            // Clear selection after measuring
+            return [];
+          } catch (error) {
+            console.error('Failed to add measurement:', error);
+            showToast('error', 'Failed to create measurement');
+            return [];
+          }
+        }
+
+        // Highlight the selected loci
+        plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
+
+        if (newLoci.length === 1) {
+          showToast('info', 'First atom selected. Click another atom to measure distance.');
+        }
+
+        return newLoci;
+      });
+    });
+
+    // Cleanup subscription
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [measurementMode, showToast]);
 
   // Extract structure metadata using Molstar's proper sequence API
   const extractStructureMetadata = (structureRefToUse: StateObjectRef<any>) => {
@@ -785,9 +855,57 @@ export default function ProteinViewer() {
     setMeasurementMode(newMode);
 
     if (newMode) {
-      showToast('info', 'Measurement mode enabled. Click atoms to select and view distances in the viewer.');
+      setSelectedLoci([]);
+      showToast('info', 'Measurement mode enabled. Click two atoms to measure distance.');
     } else {
+      // Clear highlights when disabling
+      if (pluginRef.current.managers.interactivity?.lociHighlights) {
+        pluginRef.current.managers.interactivity.lociHighlights.clearHighlights();
+      }
+      setSelectedLoci([]);
       showToast('info', 'Measurement mode disabled');
+    }
+  };
+
+  // Calculate distance between two loci (fallback method)
+  const calculateDistance = (loci1: any, loci2: any, plugin: PluginUIContext): number | null => {
+    try {
+      // Extract positions from loci
+      const getPosition = (loci: any): [number, number, number] | null => {
+        if (loci.kind === 'element-loci') {
+          const { structure, elements } = loci;
+          const element = elements[0];
+          if (!element) return null;
+
+          const unit = structure.units[element.unit];
+          const elementIndex = element.indices[0];
+
+          if (!unit || elementIndex === undefined) return null;
+
+          const l = StructureElement.Location.create(structure, unit, elementIndex);
+          const x = SP.atom.x(l);
+          const y = SP.atom.y(l);
+          const z = SP.atom.z(l);
+
+          return [x, y, z];
+        }
+        return null;
+      };
+
+      const pos1 = getPosition(loci1);
+      const pos2 = getPosition(loci2);
+
+      if (!pos1 || !pos2) return null;
+
+      // Calculate Euclidean distance
+      const dx = pos2[0] - pos1[0];
+      const dy = pos2[1] - pos1[1];
+      const dz = pos2[2] - pos1[2];
+
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    } catch (error) {
+      console.error('Error calculating distance:', error);
+      return null;
     }
   };
 
@@ -1200,10 +1318,15 @@ export default function ProteinViewer() {
               </button>
               <button
                 onClick={toggleMeasurement}
-                className={`btn-icon bg-white dark:bg-slate-800 shadow-lg ${measurementMode ? 'ring-2 ring-primary-500' : ''}`}
-                title="Measurement Tool"
+                className={`btn-icon bg-white dark:bg-slate-800 shadow-lg relative ${measurementMode ? 'ring-2 ring-primary-500 bg-primary-100 dark:bg-primary-900' : ''}`}
+                title={measurementMode ? `Measurement mode active${selectedLoci.length > 0 ? ` (${selectedLoci.length}/2 atoms selected)` : ''}` : 'Enable measurement tool'}
               >
-                <Ruler className="w-5 h-5" />
+                <Ruler className={`w-5 h-5 ${measurementMode ? 'text-primary-600 dark:text-primary-400' : ''}`} />
+                {measurementMode && selectedLoci.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    {selectedLoci.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={takeSnapshot}
