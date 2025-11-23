@@ -199,34 +199,69 @@ export default function ProteinViewer() {
 
   // Extract structure metadata for dynamic legends and protein analysis
   const extractStructureMetadata = (structureRefToUse: StateObjectRef<any>) => {
-    if (!pluginRef.current) return;
+    if (!pluginRef.current) {
+      console.warn('extractStructureMetadata: Plugin not available');
+      return;
+    }
+
+    console.log('Extracting structure metadata...');
 
     try {
       const state = pluginRef.current.state.data;
       // StateObjectRef can be used directly as the cells Map key
       const cell = state.cells.get(structureRefToUse as any);
+
+      if (!cell) {
+        console.warn('extractStructureMetadata: Cell not found for structure ref');
+        setStructureMetadata(null);
+        return;
+      }
+
       const structure = cell?.obj?.data;
 
-      if (structure) {
-        // Extract unique chain IDs
-        const chainSet = new Set<string>();
-        const { units } = structure;
+      if (!structure) {
+        console.warn('extractStructureMetadata: Structure data not available');
+        setStructureMetadata(null);
+        return;
+      }
 
-        // Extract sequence for protein analysis
-        let fullSequence = '';
-        const aminoAcidCounts: Record<string, number> = {};
+      if (!structure.units || structure.units.length === 0) {
+        console.warn('extractStructureMetadata: Structure has no units');
+        setStructureMetadata(null);
+        return;
+      }
 
-        for (const unit of units) {
-          const { model } = unit;
-          const { atomicHierarchy } = model;
+      console.log('Structure units found:', structure.units.length);
 
-          // Get chain ID
-          const chainId = atomicHierarchy.chainAtomSegments.label_asym_id.value(unit.elements[0]);
-          if (chainId) chainSet.add(chainId);
+      // Extract unique chain IDs
+      const chainSet = new Set<string>();
+      const { units } = structure;
 
-          // Extract sequence
-          try {
-            const { residues } = atomicHierarchy;
+      // Extract sequence for protein analysis
+      let fullSequence = '';
+      const aminoAcidCounts: Record<string, number> = {};
+
+      for (const unit of units) {
+        const { model } = unit;
+        const { atomicHierarchy } = model;
+
+        // Get chain ID
+        try {
+          if (unit.elements && unit.elements.length > 0) {
+            const chainId = atomicHierarchy.chainAtomSegments.label_asym_id.value(unit.elements[0]);
+            if (chainId) {
+              chainSet.add(chainId);
+              console.log('Found chain:', chainId);
+            }
+          }
+        } catch (err) {
+          console.warn('Could not extract chain ID:', err);
+        }
+
+        // Extract sequence
+        try {
+          const { residues } = atomicHierarchy;
+          if (residues && residues._rowCount > 0) {
             for (let i = 0; i < residues._rowCount; i++) {
               const compId = residues.label_comp_id.value(i);
               if (compId) {
@@ -238,26 +273,29 @@ export default function ProteinViewer() {
                 }
               }
             }
-          } catch (err) {
-            console.warn('Could not extract sequence:', err);
           }
+        } catch (err) {
+          console.warn('Could not extract sequence from unit:', err);
         }
-
-        setStructureMetadata({
-          chains: Array.from(chainSet).sort(),
-          residueCount: structure.elementCount,
-          sequence: fullSequence,
-          aminoAcidComposition: aminoAcidCounts,
-        });
-
-        console.log('Structure metadata:', {
-          chains: Array.from(chainSet),
-          residueCount: structure.elementCount,
-          sequenceLength: fullSequence.length,
-        });
       }
+
+      const metadata = {
+        chains: Array.from(chainSet).sort(),
+        residueCount: structure.elementCount,
+        sequence: fullSequence,
+        aminoAcidComposition: aminoAcidCounts,
+      };
+
+      setStructureMetadata(metadata);
+
+      console.log('✓ Structure metadata extracted successfully:', {
+        chains: metadata.chains,
+        chainCount: metadata.chains.length,
+        residueCount: metadata.residueCount,
+        sequenceLength: metadata.sequence.length,
+      });
     } catch (error) {
-      console.warn('Could not extract structure metadata:', error);
+      console.error('Error extracting structure metadata:', error);
       setStructureMetadata(null);
     }
   };
@@ -1157,171 +1195,170 @@ export default function ProteinViewer() {
               </select>
             </div>
 
-            {/* Color Legend - DYNAMIC */}
-            {currentStructure && getColorLegend() && (
-              <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-2 mb-2">
-                  <Palette className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Color Legend
-                    {selectedColorScheme === 'chain-id' && structureMetadata?.chains && (
-                      <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
-                        ({structureMetadata.chains.length} {structureMetadata.chains.length === 1 ? 'chain' : 'chains'})
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {getColorLegend()!.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div
-                        className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600 flex-shrink-0"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-xs text-slate-600 dark:text-slate-400">{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Protein Analysis */}
-            {currentStructure && structureMetadata?.sequence && (() => {
-              try {
-                const analysis = analyzeProtein(structureMetadata.sequence);
-                return (
-                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                    <button
-                      onClick={() => setShowProteinAnalysis(!showProteinAnalysis)}
-                      className="w-full flex items-center justify-between text-left"
-                    >
-                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
-                        <Info className="w-4 h-4" />
-                        Protein Analysis
-                      </span>
-                      {showProteinAnalysis ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-
-                    {showProteinAnalysis && (
-                      <div className="mt-3 space-y-3">
-                        {/* Basic Information */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Basic Information</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div><span className="font-medium">Length:</span> {analysis.length} aa</div>
-                            <div><span className="font-medium">MW:</span> {analysis.molecularWeight.toFixed(2)} Da</div>
-                            <div><span className="font-medium">pI:</span> {analysis.theoreticalPI.toFixed(2)}</div>
-                            <div><span className="font-medium">Aromaticity:</span> {(analysis.aromaticity * 100).toFixed(1)}%</div>
-                          </div>
-                        </div>
-
-                        {/* Physicochemical Properties */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Physicochemical Properties</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div><span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}</div>
-                            <div><span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}</div>
-                            <div><span className="font-medium">Instability:</span> {analysis.instabilityIndex.toFixed(2)}</div>
-                            <div><span className="font-medium">Status:</span> {analysis.instabilityIndex > 40 ? 'Unstable' : 'Stable'}</div>
-                          </div>
-                        </div>
-
-                        {/* Amino Acid Composition (Top 5) */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Amino Acid Composition (Top 5)</h4>
-                          <div className="space-y-1">
-                            {Object.entries(analysis.aminoAcidPercent)
-                              .filter(([_, percent]) => percent > 0)
-                              .sort((a, b) => b[1] - a[1])
-                              .slice(0, 5)
-                              .map(([aa, percent]) => (
-                                <div key={aa} className="flex justify-between text-xs">
-                                  <span className="font-mono">{aa}</span>
-                                  <div className="flex-1 mx-2">
-                                    <div className="bg-blue-200 dark:bg-blue-800 h-3 rounded-full overflow-hidden">
-                                      <div className="bg-blue-500 h-full" style={{ width: `${percent}%` }}></div>
-                                    </div>
-                                  </div>
-                                  <span className="font-medium">{percent.toFixed(1)}%</span>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-
-                        {/* Cleaned Sequence */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Cleaned Sequence</h4>
-                          <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-200 dark:border-blue-700 max-h-32 overflow-y-auto">
-                            <code className="text-xs font-mono break-all">{analysis.sequence}</code>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              } catch (err) {
-                return null;
-              }
-            })()}
-
             {/* Display Options */}
-            {currentStructure && (
-              <div className="mt-4">
-                <label className="label mb-2">Additional Components</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showLigands}
-                      onChange={(e) => {
-                        setShowLigands(e.target.checked);
-                        setComponentsNeedUpdate(true);
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Ligands & Small Molecules</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Bound molecules, substrates, drugs</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showIons}
-                      onChange={(e) => {
-                        setShowIons(e.target.checked);
-                        setComponentsNeedUpdate(true);
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Ions & Metal Centers</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Metal ions (Ca²⁺, Mg²⁺, Zn²⁺, etc.)</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showWater}
-                      onChange={(e) => {
-                        setShowWater(e.target.checked);
-                        setComponentsNeedUpdate(true);
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-sm text-slate-700 dark:text-slate-300">Water Molecules</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Crystallographic water</span>
-                    </div>
-                  </label>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
-                  Note: Components displayed only if present in structure
-                </p>
+            <div className="mt-4 md:col-span-2">
+              <label className="label mb-2">Additional Components</label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showLigands}
+                    onChange={(e) => {
+                      setShowLigands(e.target.checked);
+                      setComponentsNeedUpdate(true);
+                    }}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Ligands & Small Molecules</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Bound molecules, substrates, drugs</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showIons}
+                    onChange={(e) => {
+                      setShowIons(e.target.checked);
+                      setComponentsNeedUpdate(true);
+                    }}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Ions & Metal Centers</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Metal ions (Ca²⁺, Mg²⁺, Zn²⁺, etc.)</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showWater}
+                    onChange={(e) => {
+                      setShowWater(e.target.checked);
+                      setComponentsNeedUpdate(true);
+                    }}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Water Molecules</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Crystallographic water</span>
+                  </div>
+                </label>
               </div>
-            )}
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
+                Note: Components displayed only if present in structure
+              </p>
+            </div>
           </div>
         )}
+
+        {/* Color Legend - Full Width Below Grid */}
+        {currentStructure && getColorLegend() && (
+          <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 mb-2">
+              <Palette className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Color Legend
+                {selectedColorScheme === 'chain-id' && structureMetadata?.chains && (
+                  <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
+                    ({structureMetadata.chains.length} {structureMetadata.chains.length === 1 ? 'chain' : 'chains'})
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {getColorLegend()!.map((item, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <div
+                    className="w-4 h-4 rounded border border-slate-300 dark:border-slate-600 flex-shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-xs text-slate-600 dark:text-slate-400">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Protein Analysis - Full Width Below Grid */}
+        {currentStructure && structureMetadata?.sequence && (() => {
+          try {
+            const analysis = analyzeProtein(structureMetadata.sequence);
+            return (
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                <button
+                  onClick={() => setShowProteinAnalysis(!showProteinAnalysis)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                    <Info className="w-4 h-4" />
+                    Protein Analysis
+                  </span>
+                  {showProteinAnalysis ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {showProteinAnalysis && (
+                  <div className="mt-3 space-y-3">
+                    {/* Basic Information */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Basic Information</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div><span className="font-medium">Length:</span> {analysis.length} aa</div>
+                        <div><span className="font-medium">MW:</span> {analysis.molecularWeight.toFixed(2)} Da</div>
+                        <div><span className="font-medium">pI:</span> {analysis.theoreticalPI.toFixed(2)}</div>
+                        <div><span className="font-medium">Aromaticity:</span> {(analysis.aromaticity * 100).toFixed(1)}%</div>
+                      </div>
+                    </div>
+
+                    {/* Physicochemical Properties */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Physicochemical Properties</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div><span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}</div>
+                        <div><span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}</div>
+                        <div><span className="font-medium">Instability:</span> {analysis.instabilityIndex.toFixed(2)}</div>
+                        <div><span className="font-medium">Status:</span> {analysis.instabilityIndex > 40 ? 'Unstable' : 'Stable'}</div>
+                      </div>
+                    </div>
+
+                    {/* Amino Acid Composition (Top 5) */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Amino Acid Composition (Top 5)</h4>
+                      <div className="space-y-1">
+                        {Object.entries(analysis.aminoAcidPercent)
+                          .filter(([_, percent]) => percent > 0)
+                          .sort((a, b) => b[1] - a[1])
+                          .slice(0, 5)
+                          .map(([aa, percent]) => (
+                            <div key={aa} className="flex justify-between text-xs">
+                              <span className="font-mono">{aa}</span>
+                              <div className="flex-1 mx-2">
+                                <div className="bg-blue-200 dark:bg-blue-800 h-3 rounded-full overflow-hidden">
+                                  <div className="bg-blue-500 h-full" style={{ width: `${percent}%` }}></div>
+                                </div>
+                              </div>
+                              <span className="font-medium">{percent.toFixed(1)}%</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {/* Cleaned Sequence */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Cleaned Sequence</h4>
+                      <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-200 dark:border-blue-700 max-h-32 overflow-y-auto">
+                        <code className="text-xs font-mono break-all">{analysis.sequence}</code>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          } catch (err) {
+            console.error('Error rendering protein analysis:', err);
+            return null;
+          }
+        })()}
 
         {/* Structure Info Panel */}
         {showInfo && proteinInfo && currentStructure && (
