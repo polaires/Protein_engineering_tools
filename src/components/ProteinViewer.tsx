@@ -326,18 +326,9 @@ export default function ProteinViewer() {
               if (result) {
                 console.log('Successfully added distance measurement to scene');
 
-                // Add order labels (1, 2) to show which atom was selected first and second
-                try {
-                  await plugin.managers.structure.measurement.addOrderLabels([firstLoci, secondLoci]);
-                  console.log('Added order labels (1, 2) to atoms');
-                } catch (labelError) {
-                  console.error('Error adding order labels:', labelError);
-                }
-
-                // Add persistent highlights to both atoms
-                plugin.managers.interactivity.lociHighlights.highlight({ loci: firstLoci }, false);
-                plugin.managers.interactivity.lociHighlights.highlight({ loci: secondLoci }, false);
-                console.log('Added persistent highlights to both atoms');
+                // Note: Molstar's lociHighlights are temporary by design
+                // They provide visual feedback during interaction but don't persist
+                // The distance measurement itself (line + label) persists permanently
               } else {
                 console.warn('AddDistance returned undefined - measurement may have failed');
               }
