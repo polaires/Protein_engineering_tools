@@ -244,7 +244,7 @@ export default function ProteinViewer() {
               showToast('success', 'Distance measurement added');
             } else {
               // Fallback: manually calculate distance
-              const distance = calculateDistance(first, second, plugin);
+              const distance = calculateDistance(first, second);
               if (distance !== null) {
                 showToast('success', `Distance: ${distance.toFixed(2)} Å`);
               }
@@ -868,7 +868,7 @@ export default function ProteinViewer() {
   };
 
   // Calculate distance between two loci (fallback method)
-  const calculateDistance = (loci1: any, loci2: any, plugin: PluginUIContext): number | null => {
+  const calculateDistance = (loci1: any, loci2: any): number | null => {
     try {
       // Extract positions from loci
       const getPosition = (loci: any): [number, number, number] | null => {
