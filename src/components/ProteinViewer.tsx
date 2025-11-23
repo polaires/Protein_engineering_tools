@@ -16,6 +16,8 @@ import { createPluginUI } from 'molstar/lib/mol-plugin-ui';
 import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { StateObjectRef } from 'molstar/lib/mol-state';
+import { Sequence } from 'molstar/lib/mol-model/sequence';
+import { StructureElement, StructureProperties as SP } from 'molstar/lib/mol-model/structure';
 import {
   saveStructure, getAllStructures, deleteStructure, generateStructureId,
 } from '@/services/proteinViewer';
@@ -108,10 +110,10 @@ export default function ProteinViewer() {
           layout: {
             initial: {
               isExpanded: false,
-              showControls: true,       // Must be true to show any control regions
-              controlsDisplay: 'reactive', // CRITICAL: Required for proper panel display
+              showControls: true,          // Enable control regions
+              controlsDisplay: 'reactive', // Reactive display mode
               regionState: {
-                top: 'full',            // Required field - show sequence panel
+                top: 'full',               // Show sequence panel at top
                 left: 'hidden',
                 right: 'hidden',
                 bottom: 'hidden',
@@ -121,10 +123,10 @@ export default function ProteinViewer() {
           components: {
             remoteState: 'none',
             controls: {
-              left: 'none',             // Hide left panel
-              right: 'none',            // Hide right panel
-              bottom: 'none',           // Hide bottom log panel
-              // top is not set, defaults to sequence viewer
+              left: 'none',                // Hide left panel
+              right: 'none',               // Hide right panel
+              bottom: 'none',              // Hide bottom log panel
+              top: 'sequence',             // Explicitly set top to sequence viewer
             },
           },
           config: [
@@ -145,10 +147,10 @@ export default function ProteinViewer() {
         pluginRef.current = plugin;
         setIsViewerReady(true);
 
-        // Debug: Check if sequence panel is in the layout
-        console.log('Mol* plugin initialized');
+        // Debug: Verify sequence panel configuration
+        console.log('Mol* plugin initialized with sequence viewer');
         console.log('Layout state:', plugin.layout.state);
-        console.log('Sequence panel should be visible if showControls=true and controls.top is not "none"');
+        console.log('Sequence panel configured with controls.top = "sequence"');
 
         // Load saved structures list
         const structures = await getAllStructures();
@@ -198,161 +200,90 @@ export default function ProteinViewer() {
     }
   }, [componentsNeedUpdate, showLigands, showIons, showWater]);
 
-  // Extract structure metadata for dynamic legends and protein analysis
+  // Extract structure metadata using Molstar's proper sequence API
   const extractStructureMetadata = (structureRefToUse: StateObjectRef<any>) => {
     if (!pluginRef.current) {
       console.warn('extractStructureMetadata: Plugin not available');
       return;
     }
 
-    console.log('Extracting structure metadata...');
+    console.log('Extracting structure metadata using Molstar API...');
 
     try {
       const state = pluginRef.current.state.data;
-      // StateObjectRef can be used directly as the cells Map key
       const cell = state.cells.get(structureRefToUse as any);
 
-      if (!cell) {
-        console.warn('extractStructureMetadata: Cell not found for structure ref');
+      if (!cell || !cell.obj?.data) {
+        console.warn('extractStructureMetadata: Cell not found');
         setStructureMetadata(null);
         return;
       }
 
-      const structure = cell?.obj?.data;
-
-      if (!structure) {
-        console.warn('extractStructureMetadata: Structure data not available');
-        setStructureMetadata(null);
-        return;
-      }
+      const structure = cell.obj.data;
 
       if (!structure.units || structure.units.length === 0) {
-        console.warn('extractStructureMetadata: Structure has no units');
+        console.warn('extractStructureMetadata: No units');
         setStructureMetadata(null);
         return;
       }
 
       console.log('Structure units found:', structure.units.length);
 
-      // Extract unique chain IDs and sequences per chain
+      // Use Molstar's StructureElement API to get chain IDs and sequences
+      const l = StructureElement.Location.create(structure);
       const chainSet = new Set<string>();
-      const { units } = structure;
-
-      // Store sequences per chain
       const chainSequences: Record<string, string> = {};
       const aminoAcidCounts: Record<string, number> = {};
+      const entitySequenceMap = new Map<string, string>();
 
-      // Iterate through all models in the structure
-      for (const unit of units) {
+      // Iterate through units to extract chain and sequence info
+      for (const unit of structure.units) {
         if (!unit.model) continue;
 
-        const { model } = unit;
-        const { atomicHierarchy } = model;
+        StructureElement.Location.set(l, structure, unit, unit.elements[0]);
 
-        if (!atomicHierarchy) continue;
+        // Get chain ID using Molstar's API
+        const chainId = SP.chain.label_asym_id(l);
+        const entityKey = SP.entity.key(l);
 
-        // Extract chain information from this unit
-        const { chainAtomSegments, residues, chains, atoms, residueAtomSegments } = atomicHierarchy;
+        if (chainId) {
+          chainSet.add(chainId);
 
-        // Get chain ID for this unit - prioritize proper letter labels
-        let chainId: string | null = null;
-        try {
+          // Get entity sequence using Molstar's Sequence API
+          const entitySeq = unit.model.sequence.byEntityKey[entityKey];
 
-          // Method 1 (BEST): Try getting proper chain label from chains.label_asym_id
-          if (chainAtomSegments && chains && chains.label_asym_id && unit.elements && unit.elements.length > 0) {
-            try {
-              const firstElement = unit.elements[0];
-              const segmentIndex = chainAtomSegments.index[firstElement];
-              if (segmentIndex !== undefined) {
-                chainId = chains.label_asym_id.value(segmentIndex);
-                if (chainId) {
-                  console.log('Found chain (label_asym_id):', chainId);
+          if (entitySeq && entitySeq.sequence) {
+            // Use Molstar's getSequenceString function
+            const seqString = Sequence.getSequenceString(entitySeq.sequence);
+
+            if (seqString && seqString.length > 0) {
+              entitySequenceMap.set(entityKey, seqString);
+              chainSequences[chainId] = seqString;
+
+              // Count amino acids
+              for (const aa of seqString) {
+                if (aa !== '-' && aa !== 'X') {
+                  aminoAcidCounts[aa] = (aminoAcidCounts[aa] || 0) + 1;
                 }
               }
-            } catch (e) {
-              console.warn('Method 1 failed:', e);
+
+              console.log(`✓ Chain ${chainId}: ${seqString.length} residues`);
             }
           }
-
-          // Method 2: Try auth_asym_id as alternative
-          if (!chainId && chains && chains.auth_asym_id && chainAtomSegments && unit.elements && unit.elements.length > 0) {
-            try {
-              const firstElement = unit.elements[0];
-              const segmentIndex = chainAtomSegments.index[firstElement];
-              if (segmentIndex !== undefined) {
-                chainId = chains.auth_asym_id.value(segmentIndex);
-                if (chainId) {
-                  console.log('Found chain (auth_asym_id):', chainId);
-                }
-              }
-            } catch (e) {
-              console.warn('Method 2 failed:', e);
-            }
-          }
-
-          // Method 3: Fallback to sequential naming (only if above methods fail)
-          if (!chainId) {
-            chainId = String.fromCharCode(65 + chainSet.size); // A, B, C...
-            console.log('Found chain (fallback):', chainId);
-          }
-
-          if (chainId) {
-            chainSet.add(String(chainId));
-          }
-        } catch (err) {
-          console.warn('Could not extract chain ID:', err);
-        }
-
-        // Extract residue sequence for this chain
-        try {
-          const hasResidues = residues && residues._rowCount > 0;
-
-          if (hasResidues && chainId && atoms && atoms.label_comp_id && residueAtomSegments) {
-            let chainSequence = '';
-
-            for (let rI = 0; rI < residues._rowCount; rI++) {
-              try {
-                const atomStart = residueAtomSegments.offsets[rI];
-                if (atomStart !== undefined) {
-                  const compId = atoms.label_comp_id.value(atomStart);
-                  if (compId) {
-                    const compIdStr = String(compId);
-                    const oneLetterCode = threeToOne(compIdStr);
-                    if (oneLetterCode) {
-                      chainSequence += oneLetterCode;
-                      aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
-                    }
-                  }
-                }
-              } catch (e) {
-                // Silent fail for individual residues
-              }
-            }
-
-            if (chainSequence.length > 0) {
-              chainSequences[chainId] = chainSequence;
-              console.log(`✓ Chain ${chainId}: ${chainSequence.length} amino acids`);
-            }
-          }
-        } catch (err) {
-          console.error('Could not extract sequence:', err);
         }
       }
 
-      // Detect if all chains have identical sequences
+      // Detect if all sequences are identical
       const uniqueSeqs = new Set(Object.values(chainSequences));
       const allIdentical = uniqueSeqs.size === 1;
       const uniqueSequence = allIdentical ? Array.from(uniqueSeqs)[0] : undefined;
-
-      // If sequences differ, use the first chain as representative
       const representativeSequence = uniqueSequence || Object.values(chainSequences)[0];
 
       // Debug sequence comparison
       if (!allIdentical && Object.keys(chainSequences).length > 1) {
-        const seqs = Object.entries(chainSequences);
         console.warn('⚠️ Chains have different sequences:');
-        seqs.forEach(([chain, seq]) => {
-          console.log(`  Chain ${chain}: ${seq.substring(0, 20)}... (${seq.length} aa)`);
+        Object.entries(chainSequences).forEach(([chain, seq]) => {
+          console.log(`  Chain ${chain}: ${seq.substring(0, 20)}... (${seq.length} residues)`);
         });
       }
 
@@ -360,17 +291,16 @@ export default function ProteinViewer() {
         chains: Array.from(chainSet).sort(),
         residueCount: structure.elementCount,
         sequences: chainSequences,
-        uniqueSequence: representativeSequence, // Always set a sequence to analyze
+        uniqueSequence: representativeSequence,
         aminoAcidComposition: aminoAcidCounts,
       };
 
       setStructureMetadata(metadata);
 
-      console.log('✓ Structure metadata extracted successfully:', {
+      console.log('✓ Structure metadata extracted using Molstar API:', {
         chains: metadata.chains,
         chainCount: metadata.chains.length,
         residueCount: metadata.residueCount,
-        chainSequences: Object.keys(chainSequences).map(c => `${c}:${chainSequences[c].length}`).join(', '),
         allChainsIdentical: allIdentical,
         usingSequence: allIdentical ? 'unique (all identical)' : `chain ${Object.keys(chainSequences)[0]} (representative)`,
       });
@@ -380,16 +310,49 @@ export default function ProteinViewer() {
     }
   };
 
-  // Helper function to convert 3-letter amino acid code to 1-letter
-  const threeToOne = (three: string): string | null => {
-    const map: Record<string, string> = {
-      'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
-      'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
-      'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
-      'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
-      'SEC': 'U', 'PYL': 'O'
-    };
-    return map[three.toUpperCase()] || null;
+  // Export sequences as FASTA using Molstar's sequence API
+  const exportFASTA = () => {
+    if (!structureMetadata || !currentStructure) {
+      showToast('error', 'No structure loaded');
+      return;
+    }
+
+    try {
+      const { sequences } = structureMetadata;
+
+      if (!sequences || Object.keys(sequences).length === 0) {
+        showToast('error', 'No sequences available');
+        return;
+      }
+
+      // Generate FASTA format
+      let fastaContent = '';
+      const structureName = currentStructure.pdbId || currentStructure.name;
+
+      Object.entries(sequences).forEach(([chainId, sequence]: [string, string]) => {
+        // FASTA header format: >PDB|Chain|Description
+        fastaContent += `>${structureName}|Chain_${chainId}|Length_${sequence.length}\n`;
+
+        // Split sequence into lines of 60 characters (FASTA standard)
+        for (let i = 0; i < sequence.length; i += 60) {
+          fastaContent += sequence.substring(i, i + 60) + '\n';
+        }
+      });
+
+      // Download the FASTA file
+      const blob = new Blob([fastaContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${structureName}_sequences.fasta`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showToast('success', 'FASTA file exported');
+    } catch (error) {
+      console.error('Failed to export FASTA:', error);
+      showToast('error', 'Failed to export FASTA');
+    }
   };
 
   // Apply representation and color scheme
@@ -1522,7 +1485,7 @@ export default function ProteinViewer() {
           <div className="mt-6">
             <div className="flex items-center gap-2 mb-2">
               <FileDown className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-              <span className="label mb-0">Export Structure</span>
+              <span className="label mb-0">Export Options</span>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => exportStructure('pdb')} className="btn-secondary">
@@ -1532,6 +1495,10 @@ export default function ProteinViewer() {
               <button onClick={() => exportStructure('cif')} className="btn-secondary">
                 <Download className="w-4 h-4 mr-2" />
                 Export mmCIF
+              </button>
+              <button onClick={exportFASTA} className="btn-secondary" disabled={!structureMetadata?.sequences}>
+                <Download className="w-4 h-4 mr-2" />
+                Export FASTA
               </button>
             </div>
           </div>
