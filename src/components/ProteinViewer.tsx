@@ -18,6 +18,9 @@ import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { StateObjectRef } from 'molstar/lib/mol-state';
 import { Sequence } from 'molstar/lib/mol-model/sequence';
 import { StructureElement, StructureProperties as SP } from 'molstar/lib/mol-model/structure';
+import { ColorTheme } from 'molstar/lib/mol-theme/color';
+import { getPalette } from 'molstar/lib/mol-util/color/palette';
+import { Color } from 'molstar/lib/mol-util/color';
 import {
   saveStructure, getAllStructures, deleteStructure, generateStructureId,
 } from '@/services/proteinViewer';
@@ -797,17 +800,39 @@ export default function ProteinViewer() {
           return null; // No chains info available
         }
 
-        // Mol* default chain color palette (from ColorTheme)
-        const molstarChainColors = [
-          '#8dd3c7', '#ffffb3', '#bebada', '#fb8072', '#80b1d3',
-          '#fdb462', '#b3de69', '#fccde5', '#d9d9d9', '#bc80bd',
-          '#ccebc5', '#ffed6f'
+        // Use Molstar's actual palette system (same as ChainIdColorTheme)
+        // This is the 'many-distinct' color list from Molstar
+        const manyDistinctColors = [
+          // dark-2
+          0x1b9e77, 0xd95f02, 0x7570b3, 0xe7298a, 0x66a61e, 0xe6ab02, 0xa6761d, 0x666666,
+          // set-1
+          0xe41a1c, 0x377eb8, 0x4daf4a, 0x984ea3, 0xff7f00, 0xffff33, 0xa65628, 0xf781bf, 0x999999,
+          // set-2
+          0x66c2a5, 0xfc8d62, 0x8da0cb, 0xe78ac3, 0xa6d854, 0xffd92f, 0xe5c494, 0xb3b3b3
         ];
 
-        return structureMetadata.chains.slice(0, 10).map((chainId: string, index: number) => ({
-          label: `Chain ${chainId}`,
-          color: molstarChainColors[index % molstarChainColors.length],
-        }));
+        const chainCount = structureMetadata.chains.length;
+        const palette = getPalette(chainCount, {
+          palette: {
+            name: 'colors',
+            params: {
+              list: {
+                kind: 'set',
+                colors: manyDistinctColors
+              }
+            }
+          }
+        }, {
+          valueLabel: (i: number) => structureMetadata.chains[i]
+        });
+
+        return structureMetadata.chains.map((chainId: string, index: number) => {
+          const color = palette.color(index);
+          return {
+            label: `Chain ${chainId}`,
+            color: Color.toHexStyle(color),
+          };
+        });
       case 'secondary-structure':
         return [
           { label: 'α-Helix', color: 'rgb(255, 0, 255)' }, // Magenta
