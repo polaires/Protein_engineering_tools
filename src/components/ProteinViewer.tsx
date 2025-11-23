@@ -55,7 +55,8 @@ export default function ProteinViewer() {
   const [structureMetadata, setStructureMetadata] = useState<{
     chains?: string[];
     residueCount?: number;
-    sequence?: string;
+    sequences?: Record<string, string>; // Per-chain sequences
+    uniqueSequence?: string; // Single unique sequence if all chains identical
     aminoAcidComposition?: Record<string, number>;
   } | null>(null);
 
@@ -233,12 +234,12 @@ export default function ProteinViewer() {
 
       console.log('Structure units found:', structure.units.length);
 
-      // Extract unique chain IDs
+      // Extract unique chain IDs and sequences per chain
       const chainSet = new Set<string>();
       const { units } = structure;
 
-      // Extract sequence for protein analysis
-      let fullSequence = '';
+      // Store sequences per chain
+      const chainSequences: Record<string, string> = {};
       const aminoAcidCounts: Record<string, number> = {};
 
       // Iterate through all models in the structure
@@ -254,8 +255,8 @@ export default function ProteinViewer() {
         const { chainAtomSegments, residues, chains, atoms, residueAtomSegments } = atomicHierarchy;
 
         // Get chain ID for this unit - prioritize proper letter labels
+        let chainId: string | null = null;
         try {
-          let chainId = null;
 
           // Method 1 (BEST): Try getting proper chain label from chains.label_asym_id
           if (chainAtomSegments && chains && chains.label_asym_id && unit.elements && unit.elements.length > 0) {
@@ -302,66 +303,35 @@ export default function ProteinViewer() {
           console.warn('Could not extract chain ID:', err);
         }
 
-        // Extract residue sequence - only from polymer/protein units
+        // Extract residue sequence for this chain
         try {
-          // Check if this unit is a polymer (not a ligand, ion, or water)
-          const isPolymer = unit.kind === 0; // 0 = atomic, check if it's polymer
           const hasResidues = residues && residues._rowCount > 0;
 
-          if (hasResidues) {
-            console.log(`Unit has ${residues._rowCount} residues, isPolymer: ${isPolymer}`);
+          if (hasResidues && chainId && atoms && atoms.label_comp_id && residueAtomSegments) {
+            let chainSequence = '';
 
-            // Debug: Log available data structures
-            console.log('Available hierarchy objects:');
-            console.log('  - atoms exists?', !!atoms);
-            console.log('  - residueAtomSegments exists?', !!residueAtomSegments);
-
-            if (atoms) {
-              console.log('  - atoms.label_comp_id exists?', !!atoms.label_comp_id);
-            }
-
-            let extractedInThisUnit = 0;
-
-            // NEW APPROACH: Get comp_id from atoms table via residueAtomSegments
-            if (atoms && atoms.label_comp_id && residueAtomSegments) {
-              console.log('✓ Using atoms.label_comp_id via residueAtomSegments');
-
-              for (let rI = 0; rI < residues._rowCount; rI++) {
-                try {
-                  // Get the first atom index for this residue
-                  const atomStart = residueAtomSegments.offsets[rI];
-
-                  if (atomStart !== undefined) {
-                    // Get comp_id from the first atom of this residue
-                    const compId = atoms.label_comp_id.value(atomStart);
-
-                    if (compId) {
-                      const compIdStr = String(compId);
-                      const oneLetterCode = threeToOne(compIdStr);
-
-                      if (oneLetterCode) {
-                        fullSequence += oneLetterCode;
-                        aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
-                        extractedInThisUnit++;
-                      } else if (rI === 0) {
-                        console.log(`Non-standard residue: ${compIdStr} (skipped)`);
-                      }
+            for (let rI = 0; rI < residues._rowCount; rI++) {
+              try {
+                const atomStart = residueAtomSegments.offsets[rI];
+                if (atomStart !== undefined) {
+                  const compId = atoms.label_comp_id.value(atomStart);
+                  if (compId) {
+                    const compIdStr = String(compId);
+                    const oneLetterCode = threeToOne(compIdStr);
+                    if (oneLetterCode) {
+                      chainSequence += oneLetterCode;
+                      aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
                     }
                   }
-                } catch (e) {
-                  if (rI === 0) {
-                    console.error('Error extracting from atoms table:', e);
-                  }
                 }
+              } catch (e) {
+                // Silent fail for individual residues
               }
+            }
 
-              if (extractedInThisUnit > 0) {
-                console.log(`✓ Extracted ${extractedInThisUnit} amino acids from this unit`);
-              } else {
-                console.warn(`✗ No amino acids extracted from this unit (${residues._rowCount} residues found)`);
-              }
-            } else {
-              console.warn('Cannot extract sequence: atoms.label_comp_id or residueAtomSegments not available');
+            if (chainSequence.length > 0) {
+              chainSequences[chainId] = chainSequence;
+              console.log(`✓ Chain ${chainId}: ${chainSequence.length} amino acids`);
             }
           }
         } catch (err) {
@@ -369,10 +339,16 @@ export default function ProteinViewer() {
         }
       }
 
+      // Detect if all chains have identical sequences
+      const uniqueSeqs = new Set(Object.values(chainSequences));
+      const allIdentical = uniqueSeqs.size === 1;
+      const uniqueSequence = allIdentical ? Array.from(uniqueSeqs)[0] : undefined;
+
       const metadata = {
         chains: Array.from(chainSet).sort(),
         residueCount: structure.elementCount,
-        sequence: fullSequence,
+        sequences: chainSequences,
+        uniqueSequence,
         aminoAcidComposition: aminoAcidCounts,
       };
 
@@ -382,7 +358,8 @@ export default function ProteinViewer() {
         chains: metadata.chains,
         chainCount: metadata.chains.length,
         residueCount: metadata.residueCount,
-        sequenceLength: metadata.sequence.length,
+        chainSequences: Object.keys(chainSequences).map(c => `${c}:${chainSequences[c].length}`).join(', '),
+        allChainsIdentical: allIdentical,
       });
     } catch (error) {
       console.error('Error extracting structure metadata:', error);
@@ -1371,9 +1348,12 @@ export default function ProteinViewer() {
         )}
 
         {/* Protein Analysis - Full Width Below Grid */}
-        {currentStructure && structureMetadata?.sequence && (() => {
+        {currentStructure && structureMetadata?.uniqueSequence && (() => {
           try {
-            const analysis = analyzeProtein(structureMetadata.sequence);
+            const seq = structureMetadata.uniqueSequence;
+            const analysis = analyzeProtein(seq);
+            const allChains = structureMetadata.chains?.join(', ') || '';
+
             return (
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                 <button
@@ -1383,6 +1363,9 @@ export default function ProteinViewer() {
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
                     <Info className="w-4 h-4" />
                     Protein Analysis
+                    <span className="text-xs font-normal text-blue-600 dark:text-blue-400">
+                      (Chains {allChains})
+                    </span>
                   </span>
                   {showProteinAnalysis ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
@@ -1391,53 +1374,66 @@ export default function ProteinViewer() {
                   <div className="mt-3 space-y-3">
                     {/* Basic Information */}
                     <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Basic Information</h4>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                        Basic Information
+                      </h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                        <div><span className="font-medium">Length:</span> {analysis.length} aa</div>
-                        <div><span className="font-medium">MW:</span> {analysis.molecularWeight.toFixed(2)} Da</div>
-                        <div><span className="font-medium">pI:</span> {analysis.theoreticalPI.toFixed(2)}</div>
-                        <div><span className="font-medium">Aromaticity:</span> {(analysis.aromaticity * 100).toFixed(1)}%</div>
+                        <div title="Number of amino acids"><span className="font-medium">Length:</span> {analysis.length} aa</div>
+                        <div title="Molecular weight in Daltons"><span className="font-medium">MW:</span> {analysis.molecularWeight.toFixed(2)} Da</div>
+                        <div title="Theoretical isoelectric point"><span className="font-medium">pI:</span> {analysis.theoreticalPI.toFixed(2)}</div>
+                        <div title="Fraction of aromatic amino acids (Phe, Trp, Tyr)"><span className="font-medium">Aromaticity:</span> {(analysis.aromaticity * 100).toFixed(1)}%</div>
                       </div>
                     </div>
 
                     {/* Physicochemical Properties */}
                     <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Physicochemical Properties</h4>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                        Physicochemical Properties
+                      </h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                        <div><span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}</div>
-                        <div><span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}</div>
-                        <div><span className="font-medium">Instability:</span> {analysis.instabilityIndex.toFixed(2)}</div>
-                        <div><span className="font-medium">Status:</span> {analysis.instabilityIndex > 40 ? 'Unstable' : 'Stable'}</div>
+                        <div title="Grand average of hydropathy (negative = hydrophilic, positive = hydrophobic)">
+                          <span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}
+                        </div>
+                        <div title="Relative volume of aliphatic side chains">
+                          <span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}
+                        </div>
+                        <div title="Estimated protein stability (>40 = unstable)">
+                          <span className="font-medium">Instability:</span> {analysis.instabilityIndex.toFixed(2)}
+                        </div>
+                        <div>
+                          <span className="font-medium">Status:</span> {analysis.instabilityIndex > 40 ? '⚠️ Unstable' : '✓ Stable'}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Amino Acid Composition (Top 5) */}
+                    {/* Amino Acid Composition - ALL in compact format */}
                     <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Amino Acid Composition (Top 5)</h4>
-                      <div className="space-y-1">
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                        Amino Acid Composition
+                      </h4>
+                      <div className="grid grid-cols-4 md:grid-cols-10 gap-1 text-xs font-mono">
                         {Object.entries(analysis.aminoAcidPercent)
-                          .filter(([_, percent]) => percent > 0)
                           .sort((a, b) => b[1] - a[1])
-                          .slice(0, 5)
                           .map(([aa, percent]) => (
-                            <div key={aa} className="flex justify-between text-xs">
-                              <span className="font-mono">{aa}</span>
-                              <div className="flex-1 mx-2">
-                                <div className="bg-blue-200 dark:bg-blue-800 h-3 rounded-full overflow-hidden">
-                                  <div className="bg-blue-500 h-full" style={{ width: `${percent}%` }}></div>
-                                </div>
-                              </div>
-                              <span className="font-medium">{percent.toFixed(1)}%</span>
+                            <div
+                              key={aa}
+                              className="flex flex-col items-center p-1 bg-blue-100 dark:bg-blue-900/30 rounded"
+                              title={`${aa}: ${percent.toFixed(1)}%`}
+                            >
+                              <span className="font-bold text-blue-900 dark:text-blue-100">{aa}</span>
+                              <span className="text-[10px] text-blue-700 dark:text-blue-300">{percent.toFixed(1)}%</span>
                             </div>
                           ))}
                       </div>
                     </div>
 
-                    {/* Cleaned Sequence */}
+                    {/* Sequence */}
                     <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Cleaned Sequence</h4>
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                        Sequence ({seq.length} aa)
+                      </h4>
                       <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-200 dark:border-blue-700 max-h-32 overflow-y-auto">
-                        <code className="text-xs font-mono break-all">{analysis.sequence}</code>
+                        <code className="text-xs font-mono break-all leading-relaxed">{seq}</code>
                       </div>
                     </div>
                   </div>
