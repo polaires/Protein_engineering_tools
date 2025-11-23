@@ -96,6 +96,7 @@ export default function ProteinViewer() {
             initial: {
               isExpanded: false,
               showControls: true,       // Must be true to show any control regions
+              controlsDisplay: 'reactive', // CRITICAL: Required for proper panel display
               regionState: {
                 top: 'full',            // Required field - show sequence panel
                 left: 'hidden',
@@ -925,12 +926,12 @@ export default function ProteinViewer() {
         >
           <div
             ref={viewerRef}
-            className={`w-full h-[600px] bg-slate-50 dark:bg-slate-900 rounded-lg overflow-hidden border-2 transition-all ${
+            className={`w-full h-[600px] bg-slate-50 dark:bg-slate-900 rounded-lg border-2 transition-all ${
               isDraggingOver
                 ? 'border-primary-500 border-dashed border-4 bg-primary-50 dark:bg-primary-900/20'
                 : 'border-slate-200 dark:border-slate-700'
             }`}
-            style={{ position: 'relative' }}
+            style={{ position: 'relative', overflow: 'visible' }}
           />
 
           {/* Drag Overlay */}
