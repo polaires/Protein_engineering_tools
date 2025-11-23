@@ -344,11 +344,23 @@ export default function ProteinViewer() {
       const allIdentical = uniqueSeqs.size === 1;
       const uniqueSequence = allIdentical ? Array.from(uniqueSeqs)[0] : undefined;
 
+      // If sequences differ, use the first chain as representative
+      const representativeSequence = uniqueSequence || Object.values(chainSequences)[0];
+
+      // Debug sequence comparison
+      if (!allIdentical && Object.keys(chainSequences).length > 1) {
+        const seqs = Object.entries(chainSequences);
+        console.warn('⚠️ Chains have different sequences:');
+        seqs.forEach(([chain, seq]) => {
+          console.log(`  Chain ${chain}: ${seq.substring(0, 20)}... (${seq.length} aa)`);
+        });
+      }
+
       const metadata = {
         chains: Array.from(chainSet).sort(),
         residueCount: structure.elementCount,
         sequences: chainSequences,
-        uniqueSequence,
+        uniqueSequence: representativeSequence, // Always set a sequence to analyze
         aminoAcidComposition: aminoAcidCounts,
       };
 
@@ -360,6 +372,7 @@ export default function ProteinViewer() {
         residueCount: metadata.residueCount,
         chainSequences: Object.keys(chainSequences).map(c => `${c}:${chainSequences[c].length}`).join(', '),
         allChainsIdentical: allIdentical,
+        usingSequence: allIdentical ? 'unique (all identical)' : `chain ${Object.keys(chainSequences)[0]} (representative)`,
       });
     } catch (error) {
       console.error('Error extracting structure metadata:', error);
@@ -1354,6 +1367,14 @@ export default function ProteinViewer() {
             const analysis = analyzeProtein(seq);
             const allChains = structureMetadata.chains?.join(', ') || '';
 
+            // Check if all chain sequences are identical
+            const sequences = structureMetadata.sequences || {};
+            const uniqueSeqs = new Set(Object.values(sequences));
+            const allIdentical = uniqueSeqs.size === 1;
+            const sequenceInfo = allIdentical
+              ? `${allChains} (identical)`
+              : `${Object.keys(sequences)[0]} (representative)`;
+
             return (
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                 <button
@@ -1364,7 +1385,7 @@ export default function ProteinViewer() {
                     <Info className="w-4 h-4" />
                     Protein Analysis
                     <span className="text-xs font-normal text-blue-600 dark:text-blue-400">
-                      (Chains {allChains})
+                      ({sequenceInfo})
                     </span>
                   </span>
                   {showProteinAnalysis ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -1390,18 +1411,24 @@ export default function ProteinViewer() {
                       <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
                         Physicochemical Properties
                       </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                        <div title="Grand average of hydropathy (negative = hydrophilic, positive = hydrophobic)">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                        <div>
                           <span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}
-                        </div>
-                        <div title="Relative volume of aliphatic side chains">
-                          <span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}
-                        </div>
-                        <div title="Estimated protein stability (>40 = unstable)">
-                          <span className="font-medium">Instability:</span> {analysis.instabilityIndex.toFixed(2)}
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
+                            {analysis.gravy < 0 ? 'Hydrophilic (water-loving)' : 'Hydrophobic (water-repelling)'}
+                          </span>
                         </div>
                         <div>
-                          <span className="font-medium">Status:</span> {analysis.instabilityIndex > 40 ? '⚠️ Unstable' : '✓ Stable'}
+                          <span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
+                            Thermostability indicator
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-medium">Instability Index:</span> {analysis.instabilityIndex.toFixed(2)}
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
+                            {analysis.instabilityIndex > 40 ? '⚠️ Unstable in vitro' : '✓ Stable in vitro'}
+                          </span>
                         </div>
                       </div>
                     </div>
