@@ -20,6 +20,7 @@ import { StateObjectRef } from 'molstar/lib/mol-state';
 import { Sequence } from 'molstar/lib/mol-model/sequence';
 import { StructureElement, StructureProperties as SP } from 'molstar/lib/mol-model/structure';
 import { OrderedSet } from 'molstar/lib/mol-data/int';
+import { Vec3 } from 'molstar/lib/mol-math/linear-algebra';
 import { getPalette } from 'molstar/lib/mol-util/color/palette';
 import { Color } from 'molstar/lib/mol-util/color';
 import {
@@ -980,12 +981,18 @@ export default function ProteinViewer() {
         // Get first index from OrderedSet
         const elementIndex = unit.elements[OrderedSet.getAt(indices, 0)];
 
-        if (!unit || elementIndex === undefined) return null;
+        if (!unit || elementIndex === undefined) {
+          console.error('Invalid unit or elementIndex:', { unit, elementIndex });
+          return null;
+        }
 
-        // Use the unit's conformation to get the position directly
-        const pos = unit.conformation.position(elementIndex, { x: 0, y: 0, z: 0 });
+        // Create a proper Vec3 and use conformation.position to fill it
+        const pos = Vec3();
+        unit.conformation.position(elementIndex, pos);
 
-        return [pos.x, pos.y, pos.z];
+        console.log('Position extracted:', pos, 'for elementIndex:', elementIndex);
+
+        return [pos[0], pos[1], pos[2]];
       }
 
       // Handle bond-loci
@@ -999,8 +1006,9 @@ export default function ProteinViewer() {
 
         if (!unit || elementIndex === undefined) return null;
 
-        const pos = unit.conformation.position(elementIndex, { x: 0, y: 0, z: 0 });
-        return [pos.x, pos.y, pos.z];
+        const pos = Vec3();
+        unit.conformation.position(elementIndex, pos);
+        return [pos[0], pos[1], pos[2]];
       }
 
       return null;
