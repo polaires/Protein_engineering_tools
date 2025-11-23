@@ -900,7 +900,7 @@ export default function ProteinViewer() {
         const l = StructureElement.Location.create(structure, unit, elementIndex);
 
         const atomName = SP.atom.label_atom_id(l);
-        const resName = SP.residue.label_comp_id(l);
+        const resName = SP.atom.label_comp_id(l); // Residue name accessed via atom
         const resSeq = SP.residue.label_seq_id(l);
         const chainId = SP.chain.label_asym_id(l);
 
