@@ -253,50 +253,66 @@ export default function ProteinViewer() {
         // Extract chain information from this unit
         const { chainAtomSegments, residues, chains } = atomicHierarchy;
 
-        // Get chain ID for this unit
+        // Get chain ID for this unit - prioritize proper letter labels
         try {
-          // Method 1: Use unit.invariantId which contains chain info
-          if (unit.invariantId) {
-            const chainId = unit.invariantId;
-            chainSet.add(String(chainId));
-            console.log('Found chain (invariantId):', chainId);
-          }
-          // Method 2: Try getting from chainAtomSegments
-          else if (chainAtomSegments && chains && unit.elements && unit.elements.length > 0) {
-            const firstElement = unit.elements[0];
-            const segmentIndex = chainAtomSegments.index[firstElement];
-            if (segmentIndex !== undefined && chains.label_asym_id) {
-              const chainId = chains.label_asym_id.value(segmentIndex);
-              if (chainId) {
-                chainSet.add(String(chainId));
-                console.log('Found chain (label_asym_id):', chainId);
+          let chainId = null;
+
+          // Method 1 (BEST): Try getting proper chain label from chains.label_asym_id
+          if (chainAtomSegments && chains && chains.label_asym_id && unit.elements && unit.elements.length > 0) {
+            try {
+              const firstElement = unit.elements[0];
+              const segmentIndex = chainAtomSegments.index[firstElement];
+              if (segmentIndex !== undefined) {
+                chainId = chains.label_asym_id.value(segmentIndex);
+                if (chainId) {
+                  console.log('Found chain (label_asym_id):', chainId);
+                }
               }
+            } catch (e) {
+              console.warn('Method 1 failed:', e);
             }
           }
-          // Method 3: Fallback to sequential naming
-          else {
-            const chainId = String.fromCharCode(65 + chainSet.size); // A, B, C...
-            chainSet.add(chainId);
+
+          // Method 2: Try auth_asym_id as alternative
+          if (!chainId && chains && chains.auth_asym_id && chainAtomSegments && unit.elements && unit.elements.length > 0) {
+            try {
+              const firstElement = unit.elements[0];
+              const segmentIndex = chainAtomSegments.index[firstElement];
+              if (segmentIndex !== undefined) {
+                chainId = chains.auth_asym_id.value(segmentIndex);
+                if (chainId) {
+                  console.log('Found chain (auth_asym_id):', chainId);
+                }
+              }
+            } catch (e) {
+              console.warn('Method 2 failed:', e);
+            }
+          }
+
+          // Method 3: Fallback to sequential naming (only if above methods fail)
+          if (!chainId) {
+            chainId = String.fromCharCode(65 + chainSet.size); // A, B, C...
             console.log('Found chain (fallback):', chainId);
+          }
+
+          if (chainId) {
+            chainSet.add(String(chainId));
           }
         } catch (err) {
           console.warn('Could not extract chain ID:', err);
         }
 
-        // Extract residue sequence
+        // Extract residue sequence - only from polymer/protein units
         try {
-          if (residues && residues._rowCount > 0) {
-            const seenResidues = new Set<string>();
+          // Check if this unit is a polymer (not a ligand, ion, or water)
+          const isPolymer = unit.kind === 0; // 0 = atomic, check if it's polymer
+          const hasResidues = residues && residues._rowCount > 0;
+
+          if (hasResidues) {
+            console.log(`Unit has ${residues._rowCount} residues, isPolymer: ${isPolymer}`);
 
             for (let rI = 0; rI < residues._rowCount; rI++) {
-              // Get residue identifier to avoid duplicates
-              const seqId = residues.label_seq_id?.value(rI) || rI;
-              const residueKey = `${rI}_${seqId}`;
-
-              if (seenResidues.has(residueKey)) continue;
-              seenResidues.add(residueKey);
-
-              // Try multiple sources for residue name
+              // Try to get residue name
               let compId = null;
               if (residues.label_comp_id) {
                 compId = residues.label_comp_id.value(rI);
@@ -306,12 +322,23 @@ export default function ProteinViewer() {
 
               if (compId) {
                 const compIdStr = String(compId);
+
+                // Only add if it's a standard amino acid
                 const oneLetterCode = threeToOne(compIdStr);
                 if (oneLetterCode) {
                   fullSequence += oneLetterCode;
                   aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
+                } else {
+                  // Log non-standard residues
+                  if (rI === 0) {
+                    console.log(`Non-standard residue: ${compIdStr} (skipped)`);
+                  }
                 }
               }
+            }
+
+            if (fullSequence.length > 0) {
+              console.log(`Extracted ${fullSequence.length} amino acids from this unit`);
             }
           }
         } catch (err) {
