@@ -925,11 +925,28 @@ export default function ProteinViewer() {
   // Get position from any loci type (works for atoms, ions, bonds, etc.)
   const getLociPosition = (loci: any): [number, number, number] | null => {
     try {
-      if (!loci || loci.kind === 'empty-loci') return null;
+      if (!loci || loci.kind === 'empty-loci') {
+        console.log('Empty or null loci');
+        return null;
+      }
+
+      console.log('Getting position for loci:', { kind: loci.kind, loci });
 
       // Handle element-loci (atoms, residues, ions, etc.)
       if (loci.kind === 'element-loci') {
         const { structure, elements } = loci;
+
+        if (!structure) {
+          console.error('No structure in loci');
+          return null;
+        }
+
+        if (!elements) {
+          console.error('No elements in loci');
+          return null;
+        }
+
+        console.log('Elements type:', Array.isArray(elements), 'Elements:', elements);
 
         // Handle both array and single element cases
         let element;
@@ -940,22 +957,40 @@ export default function ProteinViewer() {
           element = elements;
         }
 
-        if (!element) return null;
+        if (!element) {
+          console.error('Element is null or undefined');
+          return null;
+        }
+
+        console.log('Element:', element);
 
         // Get the first unit and element
         let unit, elementIndex;
 
-        if (typeof element.unit === 'number') {
+        if (typeof element.unit !== 'undefined') {
           // Standard structure
-          unit = structure.units[element.unit];
-          elementIndex = element.indices?.[0] ?? element.element ?? 0;
+          const unitIndex = typeof element.unit === 'number' ? element.unit : 0;
+          unit = structure.units[unitIndex];
+
+          if (element.indices && Array.isArray(element.indices) && element.indices.length > 0) {
+            elementIndex = element.indices[0];
+          } else if (typeof element.element !== 'undefined') {
+            elementIndex = element.element;
+          } else {
+            elementIndex = 0;
+          }
         } else {
           // Try direct access
           unit = structure.units[0];
           elementIndex = 0;
         }
 
-        if (!unit) return null;
+        if (!unit) {
+          console.error('Could not get unit from structure');
+          return null;
+        }
+
+        console.log('Unit:', unit, 'ElementIndex:', elementIndex);
 
         // Create location and get coordinates
         const l = StructureElement.Location.create(structure, unit, elementIndex);
@@ -963,6 +998,7 @@ export default function ProteinViewer() {
         const y = SP.atom.y(l);
         const z = SP.atom.z(l);
 
+        console.log('Position extracted:', [x, y, z]);
         return [x, y, z];
       }
 
@@ -985,6 +1021,7 @@ export default function ProteinViewer() {
         return [x, y, z];
       }
 
+      console.error('Unknown loci kind:', loci.kind);
       return null;
     } catch (error) {
       console.error('Error getting loci position:', error);
