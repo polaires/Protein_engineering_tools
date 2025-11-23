@@ -284,10 +284,10 @@ export default function ProteinViewer() {
         }
 
         // For first atom: Highlight
-        plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
+        plugin.managers.interactivity.lociHighlights.highlightOnly({ loci: clonedLoci });
 
         // Get atom info for the toast
-        const atomInfo = getAtomInfo(loci);
+        const atomInfo = getAtomInfo(clonedLoci);
         if (newLoci.length === 1) {
           showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
         }
