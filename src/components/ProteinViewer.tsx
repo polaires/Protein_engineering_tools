@@ -203,7 +203,8 @@ export default function ProteinViewer() {
 
     try {
       const state = pluginRef.current.state.data;
-      const cell = state.cells.get(structureRefToUse);
+      // Get the cell using the ref property
+      const cell = state.cells.get(structureRefToUse.ref ?? structureRefToUse as any);
       const structure = cell?.obj?.data;
 
       if (structure) {
