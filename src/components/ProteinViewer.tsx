@@ -259,7 +259,10 @@ export default function ProteinViewer() {
           const chainIdStr = String(chainId);
 
           // Skip if we've already processed this chain
-          if (chainSet.has(chainIdStr)) continue;
+          if (chainSet.has(chainIdStr)) {
+            console.log(`  ⊳ Skipping duplicate chain ${chainIdStr}`);
+            continue;
+          }
 
           chainSet.add(chainIdStr);
 
@@ -317,11 +320,13 @@ export default function ProteinViewer() {
       }
 
       console.log('✓ Structure metadata extracted using Molstar API:', {
-        chains: metadata.chains,
+        polymerChainsOnly: true,
+        totalUnits: structure.units.length,
+        uniquePolymerChains: metadata.chains,
         chainCount: metadata.chains.length,
         residueCount: metadata.residueCount,
         allChainsIdentical: allIdentical,
-        polymerChainsOnly: true,
+        chainSequences: Object.keys(chainSequences),
       });
     } catch (error) {
       console.error('Error extracting structure metadata:', error);
