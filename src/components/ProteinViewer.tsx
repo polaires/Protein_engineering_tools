@@ -21,7 +21,7 @@ import {
 } from '@/services/proteinViewer';
 import { ProteinStructure, ProteinInfo, ColorScheme, RepresentationStyle } from '@/types/protein-viewer';
 import { useApp } from '@/contexts/AppContext';
-import { analyzeProtein, cleanSequence } from '@/utils/proteinAnalysis';
+import { analyzeProtein } from '@/utils/proteinAnalysis';
 
 // Import Mol* CSS
 import 'molstar/lib/mol-plugin-ui/skin/light.scss';
@@ -230,7 +230,7 @@ export default function ProteinViewer() {
               const compId = residues.label_comp_id.value(i);
               if (compId) {
                 // Convert 3-letter code to 1-letter code
-                const oneLetterCode = threeToOne(compId);
+                const oneLetterCode = threeToOne(String(compId));
                 if (oneLetterCode) {
                   fullSequence += oneLetterCode;
                   aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
