@@ -311,13 +311,56 @@ export default function ProteinViewer() {
           if (hasResidues) {
             console.log(`Unit has ${residues._rowCount} residues, isPolymer: ${isPolymer}`);
 
+            // Debug: Log available properties on residues
+            console.log('Residues object properties:', Object.keys(residues).filter(k => !k.startsWith('_')));
+
+            let extractedInThisUnit = 0;
+
             for (let rI = 0; rI < residues._rowCount; rI++) {
-              // Try to get residue name
+              // Try to get residue name - check multiple properties
               let compId = null;
+
+              // Debug first residue in detail
+              if (rI === 0) {
+                console.log('First residue debug:');
+                console.log('  - label_comp_id exists?', !!residues.label_comp_id);
+                console.log('  - auth_comp_id exists?', !!residues.auth_comp_id);
+                console.log('  - comp_id exists?', !!(residues as any).comp_id);
+
+                if (residues.label_comp_id) {
+                  try {
+                    const testValue = residues.label_comp_id.value(rI);
+                    console.log('  - label_comp_id.value(0):', testValue);
+                  } catch (e) {
+                    console.log('  - label_comp_id.value(0) ERROR:', e);
+                  }
+                }
+              }
+
+              // Try multiple ways to get composition ID
               if (residues.label_comp_id) {
-                compId = residues.label_comp_id.value(rI);
-              } else if (residues.auth_comp_id) {
-                compId = residues.auth_comp_id.value(rI);
+                try {
+                  compId = residues.label_comp_id.value(rI);
+                } catch (e) {
+                  if (rI === 0) console.log('  - Failed to get label_comp_id:', e);
+                }
+              }
+
+              if (!compId && residues.auth_comp_id) {
+                try {
+                  compId = residues.auth_comp_id.value(rI);
+                } catch (e) {
+                  if (rI === 0) console.log('  - Failed to get auth_comp_id:', e);
+                }
+              }
+
+              // Try generic comp_id
+              if (!compId && (residues as any).comp_id) {
+                try {
+                  compId = (residues as any).comp_id.value(rI);
+                } catch (e) {
+                  if (rI === 0) console.log('  - Failed to get comp_id:', e);
+                }
               }
 
               if (compId) {
@@ -328,21 +371,28 @@ export default function ProteinViewer() {
                 if (oneLetterCode) {
                   fullSequence += oneLetterCode;
                   aminoAcidCounts[oneLetterCode] = (aminoAcidCounts[oneLetterCode] || 0) + 1;
+                  extractedInThisUnit++;
                 } else {
                   // Log non-standard residues
                   if (rI === 0) {
                     console.log(`Non-standard residue: ${compIdStr} (skipped)`);
                   }
                 }
+              } else {
+                if (rI === 0) {
+                  console.log('Could not get compId for first residue - all methods failed');
+                }
               }
             }
 
-            if (fullSequence.length > 0) {
-              console.log(`Extracted ${fullSequence.length} amino acids from this unit`);
+            if (extractedInThisUnit > 0) {
+              console.log(`✓ Extracted ${extractedInThisUnit} amino acids from this unit`);
+            } else {
+              console.warn(`✗ No amino acids extracted from this unit (${residues._rowCount} residues found)`);
             }
           }
         } catch (err) {
-          console.warn('Could not extract sequence:', err);
+          console.error('Could not extract sequence:', err);
         }
       }
 
