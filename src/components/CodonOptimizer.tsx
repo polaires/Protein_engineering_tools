@@ -280,7 +280,7 @@ export default function CodonOptimizer() {
           <p><strong>Browser Method:</strong> E. coli K-12 codon usage table (works offline)</p>
           {apiStatus === 'offline' && (
             <p className="text-amber-700 dark:text-amber-300 mt-2">
-              💡 To use CodonTransformer API, start the server: <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">python codon_api.py</code>
+              💡 To use CodonTransformer API, start the server: <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">python scripts/codon_api.py</code>
             </p>
           )}
         </div>
