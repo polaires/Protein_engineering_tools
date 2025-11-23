@@ -18,7 +18,6 @@ import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { StateObjectRef } from 'molstar/lib/mol-state';
 import { Sequence } from 'molstar/lib/mol-model/sequence';
 import { StructureElement, StructureProperties as SP } from 'molstar/lib/mol-model/structure';
-import { ColorTheme } from 'molstar/lib/mol-theme/color';
 import { getPalette } from 'molstar/lib/mol-util/color/palette';
 import { Color } from 'molstar/lib/mol-util/color';
 import {
@@ -802,7 +801,7 @@ export default function ProteinViewer() {
 
         // Use Molstar's actual palette system (same as ChainIdColorTheme)
         // This is the 'many-distinct' color list from Molstar
-        const manyDistinctColors = [
+        const manyDistinctColors: Color[] = [
           // dark-2
           0x1b9e77, 0xd95f02, 0x7570b3, 0xe7298a, 0x66a61e, 0xe6ab02, 0xa6761d, 0x666666,
           // set-1
@@ -811,7 +810,8 @@ export default function ProteinViewer() {
           0x66c2a5, 0xfc8d62, 0x8da0cb, 0xe78ac3, 0xa6d854, 0xffd92f, 0xe5c494, 0xb3b3b3
         ];
 
-        const chainCount = structureMetadata.chains.length;
+        const chains = structureMetadata.chains;
+        const chainCount = chains.length;
         const palette = getPalette(chainCount, {
           palette: {
             name: 'colors',
@@ -823,7 +823,7 @@ export default function ProteinViewer() {
             }
           }
         }, {
-          valueLabel: (i: number) => structureMetadata.chains[i]
+          valueLabel: (i: number) => chains[i]
         });
 
         return structureMetadata.chains.map((chainId: string, index: number) => {
