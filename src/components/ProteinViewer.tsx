@@ -19,6 +19,7 @@ import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { StateObjectRef } from 'molstar/lib/mol-state';
 import { Sequence } from 'molstar/lib/mol-model/sequence';
 import { StructureElement, StructureProperties as SP } from 'molstar/lib/mol-model/structure';
+import { OrderedSet } from 'molstar/lib/mol-data/int';
 import { getPalette } from 'molstar/lib/mol-util/color/palette';
 import { Color } from 'molstar/lib/mol-util/color';
 import {
@@ -889,27 +890,21 @@ export default function ProteinViewer() {
       if (loci.kind === 'element-loci') {
         const { structure, elements } = loci;
 
-        // Handle both array and single element cases
-        let element;
-        if (Array.isArray(elements)) {
-          element = elements[0];
-        } else {
-          element = elements;
-        }
+        if (!elements || elements.length === 0) return 'Unknown';
 
-        if (!element) return 'Unknown';
+        // Get the first element from the loci.elements array
+        const element = elements[0];
 
-        // Get unit and element index
-        let unit, elementIndex;
-        if (typeof element.unit === 'number') {
-          unit = structure.units[element.unit];
-          elementIndex = element.indices?.[0] ?? element.element ?? 0;
-        } else {
-          unit = structure.units[0];
-          elementIndex = 0;
-        }
+        // The unit is the Unit object itself (not an index)
+        const unit = element.unit;
 
-        if (!unit) return 'Unknown';
+        // The indices is an OrderedSet - use OrderedSet module methods
+        const { indices } = element;
+
+        // Get first index from OrderedSet
+        const elementIndex = unit.elements[OrderedSet.getAt(indices, 0)];
+
+        if (!unit || elementIndex === undefined) return 'Unknown';
 
         // Create location and extract atom details
         const l = StructureElement.Location.create(structure, unit, elementIndex);
@@ -924,7 +919,7 @@ export default function ProteinViewer() {
 
       return 'Selected element';
     } catch (error) {
-      console.error('Error getting atom info:', error);
+      console.error('Error getting atom info:', error, loci);
       return 'Unknown';
     }
   };
@@ -938,70 +933,46 @@ export default function ProteinViewer() {
       if (loci.kind === 'element-loci') {
         const { structure, elements } = loci;
 
-        if (!structure || !elements) return null;
+        if (!structure || !elements || elements.length === 0) return null;
 
-        // Handle both array and single element cases
-        let element;
-        if (Array.isArray(elements)) {
-          element = elements[0];
-        } else {
-          element = elements;
-        }
+        // Get the first element from the loci.elements array
+        const element = elements[0];
 
-        if (!element) return null;
+        // The unit is the Unit object itself (not an index)
+        const unit = element.unit;
 
-        // Get the first unit and element index
-        let unit, elementIndex;
+        // The indices is an OrderedSet - use OrderedSet module methods
+        const { indices } = element;
 
-        if (typeof element.unit !== 'undefined') {
-          const unitIndex = typeof element.unit === 'number' ? element.unit : 0;
-          unit = structure.units[unitIndex];
+        // Get first index from OrderedSet
+        const elementIndex = unit.elements[OrderedSet.getAt(indices, 0)];
 
-          if (element.indices && Array.isArray(element.indices) && element.indices.length > 0) {
-            elementIndex = element.indices[0];
-          } else if (typeof element.element !== 'undefined') {
-            elementIndex = element.element;
-          } else {
-            elementIndex = 0;
-          }
-        } else {
-          unit = structure.units[0];
-          elementIndex = 0;
-        }
+        if (!unit || elementIndex === undefined) return null;
 
-        if (!unit) return null;
+        // Use the unit's conformation to get the position directly
+        const pos = unit.conformation.position(elementIndex, { x: 0, y: 0, z: 0 });
 
-        // Create location and get coordinates
-        const l = StructureElement.Location.create(structure, unit, elementIndex);
-        const x = SP.atom.x(l);
-        const y = SP.atom.y(l);
-        const z = SP.atom.z(l);
-
-        return [x, y, z];
+        return [pos.x, pos.y, pos.z];
       }
 
       // Handle bond-loci
       if (loci.kind === 'bond-loci') {
         const { structure, bonds } = loci;
+        if (!bonds || bonds.length === 0) return null;
+
         const bond = bonds[0];
-        if (!bond) return null;
-
         const unit = structure.units[bond.aUnit];
-        const elementIndex = bond.aIndex;
+        const elementIndex = unit.elements[bond.aIndex];
 
-        if (!unit) return null;
+        if (!unit || elementIndex === undefined) return null;
 
-        const l = StructureElement.Location.create(structure, unit, elementIndex);
-        const x = SP.atom.x(l);
-        const y = SP.atom.y(l);
-        const z = SP.atom.z(l);
-
-        return [x, y, z];
+        const pos = unit.conformation.position(elementIndex, { x: 0, y: 0, z: 0 });
+        return [pos.x, pos.y, pos.z];
       }
 
       return null;
     } catch (error) {
-      console.error('Error getting loci position:', error);
+      console.error('Error getting loci position:', error, loci);
       return null;
     }
   };
