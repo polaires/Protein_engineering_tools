@@ -1006,29 +1006,6 @@ export default function ProteinViewer() {
     }
   };
 
-  // Calculate distance between two loci (works for all loci types)
-  const calculateDistance = (loci1: any, loci2: any): number | null => {
-    try {
-      const pos1 = getLociPosition(loci1);
-      const pos2 = getLociPosition(loci2);
-
-      if (!pos1 || !pos2) {
-        console.error('Could not extract positions from loci');
-        return null;
-      }
-
-      // Calculate Euclidean distance
-      const dx = pos2[0] - pos1[0];
-      const dy = pos2[1] - pos1[1];
-      const dz = pos2[2] - pos1[2];
-
-      return Math.sqrt(dx * dx + dy * dy + dz * dz);
-    } catch (error) {
-      console.error('Error calculating distance:', error);
-      return null;
-    }
-  };
-
   // Get color legend data based on selected color scheme
   const getColorLegend = () => {
     switch (selectedColorScheme) {
