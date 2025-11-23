@@ -92,9 +92,9 @@ export default function ProteinViewer() {
           layout: {
             initial: {
               isExpanded: false,
-              showControls: false,
+              showControls: true,       // Must be true to show any control regions
               regionState: {
-                top: 'full',      // Show sequence panel in top region
+                top: 'full',            // Show sequence panel in top region
                 left: 'hidden',
                 right: 'hidden',
                 bottom: 'hidden',
@@ -103,6 +103,12 @@ export default function ProteinViewer() {
           },
           components: {
             remoteState: 'none',
+            controls: {
+              left: 'none',             // Hide left panel
+              right: 'none',            // Hide right panel
+              bottom: 'none',           // Hide bottom log panel
+              // top is not set, defaults to sequence viewer
+            },
           },
           config: [
             [PluginConfig.Viewport.ShowExpand, false],
