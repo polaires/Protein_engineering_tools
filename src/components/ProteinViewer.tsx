@@ -55,6 +55,9 @@ export default function ProteinViewer() {
   const [showIons, setShowIons] = useState(true);
   const [showWater, setShowWater] = useState(false);
 
+  // Track when component visibility changes to update visualization
+  const [componentsNeedUpdate, setComponentsNeedUpdate] = useState(false);
+
   // Ref to prevent drag overlay from showing during/after file load
   const allowDragOverlayRef = useRef(true);
 
@@ -93,10 +96,10 @@ export default function ProteinViewer() {
             initial: {
               isExpanded: false,
               showControls: true,       // Must be true to show any control regions
+              // Don't set regionState for top - let it render naturally
               regionState: {
-                top: 'full',            // Show sequence panel in top region
-                left: 'hidden',
-                right: 'hidden',
+                left: 'collapsed',
+                right: 'collapsed',
                 bottom: 'hidden',
               },
             },
@@ -127,6 +130,11 @@ export default function ProteinViewer() {
 
         pluginRef.current = plugin;
         setIsViewerReady(true);
+
+        // Debug: Check if sequence panel is in the layout
+        console.log('Mol* plugin initialized');
+        console.log('Layout state:', plugin.layout.state);
+        console.log('Sequence panel should be visible if showControls=true and controls.top is not "none"');
 
         // Load saved structures list
         const structures = await getAllStructures();
@@ -167,6 +175,14 @@ export default function ProteinViewer() {
       return () => clearTimeout(timeout);
     }
   }, [isLoading, currentStructure]);
+
+  // Update visualization when component visibility changes
+  useEffect(() => {
+    if (componentsNeedUpdate && currentStructure && !isLoading && !isUpdatingVisualization) {
+      updateVisualization(selectedRepresentation, selectedColorScheme);
+      setComponentsNeedUpdate(false);
+    }
+  }, [componentsNeedUpdate, showLigands, showIons, showWater]);
 
   // Apply representation and color scheme
   const applyVisualization = async (structureRefToUse: StateObjectRef<any>, representation: string, colorScheme: string) => {
@@ -1072,7 +1088,7 @@ export default function ProteinViewer() {
                       checked={showLigands}
                       onChange={(e) => {
                         setShowLigands(e.target.checked);
-                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
+                        setComponentsNeedUpdate(true);
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
@@ -1087,7 +1103,7 @@ export default function ProteinViewer() {
                       checked={showIons}
                       onChange={(e) => {
                         setShowIons(e.target.checked);
-                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
+                        setComponentsNeedUpdate(true);
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
@@ -1102,7 +1118,7 @@ export default function ProteinViewer() {
                       checked={showWater}
                       onChange={(e) => {
                         setShowWater(e.target.checked);
-                        if (currentStructure) updateVisualization(selectedRepresentation, selectedColorScheme);
+                        setComponentsNeedUpdate(true);
                       }}
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
