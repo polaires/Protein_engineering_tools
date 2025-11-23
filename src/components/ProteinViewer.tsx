@@ -56,6 +56,7 @@ export default function ProteinViewer() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUpdatingVisualization, setIsUpdatingVisualization] = useState(false);
   const [selectedLoci, setSelectedLoci] = useState<any[]>([]);
+  const [measurementRepresentations, setMeasurementRepresentations] = useState<any[]>([]);
 
   // Store actual structure metadata for dynamic legends and analysis
   const [structureMetadata, setStructureMetadata] = useState<{
@@ -237,27 +238,51 @@ export default function ProteinViewer() {
           const first = newLoci[newLoci.length - 2];
           const second = newLoci[newLoci.length - 1];
 
-          // Calculate distance manually (works for all loci types: atoms, ions, etc.)
-          const distance = calculateDistance(first, second);
+          // Add visual representation for second atom
+          (async () => {
+            const repr = await addSelectionRepresentation(plugin, second, '2');
+            if (repr) {
+              setMeasurementRepresentations((prev: any[]) => [...prev, repr]);
+            }
 
-          if (distance !== null) {
-            // Get atom info for better feedback
-            const atom1Info = getAtomInfo(first);
-            const atom2Info = getAtomInfo(second);
-            const measurementText = `${atom1Info} ↔ ${atom2Info}: ${distance.toFixed(2)} Å`;
+            // Wait a bit for visual update, then calculate distance
+            setTimeout(async () => {
+              // Calculate distance manually (works for all loci types: atoms, ions, etc.)
+              const distance = calculateDistance(first, second);
 
-            showToast('success', measurementText, 5000); // Show for 5 seconds
-          } else {
-            showToast('error', 'Failed to calculate distance');
-          }
+              if (distance !== null) {
+                // Get atom info for better feedback
+                const atom1Info = getAtomInfo(first);
+                const atom2Info = getAtomInfo(second);
+                const measurementText = `${atom1Info} ↔ ${atom2Info}: ${distance.toFixed(2)} Å`;
 
-          // Clear highlights and selection after measuring
-          plugin.managers.interactivity.lociHighlights.clearHighlights();
+                showToast('success', measurementText, 6000); // Show for 6 seconds
+
+                // Keep the representations visible for a moment, then clear
+                setTimeout(async () => {
+                  await clearMeasurementRepresentations(plugin);
+                  plugin.managers.interactivity.lociHighlights.clearHighlights();
+                }, 4000); // Keep visible for 4 seconds after measurement
+              } else {
+                showToast('error', 'Failed to calculate distance');
+                await clearMeasurementRepresentations(plugin);
+                plugin.managers.interactivity.lociHighlights.clearHighlights();
+              }
+            }, 100);
+          })();
+
           return [];
         }
 
-        // For first atom: Highlight with stronger emphasis
+        // For first atom: Add visual representation and highlight
         plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
+
+        (async () => {
+          const repr = await addSelectionRepresentation(plugin, loci, '1');
+          if (repr) {
+            setMeasurementRepresentations([repr]);
+          }
+        })();
 
         // Get atom info for the toast
         const atomInfo = getAtomInfo(loci);
@@ -847,7 +872,7 @@ export default function ProteinViewer() {
   };
 
   // Toggle measurement mode
-  const toggleMeasurement = () => {
+  const toggleMeasurement = async () => {
     if (!pluginRef.current) return;
 
     const newMode = !measurementMode;
@@ -855,14 +880,106 @@ export default function ProteinViewer() {
 
     if (newMode) {
       setSelectedLoci([]);
-      showToast('info', 'Measurement mode enabled. Click two atoms to measure distance.');
+      showToast('info', 'Measurement mode enabled. Click atoms to measure distance. Selected residues will show in green/magenta.');
     } else {
-      // Clear highlights when disabling
+      // Clear highlights and representations when disabling
       if (pluginRef.current.managers.interactivity?.lociHighlights) {
         pluginRef.current.managers.interactivity.lociHighlights.clearHighlights();
       }
+      await clearMeasurementRepresentations(pluginRef.current);
       setSelectedLoci([]);
       showToast('info', 'Measurement mode disabled');
+    }
+  };
+
+  // Add visual representation for selected atom (highlight residue + show side chain as sticks)
+  const addSelectionRepresentation = async (plugin: PluginUIContext, loci: any, label: string) => {
+    try {
+      if (!loci || loci.kind !== 'element-loci') return null;
+
+      // Create a selection for the clicked residue
+      const { structure } = loci;
+
+      // Get residue info
+      const { elements } = loci;
+      let element = Array.isArray(elements) ? elements[0] : elements;
+      if (!element) return null;
+
+      let unit, elementIndex;
+      if (typeof element.unit === 'number') {
+        unit = structure.units[element.unit];
+        elementIndex = element.indices?.[0] ?? element.element ?? 0;
+      } else {
+        unit = structure.units[0];
+        elementIndex = 0;
+      }
+
+      if (!unit) return null;
+
+      // Get location to extract residue info
+      const l = StructureElement.Location.create(structure, unit, elementIndex);
+      const resSeq = SP.residue.label_seq_id(l);
+      const chainId = SP.chain.label_asym_id(l);
+
+      // Build a query to select the entire residue
+      const data = plugin.state.data;
+      const structureCell = data.selectQ((q: any) =>
+        q.ofType(plugin.state.data.PluginStateObject.Molecule.Structure)
+      )[0];
+
+      if (!structureCell) return null;
+
+      // Create a component for this specific residue
+      const component = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureCell,
+        plugin.state.data.PluginStateObject.Molecule.Structure.toExpression(
+          plugin.state.data.PluginStateObject.Molecule.Structure.toExpression.residuesBySeqId(
+            chainId,
+            [resSeq]
+          )
+        ),
+        `measurement-${label}`
+      );
+
+      if (!component) return null;
+
+      // Add ball-and-stick representation with bright color
+      const repr = await plugin.builders.structure.representation.addRepresentation(
+        component,
+        {
+          type: 'ball-and-stick',
+          color: 'uniform',
+          colorParams: { value: label === '1' ? 0x00ff00 : 0xff00ff }, // Green for first, magenta for second
+          size: 'uniform',
+          sizeParams: { value: 0.3 },
+        },
+        { tag: `measurement-repr-${label}` }
+      );
+
+      return repr?.ref;
+    } catch (error) {
+      console.error('Error adding selection representation:', error);
+      return null;
+    }
+  };
+
+  // Clear all measurement representations
+  const clearMeasurementRepresentations = async (plugin: PluginUIContext) => {
+    try {
+      const state = plugin.state.data;
+      const reprs = state.selectQ((q: any) =>
+        q.byRef(q.root).subtree().withTag('measurement-repr-1')
+          .union()
+          .byRef(q.root).subtree().withTag('measurement-repr-2')
+      );
+
+      for (const repr of reprs) {
+        await plugin.builders.structure.representation.remove(repr);
+      }
+
+      setMeasurementRepresentations([]);
+    } catch (error) {
+      console.error('Error clearing measurement representations:', error);
     }
   };
 
