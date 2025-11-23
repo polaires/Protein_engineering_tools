@@ -96,8 +96,8 @@ export default function ProteinViewer() {
             initial: {
               isExpanded: false,
               showControls: true,       // Must be true to show any control regions
-              // Don't set regionState for top - let it render naturally
               regionState: {
+                top: 'full',            // Required field - show sequence panel
                 left: 'hidden',
                 right: 'hidden',
                 bottom: 'hidden',
