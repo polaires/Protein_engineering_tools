@@ -229,7 +229,7 @@ export default function ProteinViewer() {
       if (!loci || loci.kind === 'empty-loci') return;
 
       // Add to selected loci
-      setSelectedLoci((prev) => {
+      setSelectedLoci((prev: any[]) => {
         const newLoci = [...prev, loci];
 
         // If we have 2 or more loci, calculate and display distance
@@ -237,33 +237,30 @@ export default function ProteinViewer() {
           const first = newLoci[newLoci.length - 2];
           const second = newLoci[newLoci.length - 1];
 
-          try {
-            // Add measurement using Molstar's structure measurement manager
-            if (plugin.managers.structure?.measurement) {
-              plugin.managers.structure.measurement.addDistance(first, second);
-              showToast('success', 'Distance measurement added');
-            } else {
-              // Fallback: manually calculate distance
-              const distance = calculateDistance(first, second);
-              if (distance !== null) {
-                showToast('success', `Distance: ${distance.toFixed(2)} Å`);
-              }
-            }
+          // Calculate distance manually (works for all loci types: atoms, ions, etc.)
+          const distance = calculateDistance(first, second);
 
-            // Clear selection after measuring
-            return [];
-          } catch (error) {
-            console.error('Failed to add measurement:', error);
-            showToast('error', 'Failed to create measurement');
-            return [];
+          if (distance !== null) {
+            // Add visual measurement label using Molstar's label system
+            addMeasurementLabel(plugin, first, second, distance);
+            showToast('success', `Distance: ${distance.toFixed(2)} Å`);
+          } else {
+            showToast('error', 'Failed to calculate distance');
           }
+
+          // Clear highlights and selection after measuring
+          plugin.managers.interactivity.lociHighlights.clearHighlights();
+          return [];
         }
 
-        // Highlight the selected loci
+        // For first atom: Highlight AND add a visual label marker
         plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
 
+        // Add a label to mark the first selected atom
+        addAtomLabel(plugin, loci, '1');
+
         if (newLoci.length === 1) {
-          showToast('info', 'First atom selected. Click another atom to measure distance.');
+          showToast('info', 'First atom selected (marked with "1"). Click another atom to measure distance.');
         }
 
         return newLoci;
@@ -858,44 +855,131 @@ export default function ProteinViewer() {
       setSelectedLoci([]);
       showToast('info', 'Measurement mode enabled. Click two atoms to measure distance.');
     } else {
-      // Clear highlights when disabling
+      // Clear highlights and labels when disabling
       if (pluginRef.current.managers.interactivity?.lociHighlights) {
         pluginRef.current.managers.interactivity.lociHighlights.clearHighlights();
+      }
+      if (pluginRef.current.managers.interactivity?.lociLabels) {
+        pluginRef.current.managers.interactivity.lociLabels.clear();
       }
       setSelectedLoci([]);
       showToast('info', 'Measurement mode disabled');
     }
   };
 
-  // Calculate distance between two loci (fallback method)
+  // Add a visual label marker for selected atom
+  const addAtomLabel = (plugin: PluginUIContext, loci: any, text: string) => {
+    try {
+      const position = getLociPosition(loci);
+      if (!position) return;
+
+      // Create a label representation at the atom position
+      plugin.managers.interactivity.lociLabels.addLabel(loci, {
+        customText: text,
+      });
+    } catch (error) {
+      console.error('Error adding atom label:', error);
+    }
+  };
+
+  // Add a measurement label between two atoms
+  const addMeasurementLabel = (plugin: PluginUIContext, loci1: any, loci2: any, distance: number) => {
+    try {
+      // Create measurement label
+      const label = `${distance.toFixed(2)} Å`;
+
+      // Add labels to both loci
+      plugin.managers.interactivity.lociLabels.addLabel(loci1, {
+        customText: `● ${label}`,
+      });
+      plugin.managers.interactivity.lociLabels.addLabel(loci2, {
+        customText: `● ${label}`,
+      });
+    } catch (error) {
+      console.error('Error adding measurement label:', error);
+    }
+  };
+
+  // Get position from any loci type (works for atoms, ions, bonds, etc.)
+  const getLociPosition = (loci: any): [number, number, number] | null => {
+    try {
+      if (!loci || loci.kind === 'empty-loci') return null;
+
+      // Handle element-loci (atoms, residues, ions, etc.)
+      if (loci.kind === 'element-loci') {
+        const { structure, elements } = loci;
+
+        // Handle both array and single element cases
+        let element;
+        if (Array.isArray(elements)) {
+          element = elements[0];
+        } else {
+          // For ions and some other types, elements is not an array
+          element = elements;
+        }
+
+        if (!element) return null;
+
+        // Get the first unit and element
+        let unit, elementIndex;
+
+        if (typeof element.unit === 'number') {
+          // Standard structure
+          unit = structure.units[element.unit];
+          elementIndex = element.indices?.[0] ?? element.element ?? 0;
+        } else {
+          // Try direct access
+          unit = structure.units[0];
+          elementIndex = 0;
+        }
+
+        if (!unit) return null;
+
+        // Create location and get coordinates
+        const l = StructureElement.Location.create(structure, unit, elementIndex);
+        const x = SP.atom.x(l);
+        const y = SP.atom.y(l);
+        const z = SP.atom.z(l);
+
+        return [x, y, z];
+      }
+
+      // Handle bond-loci
+      if (loci.kind === 'bond-loci') {
+        const { structure, bonds } = loci;
+        const bond = bonds[0];
+        if (!bond) return null;
+
+        const unit = structure.units[bond.aUnit];
+        const elementIndex = bond.aIndex;
+
+        if (!unit) return null;
+
+        const l = StructureElement.Location.create(structure, unit, elementIndex);
+        const x = SP.atom.x(l);
+        const y = SP.atom.y(l);
+        const z = SP.atom.z(l);
+
+        return [x, y, z];
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting loci position:', error);
+      return null;
+    }
+  };
+
+  // Calculate distance between two loci (works for all loci types)
   const calculateDistance = (loci1: any, loci2: any): number | null => {
     try {
-      // Extract positions from loci
-      const getPosition = (loci: any): [number, number, number] | null => {
-        if (loci.kind === 'element-loci') {
-          const { structure, elements } = loci;
-          const element = elements[0];
-          if (!element) return null;
+      const pos1 = getLociPosition(loci1);
+      const pos2 = getLociPosition(loci2);
 
-          const unit = structure.units[element.unit];
-          const elementIndex = element.indices[0];
-
-          if (!unit || elementIndex === undefined) return null;
-
-          const l = StructureElement.Location.create(structure, unit, elementIndex);
-          const x = SP.atom.x(l);
-          const y = SP.atom.y(l);
-          const z = SP.atom.z(l);
-
-          return [x, y, z];
-        }
+      if (!pos1 || !pos2) {
+        console.error('Could not extract positions from loci');
         return null;
-      };
-
-      const pos1 = getPosition(loci1);
-      const pos2 = getPosition(loci2);
-
-      if (!pos1 || !pos2) return null;
+      }
 
       // Calculate Euclidean distance
       const dx = pos2[0] - pos1[0];
