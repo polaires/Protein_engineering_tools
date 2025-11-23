@@ -302,20 +302,37 @@ export default function ProteinViewer() {
           const measurementText = `${first.atomInfo} ↔ ${second.atomInfo}: ${distance.toFixed(2)} Å`;
           showToast('success', measurementText, 6000); // Show for 6 seconds
 
-          // Use Molstar's measurement manager to add visual distance label
-          try {
-            // Reconstruct Loci from stored bundles
-            const firstLoci = StructureElement.Bundle.toLoci(first.bundle, first.structure);
-            const secondLoci = StructureElement.Bundle.toLoci(second.bundle, second.structure);
+          // Add visual measurement asynchronously
+          (async () => {
+            try {
+              console.log('===== ADDING VISUAL MEASUREMENT =====');
+              // Reconstruct Loci from stored bundles
+              const firstLoci = StructureElement.Bundle.toLoci(first.bundle, first.structure);
+              const secondLoci = StructureElement.Bundle.toLoci(second.bundle, second.structure);
 
-            console.log('Reconstructed loci:', { firstLoci, secondLoci });
+              console.log('Reconstructed firstLoci:', firstLoci);
+              console.log('Reconstructed secondLoci:', secondLoci);
 
-            // Add distance measurement to the 3D scene
-            plugin.managers.structure.measurement.addDistance(firstLoci, secondLoci);
-            console.log('Added distance measurement to scene');
-          } catch (error) {
-            console.error('Error adding measurement:', error);
-          }
+              // Check if measurement manager exists
+              if (!plugin.managers?.structure?.measurement) {
+                console.error('Measurement manager not available');
+                return;
+              }
+
+              // Add distance measurement to the 3D scene
+              const result = await plugin.managers.structure.measurement.addDistance(firstLoci, secondLoci);
+              console.log('AddDistance result:', result);
+
+              if (result) {
+                console.log('Successfully added distance measurement to scene');
+              } else {
+                console.warn('AddDistance returned undefined - measurement may have failed');
+              }
+            } catch (error) {
+              console.error('Error adding measurement:', error);
+              showToast('error', 'Failed to add visual measurement');
+            }
+          })();
 
           return [];
         }
