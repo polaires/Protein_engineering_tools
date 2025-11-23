@@ -226,16 +226,31 @@ export default function ProteinViewer() {
       // Get the clicked loci
       const loci = event.current.loci;
 
-      if (!loci || loci.kind === 'empty-loci') return;
+      console.log('=== MEASUREMENT CLICK ===');
+      console.log('Clicked loci:', loci);
+      console.log('Loci kind:', loci?.kind);
+
+      if (!loci || loci.kind === 'empty-loci') {
+        console.log('Empty loci, ignoring');
+        return;
+      }
 
       // Add to selected loci
       setSelectedLoci((prev: any[]) => {
+        console.log('Previous loci count:', prev.length);
+        console.log('Previous loci:', prev);
         const newLoci = [...prev, loci];
+        console.log('New loci count:', newLoci.length);
 
         // If we have 2 or more loci, calculate and display distance
         if (newLoci.length >= 2) {
           const first = newLoci[newLoci.length - 2];
           const second = newLoci[newLoci.length - 1];
+
+          console.log('=== MEASURING ===');
+          console.log('First loci:', first);
+          console.log('Second loci:', second);
+          console.log('Are they the same object?', first === second);
 
           // Highlight both loci
           plugin.managers.interactivity.lociHighlights.highlight({ loci: first }, false);
