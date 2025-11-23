@@ -231,9 +231,32 @@ export default function ProteinViewer() {
         return;
       }
 
+      // Only handle element-loci (atoms, ions, residues) - skip bonds
+      if (loci.kind !== 'element-loci') {
+        console.log('Skipping non-element loci:', loci.kind);
+        return;
+      }
+
+      console.log('===== CLICKED LOCI =====');
+      console.log('Loci:', loci);
+      console.log('Loci.elements:', loci.elements);
+      if (loci.elements && loci.elements[0]) {
+        const elem = loci.elements[0];
+        console.log('First element:', elem);
+        console.log('element.unit:', elem.unit);
+        console.log('element.indices:', elem.indices);
+        if (elem.unit) {
+          console.log('unit.elements:', elem.unit.elements);
+          console.log('unit.elements length:', elem.unit.elements?.length);
+        }
+      }
+
       // Extract immutable data IMMEDIATELY before Molstar mutates the reference
       const position = getLociPosition(loci);
       const atomInfo = getAtomInfo(loci);
+
+      console.log('Extracted position:', position);
+      console.log('Extracted atomInfo:', atomInfo);
 
       if (!position) {
         showToast('error', 'Could not extract atom position');
@@ -249,10 +272,17 @@ export default function ProteinViewer() {
       setSelectedLoci((prev: any[]) => {
         const newLoci = [...prev, atomData];
 
+        console.log('Selected loci count:', newLoci.length);
+        console.log('New atom data:', atomData);
+
         // If we have 2 or more atoms, calculate and display distance
         if (newLoci.length >= 2) {
           const first = newLoci[newLoci.length - 2];
           const second = newLoci[newLoci.length - 1];
+
+          console.log('===== MEASURING DISTANCE =====');
+          console.log('First atom:', first);
+          console.log('Second atom:', second);
 
           // Highlight the second loci (first is already highlighted from previous click)
           plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
@@ -262,6 +292,9 @@ export default function ProteinViewer() {
           const dy = second.position[1] - first.position[1];
           const dz = second.position[2] - first.position[2];
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+          console.log('Delta:', { dx, dy, dz });
+          console.log('Distance:', distance);
 
           const measurementText = `${first.atomInfo} ↔ ${second.atomInfo}: ${distance.toFixed(2)} Å`;
           showToast('success', measurementText, 6000); // Show for 6 seconds
