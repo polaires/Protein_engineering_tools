@@ -319,16 +319,21 @@ export default function ProteinViewer() {
                 return;
               }
 
-              // Add distance measurement to the 3D scene
-              const result = await plugin.managers.structure.measurement.addDistance(firstLoci, secondLoci);
+              // Add distance measurement with unique tags to prevent conflicts
+              const measurementId = Date.now().toString();
+              const result = await plugin.managers.structure.measurement.addDistance(firstLoci, secondLoci, {
+                reprTags: [`measurement-${measurementId}`],
+                selectionTags: [`measurement-selection-${measurementId}`]
+              });
               console.log('AddDistance result:', result);
 
               if (result) {
                 console.log('Successfully added distance measurement to scene');
 
-                // Note: Molstar's lociHighlights are temporary by design
-                // They provide visual feedback during interaction but don't persist
-                // The distance measurement itself (line + label) persists permanently
+                // Add persistent highlights for both atoms
+                plugin.managers.interactivity.lociHighlights.highlight({ loci: firstLoci }, false);
+                plugin.managers.interactivity.lociHighlights.highlight({ loci: secondLoci }, false);
+                console.log('Added persistent highlights to both atoms');
               } else {
                 console.warn('AddDistance returned undefined - measurement may have failed');
               }
@@ -341,8 +346,8 @@ export default function ProteinViewer() {
           return [];
         }
 
-        // For first atom: Highlight immediately (use loci directly, don't store it)
-        plugin.managers.interactivity.lociHighlights.highlightOnly({ loci });
+        // For first atom: Use highlight() instead of highlightOnly() to preserve previous highlights
+        plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
 
         if (newLoci.length === 1) {
           showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
