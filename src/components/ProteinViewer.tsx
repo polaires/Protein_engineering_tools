@@ -1335,9 +1335,17 @@ export default function ProteinViewer() {
             const sequences = structureMetadata.sequences || {};
             const uniqueSeqs = new Set(Object.values(sequences));
             const allIdentical = uniqueSeqs.size === 1;
-            const sequenceInfo = allIdentical
-              ? `${allChains} (identical)`
-              : `${Object.keys(sequences)[0]} (representative)`;
+            const chainCount = structureMetadata.chains?.length || 0;
+
+            // Determine structure type for display
+            let structureTypeLabel = '';
+            if (chainCount === 1) {
+              structureTypeLabel = `Chain ${allChains}`;
+            } else if (allIdentical) {
+              structureTypeLabel = `Homomer: ${chainCount} identical chains (${allChains})`;
+            } else {
+              structureTypeLabel = `Heteromer: ${chainCount} chains with different sequences`;
+            }
 
             return (
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
@@ -1347,9 +1355,9 @@ export default function ProteinViewer() {
                 >
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300 flex items-center gap-2">
                     <Info className="w-4 h-4" />
-                    Protein Analysis
+                    Sequence Analysis
                     <span className="text-xs font-normal text-blue-600 dark:text-blue-400">
-                      ({sequenceInfo})
+                      {structureTypeLabel}
                     </span>
                   </span>
                   {showProteinAnalysis ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -1357,6 +1365,28 @@ export default function ProteinViewer() {
 
                 {showProteinAnalysis && (
                   <div className="mt-3 space-y-3">
+                    {/* Info banner for heteromers */}
+                    {!allIdentical && chainCount > 1 && (
+                      <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded border border-blue-300 dark:border-blue-600">
+                        <p className="text-xs text-blue-800 dark:text-blue-200">
+                          <Info className="w-3 h-3 inline mr-1" />
+                          <strong>Note:</strong> This heteromer contains {chainCount} chains with different sequences.
+                          Analysis shown for chain {Object.keys(sequences)[0]} (representative).
+                          Export FASTA to see all sequences.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Homomer info banner */}
+                    {allIdentical && chainCount > 1 && (
+                      <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-700">
+                        <p className="text-xs text-green-800 dark:text-green-200">
+                          <Info className="w-3 h-3 inline mr-1" />
+                          <strong>Homomer:</strong> All {chainCount} chains have identical sequences. Analysis applies to all chains.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Basic Information */}
                     <div>
                       <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
@@ -1379,13 +1409,16 @@ export default function ProteinViewer() {
                         <div>
                           <span className="font-medium">GRAVY:</span> {analysis.gravy.toFixed(3)}
                           <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
-                            {analysis.gravy < 0 ? 'Hydrophilic (water-loving)' : 'Hydrophobic (water-repelling)'}
+                            {analysis.gravy < 0 ? 'Hydrophilic' : 'Hydrophobic'}
                           </span>
                         </div>
                         <div>
                           <span className="font-medium">Aliphatic Index:</span> {analysis.aliphaticIndex.toFixed(2)}
                           <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">
-                            Thermostability indicator
+                            {analysis.aliphaticIndex > 100 ? '✓ High thermostability' :
+                             analysis.aliphaticIndex > 80 ? '✓ Good thermostability' :
+                             analysis.aliphaticIndex > 60 ? 'Moderate thermostability' :
+                             '⚠️ Low thermostability'}
                           </span>
                         </div>
                         <div>
@@ -1420,8 +1453,20 @@ export default function ProteinViewer() {
 
                     {/* Sequence */}
                     <div>
-                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">
-                        Sequence ({seq.length} aa)
+                      <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1 flex items-center justify-between">
+                        <span>
+                          Sequence ({seq.length} aa)
+                          {allIdentical && chainCount > 1 && (
+                            <span className="ml-2 text-[10px] font-normal text-green-600 dark:text-green-400">
+                              — Same for all {chainCount} chains
+                            </span>
+                          )}
+                          {!allIdentical && chainCount > 1 && (
+                            <span className="ml-2 text-[10px] font-normal text-blue-600 dark:text-blue-400">
+                              — Chain {Object.keys(sequences)[0]} only
+                            </span>
+                          )}
+                        </span>
                       </h4>
                       <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-200 dark:border-blue-700 max-h-32 overflow-y-auto">
                         <code className="text-xs font-mono break-all leading-relaxed">{seq}</code>
