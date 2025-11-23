@@ -207,6 +207,19 @@ export default function ProteinViewer() {
     }
   }, [componentsNeedUpdate, showLigands, showIons, showWater]);
 
+  // Clone loci data to avoid reference reuse issues
+  const cloneLoci = (loci: any) => {
+    if (!loci || loci.kind === 'empty-loci') return null;
+
+    // Create a deep clone of the loci structure to avoid reference mutation
+    return {
+      kind: loci.kind,
+      structure: loci.structure,
+      elements: loci.elements ? (Array.isArray(loci.elements) ? [...loci.elements] : loci.elements) : undefined,
+      bonds: loci.bonds ? [...loci.bonds] : undefined,
+    };
+  };
+
   // Setup measurement mode click handler
   useEffect(() => {
     if (!pluginRef.current || !measurementMode) {
@@ -223,34 +236,25 @@ export default function ProteinViewer() {
     const subscription = plugin.behaviors.interaction.click.subscribe((event: any) => {
       if (!measurementMode) return;
 
-      // Get the clicked loci
+      // Get the clicked loci and clone it to avoid reference issues
       const loci = event.current.loci;
 
-      console.log('=== MEASUREMENT CLICK ===');
-      console.log('Clicked loci:', loci);
-      console.log('Loci kind:', loci?.kind);
-
       if (!loci || loci.kind === 'empty-loci') {
-        console.log('Empty loci, ignoring');
         return;
       }
 
+      // Clone the loci to avoid Molstar's reference reuse issues
+      const clonedLoci = cloneLoci(loci);
+      if (!clonedLoci) return;
+
       // Add to selected loci
       setSelectedLoci((prev: any[]) => {
-        console.log('Previous loci count:', prev.length);
-        console.log('Previous loci:', prev);
-        const newLoci = [...prev, loci];
-        console.log('New loci count:', newLoci.length);
+        const newLoci = [...prev, clonedLoci];
 
         // If we have 2 or more loci, calculate and display distance
         if (newLoci.length >= 2) {
           const first = newLoci[newLoci.length - 2];
           const second = newLoci[newLoci.length - 1];
-
-          console.log('=== MEASURING ===');
-          console.log('First loci:', first);
-          console.log('Second loci:', second);
-          console.log('Are they the same object?', first === second);
 
           // Highlight both loci
           plugin.managers.interactivity.lociHighlights.highlight({ loci: first }, false);
@@ -940,50 +944,28 @@ export default function ProteinViewer() {
   // Get position from any loci type (works for atoms, ions, bonds, etc.)
   const getLociPosition = (loci: any): [number, number, number] | null => {
     try {
-      if (!loci || loci.kind === 'empty-loci') {
-        console.log('Empty or null loci');
-        return null;
-      }
-
-      console.log('Getting position for loci:', { kind: loci.kind, loci });
+      if (!loci || loci.kind === 'empty-loci') return null;
 
       // Handle element-loci (atoms, residues, ions, etc.)
       if (loci.kind === 'element-loci') {
         const { structure, elements } = loci;
 
-        if (!structure) {
-          console.error('No structure in loci');
-          return null;
-        }
-
-        if (!elements) {
-          console.error('No elements in loci');
-          return null;
-        }
-
-        console.log('Elements type:', Array.isArray(elements), 'Elements:', elements);
+        if (!structure || !elements) return null;
 
         // Handle both array and single element cases
         let element;
         if (Array.isArray(elements)) {
           element = elements[0];
         } else {
-          // For ions and some other types, elements is not an array
           element = elements;
         }
 
-        if (!element) {
-          console.error('Element is null or undefined');
-          return null;
-        }
+        if (!element) return null;
 
-        console.log('Element:', element);
-
-        // Get the first unit and element
+        // Get the first unit and element index
         let unit, elementIndex;
 
         if (typeof element.unit !== 'undefined') {
-          // Standard structure
           const unitIndex = typeof element.unit === 'number' ? element.unit : 0;
           unit = structure.units[unitIndex];
 
@@ -995,17 +977,11 @@ export default function ProteinViewer() {
             elementIndex = 0;
           }
         } else {
-          // Try direct access
           unit = structure.units[0];
           elementIndex = 0;
         }
 
-        if (!unit) {
-          console.error('Could not get unit from structure');
-          return null;
-        }
-
-        console.log('Unit:', unit, 'ElementIndex:', elementIndex);
+        if (!unit) return null;
 
         // Create location and get coordinates
         const l = StructureElement.Location.create(structure, unit, elementIndex);
@@ -1013,7 +989,6 @@ export default function ProteinViewer() {
         const y = SP.atom.y(l);
         const z = SP.atom.z(l);
 
-        console.log('Position extracted:', [x, y, z]);
         return [x, y, z];
       }
 
@@ -1036,7 +1011,6 @@ export default function ProteinViewer() {
         return [x, y, z];
       }
 
-      console.error('Unknown loci kind:', loci.kind);
       return null;
     } catch (error) {
       console.error('Error getting loci position:', error);
