@@ -126,7 +126,7 @@ export default function ProteinViewer() {
               left: 'none',                // Hide left panel
               right: 'none',               // Hide right panel
               bottom: 'none',              // Hide bottom log panel
-              top: 'sequence',             // Explicitly set top to sequence viewer
+              // top defaults to sequence viewer when not specified
             },
           },
           config: [
@@ -150,7 +150,7 @@ export default function ProteinViewer() {
         // Debug: Verify sequence panel configuration
         console.log('Mol* plugin initialized with sequence viewer');
         console.log('Layout state:', plugin.layout.state);
-        console.log('Sequence panel configured with controls.top = "sequence"');
+        console.log('Sequence panel using default top control (sequence viewer)');
 
         // Load saved structures list
         const structures = await getAllStructures();
@@ -247,7 +247,8 @@ export default function ProteinViewer() {
         const entityKey = SP.entity.key(l);
 
         if (chainId) {
-          chainSet.add(chainId);
+          const chainIdStr = String(chainId);
+          chainSet.add(chainIdStr);
 
           // Get entity sequence using Molstar's Sequence API
           const entitySeq = unit.model.sequence.byEntityKey[entityKey];
@@ -257,8 +258,8 @@ export default function ProteinViewer() {
             const seqString = Sequence.getSequenceString(entitySeq.sequence);
 
             if (seqString && seqString.length > 0) {
-              entitySequenceMap.set(entityKey, seqString);
-              chainSequences[chainId] = seqString;
+              entitySequenceMap.set(String(entityKey), seqString);
+              chainSequences[chainIdStr] = seqString;
 
               // Count amino acids
               for (const aa of seqString) {
@@ -267,7 +268,7 @@ export default function ProteinViewer() {
                 }
               }
 
-              console.log(`✓ Chain ${chainId}: ${seqString.length} residues`);
+              console.log(`✓ Chain ${chainIdStr}: ${seqString.length} residues`);
             }
           }
         }
