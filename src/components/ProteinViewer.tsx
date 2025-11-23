@@ -62,6 +62,9 @@ export default function ProteinViewer() {
     aminoAcidComposition?: Record<string, number>;
   } | null>(null);
 
+  // State for selected chain in analysis panel
+  const [selectedAnalysisChain, setSelectedAnalysisChain] = useState<string>('');
+
   // Store protein analysis results
   const [showProteinAnalysis, setShowProteinAnalysis] = useState(false);
 
@@ -236,11 +239,17 @@ export default function ProteinViewer() {
       const aminoAcidCounts: Record<string, number> = {};
       const entitySequenceMap = new Map<string, string>();
 
-      // Iterate through units to extract chain and sequence info
+      // Iterate through units to extract chain and sequence info (ONLY polymers/proteins)
       for (const unit of structure.units) {
         if (!unit.model) continue;
 
         StructureElement.Location.set(l, structure, unit, unit.elements[0]);
+
+        // FILTER: Only include polymer entities (exclude ligands, ions, water)
+        const entityType = SP.entity.type(l);
+        if (entityType !== 'polymer') {
+          continue; // Skip non-polymer entities (ligands, ions, water)
+        }
 
         // Get chain ID using Molstar's API
         const chainId = SP.chain.label_asym_id(l);
@@ -248,6 +257,10 @@ export default function ProteinViewer() {
 
         if (chainId) {
           const chainIdStr = String(chainId);
+
+          // Skip if we've already processed this chain
+          if (chainSet.has(chainIdStr)) continue;
+
           chainSet.add(chainIdStr);
 
           // Get entity sequence using Molstar's Sequence API
@@ -268,7 +281,7 @@ export default function ProteinViewer() {
                 }
               }
 
-              console.log(`✓ Chain ${chainIdStr}: ${seqString.length} residues`);
+              console.log(`✓ Polymer chain ${chainIdStr}: ${seqString.length} residues`);
             }
           }
         }
@@ -298,12 +311,17 @@ export default function ProteinViewer() {
 
       setStructureMetadata(metadata);
 
+      // Set default selected chain for analysis
+      if (metadata.chains.length > 0 && !selectedAnalysisChain) {
+        setSelectedAnalysisChain(metadata.chains[0]);
+      }
+
       console.log('✓ Structure metadata extracted using Molstar API:', {
         chains: metadata.chains,
         chainCount: metadata.chains.length,
         residueCount: metadata.residueCount,
         allChainsIdentical: allIdentical,
-        usingSequence: allIdentical ? 'unique (all identical)' : `chain ${Object.keys(chainSequences)[0]} (representative)`,
+        polymerChainsOnly: true,
       });
     } catch (error) {
       console.error('Error extracting structure metadata:', error);
@@ -535,6 +553,8 @@ export default function ProteinViewer() {
     if (!pluginRef.current) return;
 
     setIsLoading(true);
+    // Reset selected chain when loading new structure
+    setSelectedAnalysisChain('');
     try {
       const plugin = pluginRef.current;
 
@@ -618,6 +638,8 @@ export default function ProteinViewer() {
 
     console.log('Starting file load:', file.name);
     setIsLoading(true);
+    // Reset selected chain when loading new structure
+    setSelectedAnalysisChain('');
 
     // Immediately clear drag state
     setIsDraggingOver(false);
@@ -1324,18 +1346,23 @@ export default function ProteinViewer() {
           </div>
         )}
 
-        {/* Protein Analysis - Full Width Below Grid */}
-        {currentStructure && structureMetadata?.uniqueSequence && (() => {
+        {/* Sequence Analysis - Full Width Below Grid */}
+        {currentStructure && structureMetadata?.sequences && Object.keys(structureMetadata.sequences).length > 0 && (() => {
           try {
-            const seq = structureMetadata.uniqueSequence;
-            const analysis = analyzeProtein(seq);
-            const allChains = structureMetadata.chains?.join(', ') || '';
-
             // Check if all chain sequences are identical
             const sequences = structureMetadata.sequences || {};
             const uniqueSeqs = new Set(Object.values(sequences));
             const allIdentical = uniqueSeqs.size === 1;
             const chainCount = structureMetadata.chains?.length || 0;
+            const allChains = structureMetadata.chains?.join(', ') || '';
+
+            // Use selected chain or first chain
+            const chainToAnalyze = selectedAnalysisChain || structureMetadata.chains?.[0] || '';
+            const seq = sequences[chainToAnalyze] || '';
+
+            if (!seq) return null; // No sequence available
+
+            const analysis = analyzeProtein(seq);
 
             // Determine structure type for display
             let structureTypeLabel = '';
@@ -1365,14 +1392,38 @@ export default function ProteinViewer() {
 
                 {showProteinAnalysis && (
                   <div className="mt-3 space-y-3">
+                    {/* Chain selector for multiple chains */}
+                    {chainCount > 1 && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-medium text-blue-900 dark:text-blue-200">
+                          Analyzing Chain:
+                        </label>
+                        <select
+                          value={chainToAnalyze}
+                          onChange={(e) => setSelectedAnalysisChain(e.target.value)}
+                          className="text-xs border border-blue-300 dark:border-blue-600 rounded px-2 py-1 bg-white dark:bg-slate-800 text-blue-900 dark:text-blue-100"
+                        >
+                          {structureMetadata.chains?.map((chain) => (
+                            <option key={chain} value={chain}>
+                              Chain {chain} ({sequences[chain]?.length || 0} aa)
+                            </option>
+                          ))}
+                        </select>
+                        {allIdentical && (
+                          <span className="text-[10px] text-green-600 dark:text-green-400">
+                            (All chains identical)
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Info banner for heteromers */}
                     {!allIdentical && chainCount > 1 && (
                       <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded border border-blue-300 dark:border-blue-600">
                         <p className="text-xs text-blue-800 dark:text-blue-200">
                           <Info className="w-3 h-3 inline mr-1" />
-                          <strong>Note:</strong> This heteromer contains {chainCount} chains with different sequences.
-                          Analysis shown for chain {Object.keys(sequences)[0]} (representative).
-                          Export FASTA to see all sequences.
+                          <strong>Heteromer:</strong> This structure contains {chainCount} chains with different sequences.
+                          Use the selector above to analyze different chains. Export FASTA to see all sequences.
                         </p>
                       </div>
                     )}
@@ -1455,16 +1506,19 @@ export default function ProteinViewer() {
                     <div>
                       <h4 className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1 flex items-center justify-between">
                         <span>
-                          Sequence ({seq.length} aa)
-                          {allIdentical && chainCount > 1 && (
-                            <span className="ml-2 text-[10px] font-normal text-green-600 dark:text-green-400">
-                              — Same for all {chainCount} chains
-                            </span>
-                          )}
-                          {!allIdentical && chainCount > 1 && (
-                            <span className="ml-2 text-[10px] font-normal text-blue-600 dark:text-blue-400">
-                              — Chain {Object.keys(sequences)[0]} only
-                            </span>
+                          {chainCount === 1 ? (
+                            `Sequence ({seq.length} aa)`
+                          ) : allIdentical ? (
+                            <>
+                              Sequence ({seq.length} aa)
+                              <span className="ml-2 text-[10px] font-normal text-green-600 dark:text-green-400">
+                                — Same for all {chainCount} chains
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              Chain {chainToAnalyze} Sequence ({seq.length} aa)
+                            </>
                           )}
                         </span>
                       </h4>
