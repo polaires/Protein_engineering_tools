@@ -16,6 +16,27 @@ import MultipleSequenceAlignment from './MultipleSequenceAlignment';
 
 type ProtParamTab = 'analysis' | 'concentration' | 'alignment';
 
+/**
+ * Parse FASTA format input
+ * Supports both FASTA format (>header\nsequence) and plain sequence
+ * Returns protein name and clean sequence
+ */
+function parseFasta(input: string): { name: string; sequence: string } {
+  const trimmed = input.trim();
+
+  if (trimmed.startsWith('>')) {
+    // FASTA format
+    const lines = trimmed.split('\n');
+    const header = lines[0].substring(1); // Remove '>'
+    const sequence = lines.slice(1).join('').replace(/\s/g, ''); // Join and remove whitespace
+    return { name: header, sequence };
+  } else {
+    // Plain sequence
+    const sequence = trimmed.replace(/\s/g, ''); // Remove all whitespace
+    return { name: '', sequence };
+  }
+}
+
 export default function ProtParam() {
   const [activeTab, setActiveTab] = useState<ProtParamTab>('analysis');
   const [sequence, setSequence] = useState('');
@@ -75,7 +96,9 @@ export default function ProtParam() {
     setResult(null);
 
     try {
-      const analysis = analyzeProtein(sequence);
+      // Parse FASTA format (supports both FASTA and plain sequence)
+      const { sequence: cleanSeq } = parseFasta(sequence);
+      const analysis = analyzeProtein(cleanSeq);
       setResult(analysis);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
@@ -94,18 +117,22 @@ export default function ProtParam() {
   };
 
   const handleLoadExample = () => {
-    // Example: Human Insulin A chain
-    const exampleSeq = 'GIVEQCCTSICSLYQLENYCN';
+    // Example: Rubredoxin from Pyrococcus abyssi
+    const exampleSeq = `>1YK5_1|Chains A, B, C, D|Rubredoxin|Pyrococcus abyssi (29292)
+MAKWRCKICGYIYDEDEGDPDNGISPGTKFEDLPDDWVCPLCGAPKSEFERIE`;
     setSequence(exampleSeq);
   };
 
   const handleSearchDomains = async () => {
     setError(null);
 
+    // Parse FASTA format (supports both FASTA and plain sequence)
+    const { sequence: cleanSeq } = parseFasta(sequence);
+
     // Search Pfam domains
     setPfamLoading(true);
     try {
-      const pfamData = await searchPfamDomains(sequence);
+      const pfamData = await searchPfamDomains(cleanSeq);
       setPfamResult(pfamData);
 
       if (!pfamData.success && pfamData.error) {
@@ -122,7 +149,7 @@ export default function ProtParam() {
     }
 
     // Trigger full InterProScan analysis
-    if (sequence.trim()) {
+    if (cleanSeq.trim()) {
       handleSearchInterPro();
     }
   };
@@ -152,7 +179,9 @@ export default function ProtParam() {
     setInterProLoading(true);
 
     try {
-      const interProData = await submitInterProScan(sequence);
+      // Parse FASTA format (supports both FASTA and plain sequence)
+      const { sequence: cleanSeq } = parseFasta(sequence);
+      const interProData = await submitInterProScan(cleanSeq);
       setInterProResult(interProData);
 
       if (!interProData.success && interProData.error) {
@@ -187,11 +216,12 @@ export default function ProtParam() {
 
       console.log(`Found ${seedAlignment.length} sequences in seed alignment for ${baseAccession}`);
 
-      // Convert to AlignmentSequence format and include query sequence
+      // Parse FASTA format and convert to AlignmentSequence format
+      const { name, sequence: cleanSeq } = parseFasta(sequence);
       const sequences: AlignmentSequence[] = [
         {
-          id: 'Your_Protein',
-          sequence: sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase(),
+          id: name || 'Your_Protein',
+          sequence: cleanSeq.toUpperCase(),
         },
         ...seedAlignment.slice(0, 50).map(seq => ({
           id: seq.name,
@@ -667,8 +697,8 @@ export default function ProtParam() {
                   // Description can be string or object with {text, llm, checked, updated}
                   const descItem = meta?.description?.[0];
                   let description = descItem
-                    ? (typeof descItem === 'string' ? descItem : (descItem as any)?.text || 'Loading...')
-                    : (domain.description || 'Loading...');
+                    ? (typeof descItem === 'string' ? descItem : (descItem as any)?.text || '')
+                    : (domain.description || '');
 
                   // Strip HTML tags if present
                   if (description && description.includes('<')) {
@@ -702,14 +732,16 @@ export default function ProtParam() {
                       </div>
 
                       {/* Description line */}
-                      <div className="text-sm text-slate-700 dark:text-slate-300 mb-3">
-                        {description}
-                        {meta?.literature && Object.keys(meta.literature).length > 0 && (
-                          <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
-                            📚 {Object.keys(meta.literature).length} reference(s)
-                          </span>
-                        )}
-                      </div>
+                      {description && (
+                        <div className="text-sm text-slate-700 dark:text-slate-300 mb-3">
+                          {description}
+                          {meta?.literature && Object.keys(meta.literature).length > 0 && (
+                            <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                              📚 {Object.keys(meta.literature).length} reference(s)
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Accession, Position, E-value, Bit Score on same line */}
                       <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
@@ -825,7 +857,7 @@ export default function ProtParam() {
             <InterProAnalysis
               matches={interProResult.matches}
               sequenceLength={interProResult.sequenceLength}
-              querySequence={sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase()}
+              querySequence={parseFasta(sequence).sequence.toUpperCase()}
             />
           )}
         </div>

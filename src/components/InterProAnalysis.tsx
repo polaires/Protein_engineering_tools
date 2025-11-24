@@ -815,25 +815,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                   )}
                 </div>
 
-                {/* Prominent Loading UI for Metadata */}
-                {loadingMetadata[key] && (
-                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-300 p-4 rounded-lg shadow-md">
-                    <div className="flex items-center gap-3">
-                      <Loader2 className="w-8 h-8 animate-spin text-blue-600 flex-shrink-0" />
-                      <div className="flex-1">
-                        <h4 className="font-bold text-blue-900 mb-1">
-                          Fetching Detailed Information
-                        </h4>
-                        <p className="text-sm text-blue-700">
-                          Retrieving metadata for {accession} from {database}
-                        </p>
-                        <p className="text-xs text-blue-600 mt-1">
-                          Time elapsed: {formatElapsedTime(elapsedTime[key] || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {/* Metadata loading is quick, no need for prominent UI - shown in button */}
 
                 {/* Prominent Loading UI for Alignment */}
                 {loadingAlignment[key] && (
