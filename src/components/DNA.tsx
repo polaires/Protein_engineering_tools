@@ -3,8 +3,8 @@
  * Based on NEB NEBuilder Ligase Master Mix protocol
  */
 
-import { useState, useMemo } from 'react';
-import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound, Info, Star } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound, Info, Star, Sparkles } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import CodonOptimizerAdvanced from './CodonOptimizerAdvanced';
 import LibraryDesign from './LibraryDesign';
@@ -63,6 +63,10 @@ export default function DNA() {
 
   // Results
   const [results, setResults] = useState<CalculationResult[] | null>(null);
+
+  // Track if recommendation should be highlighted (after size change)
+  const [showRecommendationHighlight, setShowRecommendationHighlight] = useState(false);
+  const prevRecommendationRef = useRef<number>(2);
 
   // Determine which fragment is the vector
   const vectorId = useMemo(() => {
@@ -137,6 +141,27 @@ export default function DNA() {
     };
   }, [fragments, vectorId]);
 
+  // Show notification when recommendation changes
+  useEffect(() => {
+    if (ratioRecommendation.ratio !== prevRecommendationRef.current && fragments.length >= 2) {
+      setShowRecommendationHighlight(true);
+      if (ratioRecommendation.ratio !== insertRatio) {
+        showToast('info', `Recommended ratio updated to ${ratioRecommendation.ratio}:1 based on fragment sizes`);
+      }
+      prevRecommendationRef.current = ratioRecommendation.ratio;
+    }
+  }, [ratioRecommendation.ratio, fragments.length, insertRatio, showToast]);
+
+  // Apply recommended ratio and calculate
+  const applyRecommendationAndCalculate = () => {
+    setInsertRatio(ratioRecommendation.ratio);
+    setShowRecommendationHighlight(false);
+    // Need to use setTimeout to ensure state is updated before calculate runs
+    setTimeout(() => {
+      calculateWithRatio(ratioRecommendation.ratio);
+    }, 0);
+  };
+
   // Add new fragment
   const addFragment = () => {
     const newId = Date.now().toString();
@@ -173,8 +198,10 @@ export default function DNA() {
     return pmol * 1e-3 * ((size * 615.96) + 36.04);
   };
 
-  // Calculate Golden Gate Assembly
-  const calculate = () => {
+  // Calculate Golden Gate Assembly (with optional ratio override)
+  const calculateWithRatio = (ratioOverride?: number) => {
+    const ratioToUse = ratioOverride ?? insertRatio;
+
     if (fragments.length === 0) {
       showToast('error', 'Please add at least one DNA fragment');
       return;
@@ -203,10 +230,10 @@ export default function DNA() {
     const basePmol = 0.05 * (totalVolume / standardVolume);
 
     // Calculate for each fragment with proper insert:vector ratio
-    // Vector gets 1x, inserts get insertRatio x
+    // Vector gets 1x, inserts get ratioToUse x
     const calculationResults: CalculationResult[] = fragments.map(fragment => {
       const isVector = fragment.id === vectorId;
-      const appliedRatio = isVector ? 1 : insertRatio;
+      const appliedRatio = isVector ? 1 : ratioToUse;
       const targetPmol = basePmol * appliedRatio;
 
       const massNeeded = calculateMass(fragment.size, targetPmol);
@@ -264,6 +291,9 @@ export default function DNA() {
     setResults(calculationResults);
     showToast('success', 'Golden Gate Assembly calculated');
   };
+
+  // Wrapper for calculate button
+  const calculate = () => calculateWithRatio();
 
   // Calculate total DNA volume
   const totalDNAVolume = results ? results.reduce((sum, r) => {
@@ -335,35 +365,45 @@ export default function DNA() {
 
       {/* Smart Recommendation */}
       {fragments.length >= 2 && (
-        <div className={`card border-2 ${
+        <div className={`card border-2 transition-all duration-300 ${
+          showRecommendationHighlight && insertRatio !== ratioRecommendation.ratio
+            ? 'ring-2 ring-primary-400 ring-offset-2 dark:ring-offset-slate-900'
+            : ''
+        } ${
           ratioRecommendation.confidence === 'high'
             ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
             : ratioRecommendation.confidence === 'medium'
             ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
             : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
         }`}>
-          <div className="flex items-start gap-3">
-            <Info className={`w-5 h-5 mt-0.5 ${
-              ratioRecommendation.confidence === 'high' ? 'text-green-600 dark:text-green-400' :
-              ratioRecommendation.confidence === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
-              'text-slate-500'
-            }`} />
-            <div>
-              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
-                Smart Recommendation: {ratioRecommendation.ratio}:1 insert:vector
-              </h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {ratioRecommendation.reason}
-              </p>
-              {insertRatio !== ratioRecommendation.ratio && (
-                <button
-                  onClick={() => setInsertRatio(ratioRecommendation.ratio)}
-                  className="mt-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline"
-                >
-                  Apply recommended ratio
-                </button>
-              )}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Info className={`w-5 h-5 mt-0.5 ${
+                ratioRecommendation.confidence === 'high' ? 'text-green-600 dark:text-green-400' :
+                ratioRecommendation.confidence === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                'text-slate-500'
+              }`} />
+              <div>
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                  Smart Recommendation: {ratioRecommendation.ratio}:1 insert:vector
+                  {insertRatio === ratioRecommendation.ratio && (
+                    <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-normal">(applied)</span>
+                  )}
+                </h4>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {ratioRecommendation.reason}
+                </p>
+              </div>
             </div>
+            {insertRatio !== ratioRecommendation.ratio && (
+              <button
+                onClick={applyRecommendationAndCalculate}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+              >
+                <Sparkles className="w-4 h-4" />
+                Apply & Calculate
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -400,7 +440,10 @@ export default function DNA() {
               min="0.5"
               max="10"
               value={insertRatio}
-              onChange={(e) => setInsertRatio(parseFloat(e.target.value) || 2)}
+              onChange={(e) => {
+                setInsertRatio(parseFloat(e.target.value) || 2);
+                setShowRecommendationHighlight(false);
+              }}
             />
             <div className="text-xs text-slate-500 mt-1">
               Inserts at {insertRatio}× pmol vs vector at 1×
@@ -499,6 +542,12 @@ export default function DNA() {
                     min="1"
                     value={fragment.size}
                     onChange={(e) => updateFragment(fragment.id, 'size', parseFloat(e.target.value) || 0)}
+                    onBlur={() => {
+                      // Trigger recommendation highlight when user finishes editing size
+                      if (fragments.length >= 2 && insertRatio !== ratioRecommendation.ratio) {
+                        setShowRecommendationHighlight(true);
+                      }
+                    }}
                   />
                 </div>
                 <div>
