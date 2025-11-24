@@ -21,6 +21,8 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
   const [showConservation, setShowConservation] = useState(true);
   const [fontSize, setFontSize] = useState(16);
   const [showAllCompositions, setShowAllCompositions] = useState(false);
+  const [showModerateCore, setShowModerateCore] = useState(false);
+  const [showVariableCore, setShowVariableCore] = useState(false);
 
   if (!result.alignment) {
     return <div className="text-gray-500">No alignment data available</div>;
@@ -37,10 +39,13 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
   }
 
   // Elevate query protein to first position
-  const queryIndex = sequences.findIndex(seq =>
-    seq.id.toLowerCase().includes('query') ||
-    seq.id.toLowerCase() === 'query'
-  );
+  const queryIndex = sequences.findIndex(seq => {
+    const id = seq.id.toLowerCase();
+    return id.includes('query') ||
+           id === 'query' ||
+           id.includes('your_protein') ||
+           id.includes('your protein');
+  });
   if (queryIndex > 0) {
     const querySeq = sequences[queryIndex];
     sequences = [querySeq, ...sequences.slice(0, queryIndex), ...sequences.slice(queryIndex + 1)];
@@ -151,9 +156,14 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
             <span className="text-gray-700 select-none flex-shrink-0 sticky left-0 bg-white pr-1" style={{ width: `${NAME_WIDTH}ch` }}>
               Conservation
             </span>
-            <span className="whitespace-nowrap text-gray-600">
+            <span className="whitespace-nowrap text-gray-600 font-mono" style={{ fontSize: `${fontSize}px` }}>
               {conservation.map((cons, idx) => (
-                <span key={idx} title={`${(cons * 100).toFixed(0)}%`}>
+                <span
+                  key={idx}
+                  className="inline-block text-center border-r border-gray-100"
+                  style={{ width: '1ch' }}
+                  title={`Position ${idx + 1}: ${(cons * 100).toFixed(0)}%`}
+                >
                   {cons > 0.9 ? '*' : cons > 0.7 ? ':' : cons > 0.5 ? '.' : ' '}
                 </span>
               ))}
@@ -336,50 +346,108 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
         {/* Conserved Core Sequence */}
         <div className="bg-blue-50 p-4 rounded-lg">
-          <h5 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            Conserved Core Sequence
-          </h5>
-          <div className="bg-white p-4 rounded border border-blue-200">
-            <div className="font-mono text-sm break-all">
+          <div className="flex items-center justify-between mb-3">
+            <h5 className="font-semibold text-blue-900 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              Conserved Core Sequence
+            </h5>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowModerateCore(!showModerateCore)}
+                className={`text-xs px-3 py-1 rounded ${showModerateCore ? 'bg-gray-500 text-white' : 'bg-white text-gray-700 border border-gray-300'}`}
+              >
+                {showModerateCore ? 'Hide' : 'Show'} Moderate (70-90%)
+              </button>
+              <button
+                onClick={() => setShowVariableCore(!showVariableCore)}
+                className={`text-xs px-3 py-1 rounded ${showVariableCore ? 'bg-gray-300 text-gray-700' : 'bg-white text-gray-700 border border-gray-300'}`}
+              >
+                {showVariableCore ? 'Hide' : 'Show'} Variable (&lt;70%)
+              </button>
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded border border-blue-200 overflow-x-auto">
+            {/* Position Ruler */}
+            <div className="font-mono text-xs text-gray-400 mb-2 whitespace-nowrap">
+              {sequences[0].sequence.split('').map((_, idx) => {
+                if (idx % 10 === 0) {
+                  const label = String(idx + 1);
+                  return (
+                    <span key={idx} className="inline-block text-center" style={{ width: '10ch' }}>
+                      {label}
+                    </span>
+                  );
+                }
+                return null;
+              })}
+            </div>
+
+            {/* Core Sequence */}
+            <div className="font-mono text-sm whitespace-nowrap">
               {sequences[0].sequence.split('').map((_, idx) => {
                 const cons = conservation[idx];
                 const aa = sequences[0].sequence[idx]; // Use first sequence as reference
 
-                // Only show positions with >90% conservation
+                // Highly conserved (>90%)
                 if (cons > 0.9 && aa !== '-' && aa !== '.') {
                   return (
                     <span
                       key={idx}
-                      className="inline-block text-white font-bold px-1 rounded mx-px"
-                      style={{ backgroundColor: '#10b981' }}
-                      title={`Position ${idx + 1}: ${(cons * 100).toFixed(0)}% conserved`}
+                      className="inline-block text-white font-bold text-center relative group cursor-help"
+                      style={{ backgroundColor: '#10b981', width: '1ch' }}
                     >
                       {aa}
+                      <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
+                        Position {idx + 1}: {aa} ({(cons * 100).toFixed(0)}%)
+                      </span>
                     </span>
                   );
-                } else if (cons > 0.7 && aa !== '-' && aa !== '.') {
+                }
+                // Moderately conserved (70-90%)
+                else if (cons > 0.7 && aa !== '-' && aa !== '.') {
                   return (
                     <span
                       key={idx}
-                      className="text-gray-500"
-                      title={`Position ${idx + 1}: ${(cons * 100).toFixed(0)}% conserved`}
+                      className="inline-block text-center relative group cursor-help"
+                      style={{
+                        color: showModerateCore ? '#6b7280' : 'transparent',
+                        width: '1ch'
+                      }}
                     >
-                      {aa}
+                      {showModerateCore ? aa : '-'}
+                      <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
+                        Position {idx + 1}: {aa} ({(cons * 100).toFixed(0)}%)
+                      </span>
                     </span>
                   );
-                } else {
+                }
+                // Variable (<70%)
+                else {
                   return (
-                    <span key={idx} className="text-gray-300">
-                      -
+                    <span
+                      key={idx}
+                      className="inline-block text-center relative group cursor-help"
+                      style={{
+                        color: showVariableCore ? '#d1d5db' : '#e5e7eb',
+                        width: '1ch'
+                      }}
+                    >
+                      {showVariableCore && aa !== '-' && aa !== '.' ? aa : '-'}
+                      {aa !== '-' && aa !== '.' && (
+                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
+                          Position {idx + 1}: {aa} ({(cons * 100).toFixed(0)}%)
+                        </span>
+                      )}
                     </span>
                   );
                 }
               })}
             </div>
-            <div className="flex items-center gap-4 mt-3 text-xs text-blue-800">
+
+            {/* Legend */}
+            <div className="flex items-center gap-4 mt-4 text-xs text-blue-800">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-green-500 rounded"></div>
                 <span>Highly conserved (&gt;90%)</span>
