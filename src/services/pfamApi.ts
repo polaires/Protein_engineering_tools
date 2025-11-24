@@ -406,9 +406,11 @@ async function searchPfamDomainsViaProxy(sequence: string): Promise<PfamSearchRe
 
 /**
  * Parse Pfam domains from hmmscan results
+ * Filters out insignificant matches (E-value >= 0.01)
  */
 function parsePfamDomains(results: any): PfamDomain[] {
   const domains: PfamDomain[] = [];
+  const EVALUE_THRESHOLD = 0.01; // Only include significant matches
 
   try {
     // HMMER API v1 response structure: { result: { hits: [...] } } (singular "result")
@@ -426,6 +428,14 @@ function parsePfamDomains(results: any): PfamDomain[] {
       if (!hit.domains) continue;
 
       for (const domain of hit.domains) {
+        const evalue = domain.cevalue || domain.ievalue || 0;
+
+        // Filter out insignificant matches
+        if (evalue >= EVALUE_THRESHOLD) {
+          console.log(`Filtered out weak match: ${hit.name} (E-value: ${evalue.toExponential(2)})`);
+          continue;
+        }
+
         domains.push({
           acc: hit.acc || 'Unknown',
           name: hit.name || 'Unknown',
@@ -435,13 +445,15 @@ function parsePfamDomains(results: any): PfamDomain[] {
           end: domain.jenv || domain.alisqto || 0,
           ali_start: domain.iali || domain.alihmmfrom || 0,
           ali_end: domain.jali || domain.alihmmto || 0,
-          evalue: domain.cevalue || domain.ievalue || 0,
+          evalue: evalue,
           bitscore: domain.bitscore || 0,
           envelope_start: domain.ienv || 0,
           envelope_end: domain.jenv || 0,
         });
       }
     }
+
+    console.log(`After filtering: ${domains.length} significant domain(s) (E-value < ${EVALUE_THRESHOLD})`);
 
     // Sort by E-value (most significant first)
     domains.sort((a, b) => a.evalue - b.evalue);
