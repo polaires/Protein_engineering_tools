@@ -4,7 +4,7 @@
  * Provides multiple color schemes for protein sequence alignment visualization
  */
 
-export type ColorScheme = 'clustal2' | 'chemistry' | 'hydrophobicity' | 'taylor' | 'none';
+export type ColorScheme = 'clustal2' | 'chemistry' | 'hydrophobicity' | 'taylor' | 'consurf' | 'none';
 
 export interface ColorSchemeInfo {
   name: string;
@@ -12,6 +12,10 @@ export interface ColorSchemeInfo {
 }
 
 export const COLOR_SCHEMES: Record<ColorScheme, ColorSchemeInfo> = {
+  consurf: {
+    name: 'ConSurf Conservation',
+    description: 'ConSurf 9-grade conservation scale (Turquoise=Variable, Maroon=Conserved)',
+  },
   clustal2: {
     name: 'Clustal2',
     description: 'Classic Clustal coloring by residue type',
@@ -103,11 +107,59 @@ const colorMaps: Record<ColorScheme, Record<string, string>> = {
 };
 
 /**
- * Get color for an amino acid based on the selected scheme
+ * ConSurf 9-grade conservation colors
+ * Maps conservation score (0-1) to ConSurf color grades (1-9)
+ * Grade 1 (most variable) = Turquoise, Grade 9 (most conserved) = Maroon
  */
-export function getAAColor(aa: string, scheme: ColorScheme): string {
+const CONSURF_COLORS = [
+  '#10C8D1', // Grade 1 - Variable (Dark Turquoise)
+  '#8CFFFF', // Grade 2 - Light Turquoise
+  '#D7FFFF', // Grade 3 - Pale Cyan
+  '#EAFFFF', // Grade 4 - Very Pale Cyan
+  '#FFFFFF', // Grade 5 - Average (White)
+  '#FCEDF4', // Grade 6 - Very Pale Pink
+  '#FAC9DE', // Grade 7 - Pale Pink
+  '#F07DAB', // Grade 8 - Pink
+  '#A02560', // Grade 9 - Conserved (Maroon)
+];
+
+const CONSURF_INSUFFICIENT_DATA = '#FFFF96'; // Yellow for insufficient data
+
+/**
+ * Get ConSurf color based on conservation score (0-1)
+ */
+export function getConsurfColor(conservationScore: number): string {
+  // Handle insufficient data (e.g., gaps, unknown)
+  if (conservationScore < 0 || isNaN(conservationScore)) {
+    return CONSURF_INSUFFICIENT_DATA;
+  }
+
+  // Map conservation score (0-1) to grade (0-8 index)
+  // 0.0-0.1 -> grade 1 (index 0)
+  // 0.9-1.0 -> grade 9 (index 8)
+  const gradeIndex = Math.min(8, Math.floor(conservationScore * 9));
+  return CONSURF_COLORS[gradeIndex];
+}
+
+/**
+ * Get color for an amino acid based on the selected scheme
+ * For ConSurf scheme, conservation parameter must be provided
+ */
+export function getAAColor(
+  aa: string,
+  scheme: ColorScheme,
+  conservation?: number
+): string {
   if (scheme === 'none') {
     return 'transparent';
+  }
+
+  // ConSurf scheme uses conservation score
+  if (scheme === 'consurf') {
+    if (aa === '-' || aa === '.') {
+      return 'transparent';
+    }
+    return getConsurfColor(conservation !== undefined ? conservation : 0);
   }
 
   const upperAA = aa.toUpperCase();

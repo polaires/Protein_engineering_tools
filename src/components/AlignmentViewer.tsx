@@ -17,9 +17,9 @@ interface AlignmentViewerProps {
 }
 
 const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
-  const [colorScheme, setColorScheme] = useState<ColorScheme>('clustal2');
+  const [colorScheme, setColorScheme] = useState<ColorScheme>('consurf');
   const [showConservation, setShowConservation] = useState(true);
-  const [fontSize, setFontSize] = useState(18);
+  const [fontSize, setFontSize] = useState(16);
 
   if (!result.alignment) {
     return <div className="text-gray-500">No alignment data available</div>;
@@ -76,11 +76,11 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
     return (
       <div className="space-y-0">
         {/* Position ruler */}
-        <div className="flex font-mono sticky top-0 bg-gray-900 z-10 pb-1" style={{ fontSize: `${fontSize}px` }}>
-          <span className="text-gray-400 select-none flex-shrink-0 bg-gray-900" style={{ width: `${NAME_WIDTH}ch` }}>
+        <div className="flex font-mono sticky top-0 bg-white border-b border-gray-200 z-10 pb-1" style={{ fontSize: `${fontSize}px` }}>
+          <span className="text-gray-600 select-none flex-shrink-0 bg-white" style={{ width: `${NAME_WIDTH}ch` }}>
             {' '}
           </span>
-          <span className="text-gray-400 whitespace-nowrap pl-1">
+          <span className="text-gray-600 whitespace-nowrap pl-1">
             {rulerMarks}
           </span>
         </div>
@@ -90,10 +90,10 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
           const formattedName = formatSequenceName(seq.id);
 
           return (
-            <div key={seqIdx} className="flex font-mono hover:bg-gray-800" style={{ fontSize: `${fontSize}px` }}>
+            <div key={seqIdx} className="flex font-mono hover:bg-gray-50" style={{ fontSize: `${fontSize}px` }}>
               {/* Sticky name column */}
               <span
-                className="text-gray-400 select-none flex-shrink-0 sticky left-0 bg-gray-900 pr-1"
+                className="text-gray-700 select-none flex-shrink-0 sticky left-0 bg-white pr-1"
                 style={{ width: `${NAME_WIDTH}ch` }}
                 title={seq.id}
               >
@@ -102,16 +102,25 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
               {/* Entire sequence as one continuous line */}
               <span className="whitespace-nowrap">
                 {seq.sequence.split('').map((aa, aaIdx) => {
-                  const color = getAAColor(aa, colorScheme);
                   const cons = conservation[aaIdx];
+                  const color = getAAColor(aa, colorScheme, cons);
+
+                  // Determine text color based on background for readability
+                  let textColor = '#000';
+                  if (colorScheme === 'consurf') {
+                    // ConSurf: dark text on light colors, light text on dark colors
+                    textColor = cons > 0.5 ? '#fff' : '#000';
+                  } else if (colorScheme !== 'none') {
+                    textColor = '#fff';
+                  }
 
                   return (
                     <span
                       key={aaIdx}
-                      className="relative group cursor-help"
+                      className="relative group cursor-help border-r border-gray-100"
                       style={{
                         backgroundColor: color,
-                        color: colorScheme === 'none' ? 'inherit' : '#fff',
+                        color: textColor,
                         fontWeight: cons > 0.8 ? 'bold' : 'normal',
                       }}
                       title={`Position ${aaIdx + 1}\nResidue: ${aa}\nConservation: ${(cons * 100).toFixed(0)}%`}
@@ -127,11 +136,11 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
         {/* Conservation line - one continuous line */}
         {showConservation && (
-          <div className="flex font-mono text-xs border-t border-gray-700 pt-1 mt-1">
-            <span className="text-gray-400 select-none flex-shrink-0 sticky left-0 bg-gray-900 pr-1" style={{ width: `${NAME_WIDTH}ch` }}>
+          <div className="flex font-mono text-xs border-t border-gray-300 pt-1 mt-1">
+            <span className="text-gray-700 select-none flex-shrink-0 sticky left-0 bg-white pr-1" style={{ width: `${NAME_WIDTH}ch` }}>
               Conservation
             </span>
-            <span className="whitespace-nowrap text-gray-500">
+            <span className="whitespace-nowrap text-gray-600">
               {conservation.map((cons, idx) => (
                 <span key={idx} title={`${(cons * 100).toFixed(0)}%`}>
                   {cons > 0.9 ? '*' : cons > 0.7 ? ':' : cons > 0.5 ? '.' : ' '}
@@ -316,9 +325,9 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
         {/* Alignment Display with Horizontal Scrolling (ConSurf-style) */}
         <div className="relative">
-          <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-            <div className="bg-gray-900 p-4 inline-block min-w-full">
-              <div className="text-white font-mono whitespace-nowrap">{renderAlignment()}</div>
+          <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-300 rounded-lg">
+            <div className="bg-white p-4 inline-block min-w-full">
+              <div className="font-mono whitespace-nowrap">{renderAlignment()}</div>
             </div>
           </div>
         </div>

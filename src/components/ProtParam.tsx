@@ -77,11 +77,6 @@ export default function ProtParam() {
     try {
       const analysis = analyzeProtein(sequence);
       setResult(analysis);
-
-      // Auto-trigger InterProScan analysis
-      if (sequence.trim()) {
-        handleSearchInterPro();
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
     }
@@ -104,10 +99,22 @@ export default function ProtParam() {
     setSequence(exampleSeq);
   };
 
-  const handleSearchPfam = async () => {
+  const handleSearchDomains = async () => {
     setError(null);
-    setPfamLoading(true);
 
+    // Run basic protein analysis if not already done
+    if (!result) {
+      try {
+        const analysis = analyzeProtein(sequence);
+        setResult(analysis);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Analysis failed');
+        return;
+      }
+    }
+
+    // Search Pfam domains
+    setPfamLoading(true);
     try {
       const pfamData = await searchPfamDomains(sequence);
       setPfamResult(pfamData);
@@ -123,6 +130,11 @@ export default function ProtParam() {
       setPfamResult(null);
     } finally {
       setPfamLoading(false);
+    }
+
+    // Trigger full InterProScan analysis
+    if (sequence.trim()) {
+      handleSearchInterPro();
     }
   };
 
@@ -311,19 +323,19 @@ export default function ProtParam() {
               Analyze Protein
             </button>
             <button
-              onClick={handleSearchPfam}
+              onClick={handleSearchDomains}
               className="btn-primary flex-1"
-              disabled={pfamLoading || !sequence.trim()}
+              disabled={pfamLoading || interProLoading || !sequence.trim()}
             >
-              {pfamLoading ? (
+              {pfamLoading || interProLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Searching Pfam...
+                  {pfamLoading ? 'Searching Domains...' : 'Running InterProScan...'}
                 </>
               ) : (
                 <>
-                  <Search className="w-5 h-5 mr-2" />
-                  Search Pfam Domains
+                  <Database className="w-5 h-5 mr-2" />
+                  Search Protein Domains
                 </>
               )}
             </button>
