@@ -19,7 +19,7 @@ interface AlignmentViewerProps {
 const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
   const [colorScheme, setColorScheme] = useState<ColorScheme>('clustal2');
   const [showConservation, setShowConservation] = useState(true);
-  const [fontSize, setFontSize] = useState(12);
+  const [fontSize, setFontSize] = useState(18);
 
   if (!result.alignment) {
     return <div className="text-gray-500">No alignment data available</div>;
