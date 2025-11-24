@@ -1076,13 +1076,16 @@ app.post('/api/hmmer/search', async (req, res) => {
     const submitData = await submitResponse.json();
     console.log('HMMER API response data:', submitData);
 
-    if (!submitData.job || !submitData.job.id) {
+    // API v1 returns { id: "..." } directly, not { job: { id: "..." } }
+    const jobId = submitData.id || submitData.job?.id;
+
+    if (!jobId) {
       console.error('No job ID in response:', submitData);
       throw new Error('Failed to get job ID from HMMER API');
     }
 
-    console.log('HMMER search successful, job ID:', submitData.job.id);
-    res.json({ jobId: submitData.job.id });
+    console.log('HMMER search successful, job ID:', jobId);
+    res.json({ jobId });
   } catch (error) {
     console.error('HMMER search proxy error:', error);
     console.error('Error stack:', error.stack);
