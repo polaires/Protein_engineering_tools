@@ -60,6 +60,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
   querySequence,
 }) => {
   const [expandedMatch, setExpandedMatch] = useState<number | null>(null);
+  const [showAlignment, setShowAlignment] = useState<Record<string, boolean>>({});
   const [metadata, setMetadata] = useState<Record<string, InterProMetadata | null>>({});
   const [alignment, setAlignment] = useState<Record<string, AlignmentSequence[] | null>>({});
   const [colorScheme, setColorScheme] = useState<Record<string, ColorScheme>>({});
@@ -896,39 +897,51 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                   </div>
                 )}
 
-                {/* Alignment Display */}
+                {/* Alignment Display - Only show if toggled */}
                 {alignment[key] && alignment[key]!.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="font-semibold text-gray-900 mb-3">
-                      Seed Alignment ({alignment[key]!.length} sequences)
-                    </h4>
-
-                    {/* Color Scheme Selector */}
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-gray-700 mr-2">
-                        Color Scheme:
-                      </label>
-                      <select
-                        value={colorScheme[key] || 'clustal2'}
-                        onChange={(e) =>
-                          handleColorSchemeChange(key, e.target.value as ColorScheme)
-                        }
-                        className="border border-gray-300 rounded px-3 py-1 text-sm"
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-900">
+                        Seed Alignment ({alignment[key]!.length} sequences)
+                      </h4>
+                      <button
+                        onClick={() => setShowAlignment(prev => ({ ...prev, [key]: !prev[key] }))}
+                        className="text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
                       >
-                        {Object.entries(COLOR_SCHEMES).map(([value, info]) => (
-                          <option key={value} value={value}>
-                            {info.name} - {info.description}
-                          </option>
-                        ))}
-                      </select>
+                        {showAlignment[key] ? 'Hide Alignment' : 'Show Alignment'}
+                      </button>
                     </div>
 
-                    {/* Alignment Visualization (ConSurf-style with horizontal scrolling) */}
-                    <div className="bg-white border border-gray-300 p-4 rounded-lg overflow-x-auto max-h-[500px] overflow-y-auto">
-                      <div className="inline-block min-w-full">
-                        {renderAlignment(alignment[key]!, colorScheme[key] || 'consurf')}
-                      </div>
-                    </div>
+                    {showAlignment[key] && (
+                      <>
+                        {/* Color Scheme Selector */}
+                        <div className="mb-4">
+                          <label className="text-sm font-medium text-gray-700 mr-2">
+                            Color Scheme:
+                          </label>
+                          <select
+                            value={colorScheme[key] || 'clustal2'}
+                            onChange={(e) =>
+                              handleColorSchemeChange(key, e.target.value as ColorScheme)
+                            }
+                            className="border border-gray-300 rounded px-3 py-1 text-sm"
+                          >
+                            {Object.entries(COLOR_SCHEMES).map(([value, info]) => (
+                              <option key={value} value={value}>
+                                {info.name} - {info.description}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Alignment Visualization (ConSurf-style with horizontal scrolling) */}
+                        <div className="bg-white border border-gray-300 p-4 rounded-lg overflow-x-auto max-h-[500px] overflow-y-auto">
+                          <div className="inline-block min-w-full">
+                            {renderAlignment(alignment[key]!, colorScheme[key] || 'consurf')}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
