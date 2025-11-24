@@ -1054,8 +1054,8 @@ app.post('/api/hmmer/search', async (req, res) => {
 
     console.log('Submitting to HMMER API with sequence length:', sequence.length);
 
-    // Try the HMMER API endpoint with proper multipart form data
-    const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer/search/hmmscan', {
+    // Use the correct HMMER API v1 endpoint
+    const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer/api/v1/search/hmmscan', {
       method: 'POST',
       body: formData,
       headers: formData.getHeaders(),
@@ -1090,7 +1090,7 @@ app.get('/api/hmmer/results/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
 
-    const response = await fetch(`https://www.ebi.ac.uk/Tools/hmmer/results/${jobId}/score`);
+    const response = await fetch(`https://www.ebi.ac.uk/Tools/hmmer/api/v1/results/${jobId}/score`);
 
     if (response.status === 200) {
       const data = await response.json();

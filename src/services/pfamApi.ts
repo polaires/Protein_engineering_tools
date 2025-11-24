@@ -226,7 +226,7 @@ export async function searchPfamDomains(sequence: string): Promise<PfamSearchRes
     formData.append('seq', `>query\n${cleanSequence}`);
     formData.append('hmmdb', 'pfam');
 
-    const submitResponse = await fetch(`${HMMER_API_BASE}/search/hmmscan`, {
+    const submitResponse = await fetch(`${HMMER_API_BASE}/api/v1/search/hmmscan`, {
       method: 'POST',
       body: formData,
     });
@@ -248,7 +248,7 @@ export async function searchPfamDomains(sequence: string): Promise<PfamSearchRes
     let resultsData: any = null;
 
     while (retries < MAX_RETRIES) {
-      const pollResponse = await fetch(`${HMMER_API_BASE}/results/${jobId}/score`);
+      const pollResponse = await fetch(`${HMMER_API_BASE}/api/v1/results/${jobId}/score`);
 
       if (pollResponse.status === 200) {
         resultsData = await pollResponse.json();
