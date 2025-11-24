@@ -38,7 +38,6 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
   // Fixed width for sequence names (ConSurf-style)
   const NAME_WIDTH = 25; // characters
   const alignmentLength = sequences[0].sequence.length;
-  const blockSize = 60;
 
   // Calculate conservation at each position
   const conservation = calculateConservation(sequences.map(s => s.sequence));
@@ -51,100 +50,98 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
     return name.padEnd(NAME_WIDTH, ' ');
   };
 
-  // Render alignment in blocks (ConSurf-style)
+  // Render continuous alignment (ConSurf-style - NO blocks, continuous horizontal lines)
   const renderAlignment = () => {
-    const blocks: JSX.Element[] = [];
-
-    for (let pos = 0; pos < alignmentLength; pos += blockSize) {
-      const end = Math.min(pos + blockSize, alignmentLength);
-
-      // Position ruler
-      const ruler: string[] = [];
-      for (let i = pos; i < end; i += 10) {
-        ruler.push(String(i + 1).padEnd(10, ' '));
-      }
-
-      const blockElements: JSX.Element[] = [];
-
-      // Add ruler with proper spacing
-      blockElements.push(
-        <div key={`ruler-${pos}`} className="font-mono mb-1 flex" style={{ fontSize: `${fontSize}px` }}>
-          <span className="text-gray-400 select-none" style={{ width: `${NAME_WIDTH}ch`, flexShrink: 0 }}>
-            {' '}
+    // Position ruler - continuous, marks every 10 positions
+    const rulerMarks: JSX.Element[] = [];
+    for (let i = 0; i < alignmentLength; i++) {
+      if (i % 10 === 0) {
+        const label = String(i + 1);
+        rulerMarks.push(
+          <span key={i} className="inline-block text-center" style={{ width: `${label.length}ch` }}>
+            {label}
           </span>
-          <span className="text-gray-400 whitespace-nowrap">
-            {ruler.join('')}
-          </span>
-        </div>
-      );
-
-      // Add sequences
-      sequences.forEach((seq, seqIdx) => {
-        const seqBlock = seq.sequence.substring(pos, end);
-        const formattedName = formatSequenceName(seq.id);
-
-        blockElements.push(
-          <div key={`${pos}-${seqIdx}`} className="font-mono flex mb-0.5" style={{ fontSize: `${fontSize}px` }}>
-            <span
-              className="text-gray-400 select-none flex-shrink-0"
-              style={{ width: `${NAME_WIDTH}ch` }}
-              title={seq.id}
-            >
-              {formattedName}
-            </span>
-            <span className="whitespace-nowrap">
-              {seqBlock.split('').map((aa, aaIdx) => {
-                const color = getAAColor(aa, colorScheme);
-                const globalPos = pos + aaIdx;
-                const cons = conservation[globalPos];
-
-                return (
-                  <span
-                    key={aaIdx}
-                    className="relative group cursor-help transition-transform hover:scale-110"
-                    style={{
-                      backgroundColor: color,
-                      color: colorScheme === 'none' ? 'inherit' : '#fff',
-                      fontWeight: cons > 0.8 ? 'bold' : 'normal',
-                    }}
-                    title={`Position ${globalPos + 1}\nResidue: ${aa}\nConservation: ${(cons * 100).toFixed(0)}%`}
-                  >
-                    {aa}
-                  </span>
-                );
-              })}
-            </span>
-          </div>
         );
-      });
-
-      // Add conservation line if enabled
-      if (showConservation) {
-        const consBlock = conservation.slice(pos, end);
-        blockElements.push(
-          <div key={`cons-${pos}`} className="font-mono text-xs flex mb-1">
-            <span className="text-gray-400 select-none" style={{ width: `${NAME_WIDTH}ch`, flexShrink: 0 }}>
+        // Add spacing to reach next mark
+        for (let j = 0; j < 10 - label.length && i + j < alignmentLength; j++) {
+          rulerMarks.push(
+            <span key={`${i}-space-${j}`} className="inline-block" style={{ width: '1ch' }}>
               {' '}
             </span>
-            <span className="whitespace-nowrap text-xs text-gray-600">
-              {consBlock.map((cons, idx) => (
-                <span key={idx}>
+          );
+        }
+      }
+    }
+
+    return (
+      <div className="space-y-0">
+        {/* Position ruler */}
+        <div className="flex font-mono sticky top-0 bg-gray-900 z-10 pb-1" style={{ fontSize: `${fontSize}px` }}>
+          <span className="text-gray-400 select-none flex-shrink-0 bg-gray-900" style={{ width: `${NAME_WIDTH}ch` }}>
+            {' '}
+          </span>
+          <span className="text-gray-400 whitespace-nowrap pl-1">
+            {rulerMarks}
+          </span>
+        </div>
+
+        {/* Each sequence as one continuous line */}
+        {sequences.map((seq, seqIdx) => {
+          const formattedName = formatSequenceName(seq.id);
+
+          return (
+            <div key={seqIdx} className="flex font-mono hover:bg-gray-800" style={{ fontSize: `${fontSize}px` }}>
+              {/* Sticky name column */}
+              <span
+                className="text-gray-400 select-none flex-shrink-0 sticky left-0 bg-gray-900 pr-1"
+                style={{ width: `${NAME_WIDTH}ch` }}
+                title={seq.id}
+              >
+                {formattedName}
+              </span>
+              {/* Entire sequence as one continuous line */}
+              <span className="whitespace-nowrap">
+                {seq.sequence.split('').map((aa, aaIdx) => {
+                  const color = getAAColor(aa, colorScheme);
+                  const cons = conservation[aaIdx];
+
+                  return (
+                    <span
+                      key={aaIdx}
+                      className="relative group cursor-help"
+                      style={{
+                        backgroundColor: color,
+                        color: colorScheme === 'none' ? 'inherit' : '#fff',
+                        fontWeight: cons > 0.8 ? 'bold' : 'normal',
+                      }}
+                      title={`Position ${aaIdx + 1}\nResidue: ${aa}\nConservation: ${(cons * 100).toFixed(0)}%`}
+                    >
+                      {aa}
+                    </span>
+                  );
+                })}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Conservation line - one continuous line */}
+        {showConservation && (
+          <div className="flex font-mono text-xs border-t border-gray-700 pt-1 mt-1">
+            <span className="text-gray-400 select-none flex-shrink-0 sticky left-0 bg-gray-900 pr-1" style={{ width: `${NAME_WIDTH}ch` }}>
+              Conservation
+            </span>
+            <span className="whitespace-nowrap text-gray-500">
+              {conservation.map((cons, idx) => (
+                <span key={idx} title={`${(cons * 100).toFixed(0)}%`}>
                   {cons > 0.9 ? '*' : cons > 0.7 ? ':' : cons > 0.5 ? '.' : ' '}
                 </span>
               ))}
             </span>
           </div>
-        );
-      }
-
-      blocks.push(
-        <div key={`block-${pos}`} className="mb-6">
-          {blockElements}
-        </div>
-      );
-    }
-
-    return blocks;
+        )}
+      </div>
+    );
   };
 
   // Download alignment

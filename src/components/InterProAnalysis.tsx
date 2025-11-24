@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
 import {
   InterProMatch,
   InterProMetadata,
@@ -31,9 +32,57 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
   const [loadingAlignment, setLoadingAlignment] = useState<Record<string, boolean>>({});
   const [metadataError, setMetadataError] = useState<Record<string, string>>({});
   const [alignmentError, setAlignmentError] = useState<Record<string, string>>({});
+  const [elapsedTime, setElapsedTime] = useState<Record<string, number>>({});
+  const timerRef = useRef<Record<string, NodeJS.Timeout | null>>({});
+
+  // Timer effect for loading operations
+  useEffect(() => {
+    // Start timers for any active loading operations
+    Object.keys(loadingMetadata).forEach((key) => {
+      if (loadingMetadata[key] && !timerRef.current[key]) {
+        setElapsedTime((prev) => ({ ...prev, [key]: 0 }));
+        timerRef.current[key] = setInterval(() => {
+          setElapsedTime((prev) => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
+        }, 1000);
+      } else if (!loadingMetadata[key] && timerRef.current[key]) {
+        clearInterval(timerRef.current[key]!);
+        timerRef.current[key] = null;
+      }
+    });
+
+    Object.keys(loadingAlignment).forEach((key) => {
+      const alignKey = `align_${key}`;
+      if (loadingAlignment[key] && !timerRef.current[alignKey]) {
+        setElapsedTime((prev) => ({ ...prev, [alignKey]: 0 }));
+        timerRef.current[alignKey] = setInterval(() => {
+          setElapsedTime((prev) => ({ ...prev, [alignKey]: (prev[alignKey] || 0) + 1 }));
+        }, 1000);
+      } else if (!loadingAlignment[key] && timerRef.current[alignKey]) {
+        clearInterval(timerRef.current[alignKey]!);
+        timerRef.current[alignKey] = null;
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      Object.values(timerRef.current).forEach((timer) => {
+        if (timer) clearInterval(timer);
+      });
+    };
+  }, [loadingMetadata, loadingAlignment]);
 
   const handleToggleMatch = (index: number) => {
     setExpandedMatch(expandedMatch === index ? null : index);
+  };
+
+  // Format elapsed time for loading operations
+  const formatElapsedTime = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleFetchMetadata = async (accession: string, database: string) => {
@@ -133,7 +182,6 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
     // Fixed width for sequence names (ConSurf-style)
     const NAME_WIDTH = 25;
     const seqLength = sequences[0].sequence.length;
-    const blockSize = 60;
 
     // Truncate or pad sequence name to fixed width
     const formatSequenceName = (name: string): string => {
@@ -143,73 +191,77 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       return name.padEnd(NAME_WIDTH, ' ');
     };
 
-    const blocks: JSX.Element[] = [];
-
-    for (let pos = 0; pos < seqLength; pos += blockSize) {
-      const end = Math.min(pos + blockSize, seqLength);
-
-      // Position ruler
-      const ruler: string[] = [];
-      for (let i = pos; i < end; i += 10) {
-        ruler.push(String(i + 1).padEnd(10, ' '));
-      }
-
-      const blockElements: JSX.Element[] = [];
-
-      // Add ruler with proper spacing
-      blockElements.push(
-        <div key={`ruler-${pos}`} className="font-mono text-xs flex mb-1">
-          <span className="text-gray-400 select-none" style={{ width: `${NAME_WIDTH}ch`, flexShrink: 0 }}>
-            {' '}
+    // Position ruler - continuous, marks every 10 positions
+    const rulerMarks: JSX.Element[] = [];
+    for (let i = 0; i < seqLength; i++) {
+      if (i % 10 === 0) {
+        const label = String(i + 1);
+        rulerMarks.push(
+          <span key={i} className="inline-block text-center" style={{ width: `${label.length}ch` }}>
+            {label}
           </span>
-          <span className="text-gray-400 whitespace-nowrap">
-            {ruler.join('')}
-          </span>
-        </div>
-      );
-
-      // Sequences
-      sequences.forEach((seq, seqIdx) => {
-        const seqBlock = seq.sequence.substring(pos, end);
-        const formattedName = formatSequenceName(seq.name);
-
-        blockElements.push(
-          <div key={`${pos}-${seqIdx}`} className="font-mono text-xs flex mb-0.5">
-            <span
-              className="text-gray-500 select-none flex-shrink-0"
-              style={{ width: `${NAME_WIDTH}ch` }}
-              title={seq.name}
-            >
-              {formattedName}
-            </span>
-            <span className="whitespace-nowrap">
-              {seqBlock.split('').map((aa, aaIdx) => {
-                const color = getAAColor(aa, scheme);
-                return (
-                  <span
-                    key={aaIdx}
-                    style={{
-                      backgroundColor: color,
-                      color: scheme === 'none' ? 'inherit' : '#fff',
-                    }}
-                  >
-                    {aa}
-                  </span>
-                );
-              })}
-            </span>
-          </div>
         );
-      });
-
-      blocks.push(
-        <div key={`block-${pos}`} className="mb-4">
-          {blockElements}
-        </div>
-      );
+        // Add spacing to reach next mark
+        for (let j = 0; j < 10 - label.length && i + j < seqLength; j++) {
+          rulerMarks.push(
+            <span key={`${i}-space-${j}`} className="inline-block" style={{ width: '1ch' }}>
+              {' '}
+            </span>
+          );
+        }
+      }
     }
 
-    return <div className="whitespace-nowrap">{blocks}</div>;
+    return (
+      <div className="space-y-0">
+        {/* Position ruler */}
+        <div className="flex font-mono text-xs sticky top-0 bg-gray-900 z-10 pb-1">
+          <span className="text-gray-400 select-none flex-shrink-0 bg-gray-900" style={{ width: `${NAME_WIDTH}ch` }}>
+            {' '}
+          </span>
+          <span className="text-gray-400 whitespace-nowrap pl-1">
+            {rulerMarks}
+          </span>
+        </div>
+
+        {/* Each sequence as one continuous line */}
+        {sequences.map((seq, seqIdx) => {
+          const formattedName = formatSequenceName(seq.name);
+
+          return (
+            <div key={seqIdx} className="flex font-mono text-xs hover:bg-gray-800">
+              {/* Sticky name column */}
+              <span
+                className="text-gray-500 select-none flex-shrink-0 sticky left-0 bg-gray-900 pr-1"
+                style={{ width: `${NAME_WIDTH}ch` }}
+                title={seq.name}
+              >
+                {formattedName}
+              </span>
+              {/* Entire sequence as one continuous line */}
+              <span className="whitespace-nowrap">
+                {seq.sequence.split('').map((aa, aaIdx) => {
+                  const color = getAAColor(aa, scheme);
+                  return (
+                    <span
+                      key={aaIdx}
+                      className="cursor-help"
+                      style={{
+                        backgroundColor: color,
+                        color: scheme === 'none' ? 'inherit' : '#fff',
+                      }}
+                      title={`Position ${aaIdx + 1}\nResidue: ${aa}`}
+                    >
+                      {aa}
+                    </span>
+                  );
+                })}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const renderMetadata = (meta: InterProMetadata) => {
@@ -677,6 +729,46 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Prominent Loading UI for Metadata */}
+                {loadingMetadata[key] && (
+                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-300 p-4 rounded-lg shadow-md">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="font-bold text-blue-900 mb-1">
+                          Fetching Detailed Information
+                        </h4>
+                        <p className="text-sm text-blue-700">
+                          Retrieving metadata for {accession} from {database}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Time elapsed: {formatElapsedTime(elapsedTime[key] || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prominent Loading UI for Alignment */}
+                {loadingAlignment[key] && (
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 p-4 rounded-lg shadow-md">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-purple-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="font-bold text-purple-900 mb-1">
+                          Fetching Seed Alignment
+                        </h4>
+                        <p className="text-sm text-purple-700">
+                          Retrieving sequence alignment for {accession}
+                        </p>
+                        <p className="text-xs text-purple-600 mt-1">
+                          Time elapsed: {formatElapsedTime(elapsedTime[`align_${key}`] || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Error Display */}
                 {metadataError[key] && (
