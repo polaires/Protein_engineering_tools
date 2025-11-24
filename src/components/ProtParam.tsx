@@ -4,8 +4,9 @@
  */
 
 import { useState } from 'react';
-import { Dna, Info, AlertCircle, Droplet } from 'lucide-react';
+import { Dna, Info, AlertCircle, Droplet, Search, Loader2 } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
+import { searchPfamDomains, PfamSearchResult } from '@/services/pfamApi';
 import ProteinConcentration from './ProteinConcentration';
 
 type ProtParamTab = 'analysis' | 'concentration';
@@ -15,6 +16,8 @@ export default function ProtParam() {
   const [sequence, setSequence] = useState('');
   const [result, setResult] = useState<ProteinAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pfamResult, setPfamResult] = useState<PfamSearchResult | null>(null);
+  const [pfamLoading, setPfamLoading] = useState(false);
 
   const handleAnalyze = () => {
     setError(null);
@@ -32,12 +35,32 @@ export default function ProtParam() {
     setSequence('');
     setResult(null);
     setError(null);
+    setPfamResult(null);
   };
 
   const handleLoadExample = () => {
     // Example: Human Insulin A chain
     const exampleSeq = 'GIVEQCCTSICSLYQLENYCN';
     setSequence(exampleSeq);
+  };
+
+  const handleSearchPfam = async () => {
+    setError(null);
+    setPfamLoading(true);
+
+    try {
+      const pfamData = await searchPfamDomains(sequence);
+      setPfamResult(pfamData);
+
+      if (!pfamData.success && pfamData.error) {
+        setError(pfamData.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Pfam search failed');
+      setPfamResult(null);
+    } finally {
+      setPfamLoading(false);
+    }
   };
 
   return (
@@ -91,17 +114,38 @@ export default function ProtParam() {
           </div>
         </div>
 
-        <div className="flex gap-3">
-          <button onClick={handleAnalyze} className="btn-primary flex-1">
-            <Dna className="w-5 h-5 mr-2" />
-            Analyze Protein
-          </button>
-          <button onClick={handleLoadExample} className="btn-secondary">
-            Load Example
-          </button>
-          <button onClick={handleClear} className="btn-secondary">
-            Clear
-          </button>
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-3">
+            <button onClick={handleAnalyze} className="btn-primary flex-1">
+              <Dna className="w-5 h-5 mr-2" />
+              Analyze Protein
+            </button>
+            <button
+              onClick={handleSearchPfam}
+              className="btn-primary flex-1"
+              disabled={pfamLoading || !sequence.trim()}
+            >
+              {pfamLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Searching Pfam...
+                </>
+              ) : (
+                <>
+                  <Search className="w-5 h-5 mr-2" />
+                  Search Pfam Domains
+                </>
+              )}
+            </button>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleLoadExample} className="btn-secondary">
+              Load Example
+            </button>
+            <button onClick={handleClear} className="btn-secondary">
+              Clear
+            </button>
+          </div>
         </div>
       </div>
 
@@ -292,6 +336,151 @@ export default function ProtParam() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Pfam Domain Results */}
+      {pfamResult && pfamResult.success && (
+        <div className="card">
+          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <Search className="w-5 h-5" />
+            Pfam Domain Search Results
+          </h3>
+
+          {pfamResult.domains.length === 0 ? (
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center">
+              <Info className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+              <p className="text-slate-600 dark:text-slate-400">
+                No Pfam domains found for this sequence.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-600 dark:text-slate-400">Domains Found:</span>
+                    <span className="ml-2 font-bold text-blue-700 dark:text-blue-300">
+                      {pfamResult.domains.length}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-600 dark:text-slate-400">Sequence Length:</span>
+                    <span className="ml-2 font-bold text-blue-700 dark:text-blue-300">
+                      {pfamResult.sequenceLength} aa
+                    </span>
+                  </div>
+                  {pfamResult.searchTime && (
+                    <div>
+                      <span className="text-slate-600 dark:text-slate-400">Search Time:</span>
+                      <span className="ml-2 font-bold text-blue-700 dark:text-blue-300">
+                        {(pfamResult.searchTime / 1000).toFixed(1)}s
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b-2 border-slate-300 dark:border-slate-600">
+                      <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Pfam ID
+                      </th>
+                      <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Accession
+                      </th>
+                      <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Description
+                      </th>
+                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Position
+                      </th>
+                      <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        E-value
+                      </th>
+                      <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Bit Score
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pfamResult.domains.map((domain, idx) => (
+                      <tr
+                        key={idx}
+                        className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      >
+                        <td className="p-3">
+                          <a
+                            href={`https://www.ebi.ac.uk/interpro/entry/pfam/${domain.acc}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                          >
+                            {domain.name}
+                          </a>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                            {domain.acc}
+                          </span>
+                        </td>
+                        <td className="p-3 text-sm text-slate-700 dark:text-slate-300">
+                          {domain.description || 'N/A'}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="font-mono text-sm bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
+                            {domain.start}-{domain.end}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono text-sm">
+                          {domain.evalue.toExponential(2)}
+                        </td>
+                        <td className="p-3 text-right font-mono text-sm font-semibold">
+                          {domain.bitscore.toFixed(1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-2">
+                  Domain Coverage Visualization
+                </h4>
+                <div className="relative h-12 bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden">
+                  {pfamResult.domains.map((domain, idx) => {
+                    const start = (domain.start / pfamResult.sequenceLength) * 100;
+                    const width = ((domain.end - domain.start + 1) / pfamResult.sequenceLength) * 100;
+                    const colors = [
+                      'bg-blue-500',
+                      'bg-green-500',
+                      'bg-purple-500',
+                      'bg-orange-500',
+                      'bg-pink-500',
+                      'bg-cyan-500',
+                    ];
+                    const color = colors[idx % colors.length];
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`absolute h-full ${color} opacity-80 hover:opacity-100 transition-opacity cursor-pointer`}
+                        style={{ left: `${start}%`, width: `${width}%` }}
+                        title={`${domain.name} (${domain.start}-${domain.end})`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  <span>1</span>
+                  <span>{pfamResult.sequenceLength} aa</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
         </>
