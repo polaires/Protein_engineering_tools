@@ -176,17 +176,32 @@ async function sendVerificationEmail(email, token, username) {
             </p>
 
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${verificationUrl}"
-                 style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer;">
-                Verify Email Address
-              </a>
+              <!--[if mso]>
+              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${verificationUrl}" style="height:50px;v-text-anchor:middle;width:220px;" arcsize="16%" stroke="f" fillcolor="#667eea">
+                <w:anchorlock/>
+                <center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:600;">Verify Email Address</center>
+              </v:roundrect>
+              <![endif]-->
+              <!--[if !mso]><!-->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin: 0 auto;">
+                <tr>
+                  <td style="border-radius: 8px; background: #667eea;">
+                    <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" style="display: block; background: #667eea; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; mso-padding-alt: 0; border: 1px solid #667eea;">
+                      <!--[if mso]><i style="letter-spacing: 32px; mso-font-width: -100%; mso-text-raise: 30pt;">&nbsp;</i><![endif]-->
+                      <span style="mso-text-raise: 15pt;">Verify Email Address</span>
+                      <!--[if mso]><i style="letter-spacing: 32px; mso-font-width: -100%;">&nbsp;</i><![endif]-->
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <!--<![endif]-->
             </div>
 
             <p style="font-size: 14px; color: #6b7280;">
-              Or copy and paste this link into your browser:
+              Or click this link directly:
             </p>
-            <p style="background: #fff; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-family: monospace; font-size: 13px; word-break: break-all; color: #667eea;">
-              ${verificationUrl}
+            <p style="background: #fff; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 13px; word-break: break-all;">
+              <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" style="color: #667eea; text-decoration: underline;">${verificationUrl}</a>
             </p>
 
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
@@ -522,9 +537,11 @@ app.post('/api/auth/verify-email', async (req, res) => {
       const user = tokenCheck.rows[0];
       if (user.email_verified) {
         console.log('Email already verified');
+        // Return alreadyVerified flag so client can show success instead of error
         return res.json({
-          success: false,
-          message: 'Email has already been verified. You can now log in.'
+          success: true,
+          alreadyVerified: true,
+          message: 'Your email has already been verified! You can continue using the app.'
         });
       }
 

@@ -2,7 +2,7 @@
  * Email Verification Page
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Mail, CheckCircle, XCircle, Loader } from 'lucide-react';
 
 interface VerifyEmailProps {
@@ -13,9 +13,18 @@ interface VerifyEmailProps {
 export default function VerifyEmail({ token, onVerified }: VerifyEmailProps) {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
+  // Prevent double-invocation from React StrictMode or network retries
+  const verificationAttempted = useRef(false);
+  const verificationSucceeded = useRef(false);
 
   useEffect(() => {
     async function verifyEmail() {
+      // Prevent duplicate API calls - only make one attempt per token
+      if (verificationAttempted.current) {
+        return;
+      }
+      verificationAttempted.current = true;
+
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
         const response = await fetch(`${apiUrl}/api/auth/verify-email`, {
@@ -26,7 +35,13 @@ export default function VerifyEmail({ token, onVerified }: VerifyEmailProps) {
 
         const data = await response.json();
 
-        if (data.success) {
+        // Don't update state if we already succeeded (handles race conditions)
+        if (verificationSucceeded.current) {
+          return;
+        }
+
+        if (data.success || data.alreadyVerified) {
+          verificationSucceeded.current = true;
           setStatus('success');
           setMessage(data.message || 'Your email has been successfully verified!');
           if (onVerified) {
@@ -38,8 +53,11 @@ export default function VerifyEmail({ token, onVerified }: VerifyEmailProps) {
         }
       } catch (error) {
         console.error('Verification error:', error);
-        setStatus('error');
-        setMessage('An error occurred while verifying your email. Please try again.');
+        // Only show error if we haven't already succeeded
+        if (!verificationSucceeded.current) {
+          setStatus('error');
+          setMessage('An error occurred while verifying your email. Please try again.');
+        }
       }
     }
 
