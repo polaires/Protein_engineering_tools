@@ -4,10 +4,12 @@
  */
 
 import { useState } from 'react';
-import { Dna, Info, AlertCircle, Droplet, Search, Loader2 } from 'lucide-react';
+import { Dna, Info, AlertCircle, Droplet, Search, Loader2, Database } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
 import { searchPfamDomains, PfamSearchResult } from '@/services/pfamApi';
+import { submitInterProScan, InterProResult } from '@/services/interProApi';
 import ProteinConcentration from './ProteinConcentration';
+import InterProAnalysis from './InterProAnalysis';
 
 type ProtParamTab = 'analysis' | 'concentration';
 
@@ -18,6 +20,8 @@ export default function ProtParam() {
   const [error, setError] = useState<string | null>(null);
   const [pfamResult, setPfamResult] = useState<PfamSearchResult | null>(null);
   const [pfamLoading, setPfamLoading] = useState(false);
+  const [interProResult, setInterProResult] = useState<InterProResult | null>(null);
+  const [interProLoading, setInterProLoading] = useState(false);
 
   const handleAnalyze = () => {
     setError(null);
@@ -36,6 +40,7 @@ export default function ProtParam() {
     setResult(null);
     setError(null);
     setPfamResult(null);
+    setInterProResult(null);
   };
 
   const handleLoadExample = () => {
@@ -60,6 +65,25 @@ export default function ProtParam() {
       setPfamResult(null);
     } finally {
       setPfamLoading(false);
+    }
+  };
+
+  const handleSearchInterPro = async () => {
+    setError(null);
+    setInterProLoading(true);
+
+    try {
+      const interProData = await submitInterProScan(sequence);
+      setInterProResult(interProData);
+
+      if (!interProData.success && interProData.error) {
+        setError(interProData.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'InterPro search failed');
+      setInterProResult(null);
+    } finally {
+      setInterProLoading(false);
     }
   };
 
@@ -134,6 +158,25 @@ export default function ProtParam() {
                 <>
                   <Search className="w-5 h-5 mr-2" />
                   Search Pfam Domains
+                </>
+              )}
+            </button>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleSearchInterPro}
+              className="btn-primary flex-1"
+              disabled={interProLoading || !sequence.trim()}
+            >
+              {interProLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Analyzing with InterProScan...
+                </>
+              ) : (
+                <>
+                  <Database className="w-5 h-5 mr-2" />
+                  Full InterProScan Analysis
                 </>
               )}
             </button>
@@ -340,11 +383,36 @@ export default function ProtParam() {
       )}
 
       {/* Pfam Domain Results */}
+      {/* InterProScan Results */}
+      {interProResult && interProResult.success && (
+        <div className="card">
+          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <Database className="w-5 h-5" />
+            InterProScan Analysis Results
+          </h3>
+
+          {interProResult.matches.length === 0 ? (
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center">
+              <Info className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+              <p className="text-slate-600 dark:text-slate-400">
+                No domains found for this sequence in InterPro databases.
+              </p>
+            </div>
+          ) : (
+            <InterProAnalysis
+              matches={interProResult.matches}
+              sequenceLength={interProResult.sequenceLength}
+              querySequence={sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase()}
+            />
+          )}
+        </div>
+      )}
+
       {pfamResult && pfamResult.success && (
         <div className="card">
           <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
             <Search className="w-5 h-5" />
-            Pfam Domain Search Results
+            Pfam Domain Search Results (Fast)
           </h3>
 
           {pfamResult.domains.length === 0 ? (

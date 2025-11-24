@@ -1118,6 +1118,97 @@ app.get('/api/hmmer/results/:jobId', async (req, res) => {
 });
 
 // ============================================================================
+// InterProScan Proxy Endpoints
+// ============================================================================
+
+// Submit sequence to InterProScan
+app.post('/api/interpro/submit', async (req, res) => {
+  try {
+    console.log('InterProScan submit request received:', { hasSequence: !!req.body.sequence });
+
+    const { sequence } = req.body;
+
+    if (!sequence) {
+      console.error('No sequence provided');
+      return res.status(400).json({ error: 'Sequence is required' });
+    }
+
+    console.log('Submitting to InterProScan API with sequence length:', sequence.length);
+
+    // Prepare form data for InterProScan 5 REST API
+    const formData = new URLSearchParams();
+    formData.append('email', 'anonymous@example.com');
+    formData.append('sequence', sequence);
+    formData.append('goterms', 'false');
+    formData.append('pathways', 'false');
+
+    const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/services/rest/iprscan5/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'text/plain'
+      },
+      body: formData.toString(),
+    });
+
+    console.log('InterProScan API response status:', submitResponse.status);
+
+    if (!submitResponse.ok) {
+      const errorText = await submitResponse.text();
+      console.error('InterProScan submission failed:', errorText);
+      throw new Error(`InterProScan submission failed: ${submitResponse.status}`);
+    }
+
+    const jobId = await submitResponse.text();
+    console.log('InterProScan job submitted:', jobId);
+
+    res.json({ jobId });
+  } catch (error) {
+    console.error('InterProScan submit proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check InterProScan job status and get results
+app.get('/api/interpro/status/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    console.log('Checking InterProScan status for job:', jobId);
+
+    // Check status
+    const statusResponse = await fetch(`https://www.ebi.ac.uk/Tools/services/rest/iprscan5/status/${jobId}`);
+
+    if (!statusResponse.ok) {
+      throw new Error(`Status check failed: ${statusResponse.status}`);
+    }
+
+    const status = await statusResponse.text();
+    console.log('InterProScan job status:', status);
+
+    if (status === 'FINISHED') {
+      // Fetch results
+      const resultResponse = await fetch(`https://www.ebi.ac.uk/Tools/services/rest/iprscan5/result/${jobId}/json`);
+
+      if (!resultResponse.ok) {
+        throw new Error(`Results fetch failed: ${resultResponse.status}`);
+      }
+
+      const data = await resultResponse.json();
+      console.log('InterProScan results received for job:', jobId);
+      res.json({ status: 'FINISHED', data });
+    } else if (status === 'RUNNING') {
+      res.json({ status: 'RUNNING' });
+    } else {
+      res.json({ status });
+    }
+  } catch (error) {
+    console.error('InterProScan status proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
 // Health Check
 // ============================================================================
 
