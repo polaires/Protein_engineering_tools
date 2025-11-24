@@ -13,16 +13,130 @@ type DNATab = 'assembly' | 'codon' | 'library';
 type VectorSelection = 'largest' | 'smallest' | 'manual';
 type GoldenGateEnzyme = 'BsaI-HFv2' | 'BsmBI-v2' | 'BbsI-HF' | 'Esp3I' | 'SapI' | 'PaqCI';
 type BufferSystem = 'T4-ligase-buffer' | 'NEBridge-master-mix';
+type AssemblyComplexity = 'standard' | 'complex' | 'library';
 
-// Enzyme information database
-const ENZYME_INFO: Record<GoldenGateEnzyme, { temp: number; overhang: number; recognition: string; notes: string }> = {
-  'BsaI-HFv2': { temp: 37, overhang: 4, recognition: "GGTCTC", notes: 'Most common, Time-Saver qualified' },
-  'BsmBI-v2': { temp: 42, overhang: 4, recognition: "CGTCTC", notes: 'Higher temp, good for GC-rich' },
-  'Esp3I': { temp: 37, overhang: 4, recognition: "CGTCTC", notes: 'BsmBI isoschizomer, faster at 37°C' },
-  'BbsI-HF': { temp: 37, overhang: 4, recognition: "GAAGAC", notes: 'Alternative recognition site' },
-  'SapI': { temp: 37, overhang: 3, recognition: "GCTCTTC", notes: '7bp recognition, 3bp overhang' },
-  'PaqCI': { temp: 37, overhang: 4, recognition: "CACCTGC", notes: '7bp recognition, reduces internal sites' },
+// Enzyme information database (base info only - cycling depends on fragment count)
+const ENZYME_INFO: Record<GoldenGateEnzyme, {
+  temp: number;
+  overhang: number;
+  recognition: string;
+  notes: string;
+  heatInactivation: number; // °C for final heat inactivation
+}> = {
+  'BsaI-HFv2': {
+    temp: 37, overhang: 4, recognition: "GGTCTC",
+    notes: 'Most common, Time-Saver qualified',
+    heatInactivation: 60
+  },
+  'BsmBI-v2': {
+    temp: 42, overhang: 4, recognition: "CGTCTC",
+    notes: 'Higher temp, good for GC-rich',
+    heatInactivation: 60
+  },
+  'Esp3I': {
+    temp: 37, overhang: 4, recognition: "CGTCTC",
+    notes: 'BsmBI isoschizomer, faster at 37°C',
+    heatInactivation: 60
+  },
+  'BbsI-HF': {
+    temp: 37, overhang: 4, recognition: "GAAGAC",
+    notes: 'Alternative recognition site',
+    heatInactivation: 65
+  },
+  'SapI': {
+    temp: 37, overhang: 3, recognition: "GCTCTTC",
+    notes: '7bp recognition, 3bp overhang',
+    heatInactivation: 65
+  },
+  'PaqCI': {
+    temp: 37, overhang: 4, recognition: "CACCTGC",
+    notes: '7bp recognition, reduces internal sites',
+    heatInactivation: 60
+  },
 };
+
+// Generate cycling protocol based on fragment count, enzyme, and complexity
+// Based on NEB recommendations: https://www.neb.com/tools-and-resources/usage-guidelines/technical-tips-for-optimizing-golden-gate-assembly-reactions
+interface CyclingProtocol {
+  method: 'isothermal' | 'cycling';
+  digestTemp: number;
+  ligationTemp: number;
+  digestTime: string;
+  ligationTime: string;
+  cycles: number;
+  heatInactivation: { temp: number; time: string };
+  notes: string;
+  summary: string;
+}
+
+function getCyclingProtocol(
+  enzyme: GoldenGateEnzyme,
+  fragmentCount: number,
+  complexity: AssemblyComplexity
+): CyclingProtocol {
+  const enzymeInfo = ENZYME_INFO[enzyme];
+  const digestTemp = enzymeInfo.temp;
+  const heatInactivation = { temp: enzymeInfo.heatInactivation, time: '5 min' };
+
+  // Library assembly - isothermal for maximum diversity representation
+  if (complexity === 'library') {
+    return {
+      method: 'isothermal',
+      digestTemp,
+      ligationTemp: digestTemp, // Same temp for isothermal
+      digestTime: fragmentCount > 10 ? '16 hr' : '5 hr',
+      ligationTime: '-',
+      cycles: 1,
+      heatInactivation,
+      notes: 'Isothermal incubation for library diversity. Use high-conc T4 ligase for >10 parts.',
+      summary: `${digestTemp}°C for ${fragmentCount > 10 ? '16 hr' : '5 hr'}, then ${heatInactivation.temp}°C ${heatInactivation.time}`
+    };
+  }
+
+  // Simple assembly (1-4 fragments) - can use short isothermal
+  if (fragmentCount <= 4 && complexity === 'standard') {
+    return {
+      method: 'isothermal',
+      digestTemp,
+      ligationTemp: digestTemp,
+      digestTime: '1 hr',
+      ligationTime: '-',
+      cycles: 1,
+      heatInactivation,
+      notes: 'Simple 1-4 fragment assembly works well with isothermal incubation.',
+      summary: `${digestTemp}°C for 1 hr, then ${heatInactivation.temp}°C ${heatInactivation.time}`
+    };
+  }
+
+  // Standard cycling protocol for 5-10 fragments
+  if (fragmentCount <= 10) {
+    return {
+      method: 'cycling',
+      digestTemp,
+      ligationTemp: 16,
+      digestTime: '1 min',
+      ligationTime: '1 min',
+      cycles: 30,
+      heatInactivation,
+      notes: 'Standard cycling for 5-10 fragments. 1 µL enzyme mix per 20 µL.',
+      summary: `30× (${digestTemp}°C 1min → 16°C 1min), then ${heatInactivation.temp}°C ${heatInactivation.time}`
+    };
+  }
+
+  // Complex assembly (>10 fragments) - extended cycling with longer times
+  const cycles = complexity === 'complex' ? 60 : 45;
+  return {
+    method: 'cycling',
+    digestTemp,
+    ligationTemp: 16,
+    digestTime: '5 min',
+    ligationTime: '5 min',
+    cycles,
+    heatInactivation,
+    notes: `Extended cycling for ${fragmentCount} fragments. Use 2 µL enzyme mix per 20 µL. Consider overnight protocol.`,
+    summary: `${cycles}× (${digestTemp}°C 5min → 16°C 5min), then ${heatInactivation.temp}°C ${heatInactivation.time}`
+  };
+}
 
 interface DNAFragment {
   id: string;
@@ -69,11 +183,12 @@ export default function DNA() {
     { id: '2', name: 'Insert 1', size: 1000, concentration: 100 },
   ]);
   const [insertRatio, setInsertRatio] = useState(2); // Default 2:1 insert:vector (NEB recommended)
-  const [totalVolume, setTotalVolume] = useState(20); // µl - NEB standard is 20 µL
+  const [totalVolume, setTotalVolume] = useState(20); // µl - T4 buffer: 20 µL, NEBridge: 15 µL
   const [vectorSelection, setVectorSelection] = useState<VectorSelection>('largest');
   const [manualVectorId, setManualVectorId] = useState<string | null>(null);
   const [enzyme, setEnzyme] = useState<GoldenGateEnzyme>('BsaI-HFv2');
   const [bufferSystem, setBufferSystem] = useState<BufferSystem>('T4-ligase-buffer');
+  const [assemblyComplexity, setAssemblyComplexity] = useState<AssemblyComplexity>('standard');
 
   // Results
   const [results, setResults] = useState<CalculationResult[] | null>(null);
@@ -81,6 +196,25 @@ export default function DNA() {
   // Track if recommendation should be highlighted (after size change)
   const [showRecommendationHighlight, setShowRecommendationHighlight] = useState(false);
   const prevRecommendationRef = useRef<number>(2);
+
+  // Standard volumes for each buffer system (NEB protocols)
+  // T4 DNA Ligase Buffer: 20 µL standard reaction
+  // NEBridge Ligase Master Mix: 15 µL standard reaction
+  const getStandardVolume = (buffer: BufferSystem): number => {
+    return buffer === 'NEBridge-master-mix' ? 15 : 20;
+  };
+
+  // Update total volume when buffer system changes (only if at standard volume)
+  const prevBufferRef = useRef<BufferSystem>(bufferSystem);
+  useEffect(() => {
+    const oldStandard = getStandardVolume(prevBufferRef.current);
+    const newStandard = getStandardVolume(bufferSystem);
+    // Only auto-update if user hasn't changed volume from the previous standard
+    if (totalVolume === oldStandard) {
+      setTotalVolume(newStandard);
+    }
+    prevBufferRef.current = bufferSystem;
+  }, [bufferSystem, totalVolume]);
 
   // Determine which fragment is the vector
   const vectorId = useMemo(() => {
@@ -154,6 +288,11 @@ export default function DNA() {
       confidence: 'high'
     };
   }, [fragments, vectorId]);
+
+  // Get dynamic cycling protocol based on fragment count, enzyme, and complexity
+  const cyclingProtocol = useMemo(() => {
+    return getCyclingProtocol(enzyme, fragments.length, assemblyComplexity);
+  }, [enzyme, fragments.length, assemblyComplexity]);
 
   // Show notification when recommendation changes
   useEffect(() => {
@@ -238,9 +377,10 @@ export default function DNA() {
       return;
     }
 
-    // Base pmol for vector (0.05 pmol at 20 µL standard reaction)
+    // Base pmol for vector (0.05 pmol at standard reaction volume)
     // Scale proportionally with total volume to maintain proper DNA concentration
-    const standardVolume = 20; // µL - NEB standard reaction volume
+    // T4 buffer: 20 µL standard, NEBridge: 15 µL standard
+    const standardVolume = getStandardVolume(bufferSystem);
     const basePmol = 0.05 * (totalVolume / standardVolume);
 
     // Calculate for each fragment with proper insert:vector ratio
@@ -397,7 +537,7 @@ export default function DNA() {
         <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
           Protocol Information
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 dark:text-slate-300">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700 dark:text-slate-300">
           <div className="space-y-1">
             <p><strong>Enzyme:</strong> {enzyme} ({ENZYME_INFO[enzyme].recognition}, {ENZYME_INFO[enzyme].overhang}bp overhang)</p>
             <p><strong>Temperature:</strong> {ENZYME_INFO[enzyme].temp}°C</p>
@@ -406,7 +546,12 @@ export default function DNA() {
           <div className="space-y-1">
             <p><strong>Buffer:</strong> {bufferSystem === 'NEBridge-master-mix' ? 'NEBridge Ligase Master Mix (3X)' : 'T4 DNA Ligase Buffer (10X)'}</p>
             <p><strong>Ratio:</strong> {insertRatio}:1 insert:vector</p>
-            <p><strong>Base:</strong> 0.05 pmol vector at 20 µL (scales with volume)</p>
+            <p><strong>Base:</strong> 0.05 pmol vector at {getStandardVolume(bufferSystem)} µL (scales with volume)</p>
+          </div>
+          <div className="space-y-1">
+            <p><strong>Cycling Protocol ({cyclingProtocol.method}):</strong></p>
+            <p className="text-xs font-mono bg-white/50 dark:bg-slate-900/50 p-1 rounded">{cyclingProtocol.summary}</p>
+            <p className="text-xs text-slate-500 mt-1">{cyclingProtocol.notes}</p>
           </div>
         </div>
       </div>
@@ -423,12 +568,15 @@ export default function DNA() {
             <input
               type="number"
               className="input-field"
-              placeholder="20"
+              placeholder={bufferSystem === 'NEBridge-master-mix' ? '15' : '20'}
               step="5"
               min="10"
               value={totalVolume}
-              onChange={(e) => setTotalVolume(parseFloat(e.target.value) || 20)}
+              onChange={(e) => setTotalVolume(parseFloat(e.target.value) || getStandardVolume(bufferSystem))}
             />
+            <div className="text-xs text-slate-500 mt-1">
+              Standard: {getStandardVolume(bufferSystem)} µL for {bufferSystem === 'NEBridge-master-mix' ? 'NEBridge' : 'T4 buffer'}
+            </div>
           </div>
           <div>
             <label className="input-label">Buffer System</label>
@@ -468,7 +616,24 @@ export default function DNA() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="input-label">Assembly Complexity</label>
+            <select
+              className="input-field"
+              value={assemblyComplexity}
+              onChange={(e) => setAssemblyComplexity(e.target.value as AssemblyComplexity)}
+            >
+              <option value="standard">Standard (default protocol)</option>
+              <option value="complex">Complex (extended cycling)</option>
+              <option value="library">Library (isothermal, max diversity)</option>
+            </select>
+            <div className="text-xs text-slate-500 mt-1">
+              {assemblyComplexity === 'standard' && 'Auto-selects isothermal (≤4 parts) or cycling (5+ parts)'}
+              {assemblyComplexity === 'complex' && 'Extended 60-cycle protocol for >10 fragments'}
+              {assemblyComplexity === 'library' && 'Long isothermal incubation for library diversity'}
+            </div>
+          </div>
           <div>
             <label className="input-label">
               Insert:Vector Ratio *
@@ -504,8 +669,6 @@ export default function DNA() {
             </select>
           </div>
         </div>
-
-        <div className="divider" />
 
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
