@@ -133,11 +133,12 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
                   return (
                     <span
                       key={aaIdx}
-                      className="relative group cursor-help border-r border-gray-100"
+                      className="inline-block text-center relative group cursor-help border-r border-gray-100"
                       style={{
                         backgroundColor: color,
                         color: textColor,
                         fontWeight: cons > 0.8 ? 'bold' : 'normal',
+                        width: '1ch',
                       }}
                       title={`Position ${aaIdx + 1}\nResidue: ${aa}\nConservation: ${(cons * 100).toFixed(0)}%`}
                     >

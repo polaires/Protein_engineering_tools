@@ -113,7 +113,11 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
     // Auto-trigger metadata fetch when expanding
     if (newExpandedState !== null && accession && database) {
       const key = `${accession}_${database}`;
-      if (!metadata[key] && !loadingMetadata[key] && !metadataError[key]) {
+      console.log('Toggle expanded:', { key, hasMetadata: !!metadata[key], isLoading: !!loadingMetadata[key] });
+
+      // Fetch metadata if not already loaded or loading
+      if (!metadata[key] && !loadingMetadata[key]) {
+        console.log('Auto-triggering metadata fetch for', key);
         handleFetchMetadata(accession, database);
       }
     }
