@@ -673,6 +673,9 @@ export default function ProtParam() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b-2 border-slate-300 dark:border-slate-600">
+                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Action
+                      </th>
                       <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Pfam ID
                       </th>
@@ -691,9 +694,6 @@ export default function ProtParam() {
                       <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Bit Score
                       </th>
-                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Actions
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -701,11 +701,28 @@ export default function ProtParam() {
                       const baseAccession = domain.acc.split('.')[0];
                       const meta = pfamMetadata[baseAccession];
 
+                      // Helper to strip HTML tags from description
+                      const stripHtml = (html: string): string => {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = html;
+                        return tmp.textContent || tmp.innerText || '';
+                      };
+
                       // Description can be string or object with {text, llm, checked, updated}
                       const descItem = meta?.description?.[0];
-                      const description = descItem
+                      let description = descItem
                         ? (typeof descItem === 'string' ? descItem : (descItem as any)?.text || 'Loading...')
                         : (domain.description || 'Loading...');
+
+                      // Strip HTML tags if present
+                      if (description && description.includes('<')) {
+                        description = stripHtml(description);
+                      }
+
+                      // Truncate description for table display
+                      const truncatedDescription = description.length > 100
+                        ? description.substring(0, 100) + '...'
+                        : description;
 
                       // Handle name being either string or object {name, short}
                       const displayName = meta?.name
@@ -717,6 +734,26 @@ export default function ProtParam() {
                           key={idx}
                           className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                         >
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleAlignPfamDomain(domain.acc)}
+                              disabled={pfamAlignmentLoading[domain.acc]}
+                              className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 mx-auto transition-all shadow-sm hover:shadow-md"
+                              title={`Align seed sequences with ${alignmentTool.toUpperCase()}`}
+                            >
+                              {pfamAlignmentLoading[domain.acc] ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Aligning...
+                                </>
+                              ) : (
+                                <>
+                                  <GitCompare className="w-3 h-3" />
+                                  Align
+                                </>
+                              )}
+                            </button>
+                          </td>
                           <td className="p-3">
                             <a
                               href={`https://www.ebi.ac.uk/interpro/entry/pfam/${domain.acc}`}
@@ -734,11 +771,13 @@ export default function ProtParam() {
                             </span>
                           </td>
                           <td className="p-3 text-sm text-slate-700 dark:text-slate-300">
-                            <div className="max-w-md">
-                              {description}
+                            <div className="max-w-sm">
+                              <div title={description}>
+                                {truncatedDescription}
+                              </div>
                               {meta?.literature && Object.keys(meta.literature).length > 0 && (
                                 <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                                  📚 {Object.keys(meta.literature).length} reference(s) available
+                                  📚 {Object.keys(meta.literature).length} reference(s)
                                 </div>
                               )}
                             </div>
@@ -754,26 +793,6 @@ export default function ProtParam() {
                         <td className="p-3 text-right font-mono text-sm font-semibold">
                           {domain.bitscore.toFixed(1)}
                         </td>
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => handleAlignPfamDomain(domain.acc)}
-                            disabled={pfamAlignmentLoading[domain.acc]}
-                            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 mx-auto"
-                            title={`Align seed sequences with ${alignmentTool.toUpperCase()}`}
-                          >
-                            {pfamAlignmentLoading[domain.acc] ? (
-                              <>
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Aligning...
-                              </>
-                            ) : (
-                              <>
-                                <GitCompare className="w-3 h-3" />
-                                Align
-                              </>
-                            )}
-                          </button>
-                        </td>
                       </tr>
                       )
                     })}
@@ -782,36 +801,55 @@ export default function ProtParam() {
               </div>
 
               <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-2">
-                  Domain Coverage Visualization
+                <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-3">
+                  Domain Coverage Map
                 </h4>
-                <div className="relative h-12 bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden">
-                  {pfamResult.domains.map((domain, idx) => {
-                    const start = (domain.start / pfamResult.sequenceLength) * 100;
-                    const width = ((domain.end - domain.start + 1) / pfamResult.sequenceLength) * 100;
-                    const colors = [
-                      'bg-blue-500',
-                      'bg-green-500',
-                      'bg-purple-500',
-                      'bg-orange-500',
-                      'bg-pink-500',
-                      'bg-cyan-500',
-                    ];
-                    const color = colors[idx % colors.length];
+                <div className="relative h-16 bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden">
+                  {/* Position scale markers */}
+                  <div className="absolute top-0 left-0 right-0 h-4 flex items-center text-xs text-slate-600 dark:text-slate-400">
+                    <span className="absolute left-2">1</span>
+                    <span className="absolute left-1/4">|</span>
+                    <span className="absolute left-1/2">|</span>
+                    <span className="absolute left-3/4">|</span>
+                    <span className="absolute right-2">{pfamResult.sequenceLength}</span>
+                  </div>
 
-                    return (
-                      <div
-                        key={idx}
-                        className={`absolute h-full ${color} opacity-80 hover:opacity-100 transition-opacity cursor-pointer`}
-                        style={{ left: `${start}%`, width: `${width}%` }}
-                        title={`${domain.name} (${domain.start}-${domain.end})`}
-                      />
-                    );
-                  })}
+                  {/* Domain bars */}
+                  <div className="absolute top-4 bottom-0 left-0 right-0">
+                    {pfamResult.domains.map((domain, idx) => {
+                      const start = (domain.start / pfamResult.sequenceLength) * 100;
+                      const width = ((domain.end - domain.start + 1) / pfamResult.sequenceLength) * 100;
+                      const colors = [
+                        'bg-blue-500',
+                        'bg-green-500',
+                        'bg-purple-500',
+                        'bg-orange-500',
+                        'bg-pink-500',
+                        'bg-cyan-500',
+                      ];
+                      const color = colors[idx % colors.length];
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`absolute h-full ${color} opacity-80 hover:opacity-100 transition-opacity cursor-pointer group`}
+                          style={{ left: `${start}%`, width: `${width}%` }}
+                          title={`${domain.name}: ${domain.start}-${domain.end} (${domain.end - domain.start + 1} aa)`}
+                        >
+                          {/* Tooltip on hover */}
+                          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
+                            {domain.name}<br/>
+                            {domain.start}-{domain.end}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  <span>1</span>
-                  <span>{pfamResult.sequenceLength} aa</span>
+                <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  <span>Residue 1</span>
+                  <span className="text-center">Sequence Length: {pfamResult.sequenceLength} aa</span>
+                  <span>Residue {pfamResult.sequenceLength}</span>
                 </div>
               </div>
             </>
