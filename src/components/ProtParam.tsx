@@ -3,7 +3,7 @@
  * Computes various physical and chemical parameters for proteins
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dna, Info, AlertCircle, Droplet, Search, Loader2, Database, GitCompare } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
 import { searchPfamDomains, PfamSearchResult } from '@/services/pfamApi';
@@ -24,10 +24,50 @@ export default function ProtParam() {
   const [pfamLoading, setPfamLoading] = useState(false);
   const [interProResult, setInterProResult] = useState<InterProResult | null>(null);
   const [interProLoading, setInterProLoading] = useState(false);
+  const [interProElapsedTime, setInterProElapsedTime] = useState(0);
   const [alignmentResult, setAlignmentResult] = useState<AlignmentResult | null>(null);
   const [alignmentLoading, setAlignmentLoading] = useState(false);
   const [alignmentTool, setAlignmentTool] = useState<AlignmentTool>('muscle');
   const [pfamAlignmentLoading, setPfamAlignmentLoading] = useState<Record<string, boolean>>({});
+  const interProTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Timer effect for InterProScan
+  useEffect(() => {
+    if (interProLoading) {
+      setInterProElapsedTime(0);
+      interProTimerRef.current = setInterval(() => {
+        setInterProElapsedTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (interProTimerRef.current) {
+        clearInterval(interProTimerRef.current);
+        interProTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (interProTimerRef.current) {
+        clearInterval(interProTimerRef.current);
+      }
+    };
+  }, [interProLoading]);
+
+  // Format elapsed time and estimate
+  const formatInterProProgress = (elapsedSeconds: number) => {
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    const timeStr = minutes > 0
+      ? `${minutes}:${seconds.toString().padStart(2, '0')}`
+      : `${seconds}s`;
+
+    // Estimate: InterProScan typically takes 2-10 minutes
+    // Provide estimate based on sequence length
+    const sequenceLength = sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').length;
+    const estimatedMinutes = Math.max(2, Math.min(10, Math.ceil(sequenceLength / 100)));
+    const estimateStr = estimatedMinutes === 1 ? '1 minute' : `${estimatedMinutes} minutes`;
+
+    return { timeStr, estimateStr };
+  };
 
   const handleAnalyze = () => {
     setError(null);
@@ -280,7 +320,13 @@ export default function ProtParam() {
               {interProLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Analyzing with InterProScan...
+                  <span className="flex flex-col items-start">
+                    <span>Analysis in progress</span>
+                    <span className="text-xs opacity-80">
+                      {formatInterProProgress(interProElapsedTime).timeStr} elapsed
+                      (est. {formatInterProProgress(interProElapsedTime).estimateStr})
+                    </span>
+                  </span>
                 </>
               ) : (
                 <>
