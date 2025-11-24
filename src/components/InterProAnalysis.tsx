@@ -13,6 +13,41 @@ import {
   getAAColor,
 } from '../utils/alignmentColors';
 
+/**
+ * Clean XML/HTML encoded text from InterPro descriptions
+ * Converts dbxref tags, cite tags, and removes HTML tags
+ */
+function cleanInterProDescription(text: string): string {
+  if (!text) return '';
+
+  let cleaned = text;
+
+  // Remove <p> and </p> tags
+  cleaned = cleaned.replace(/<\/?p>/g, '');
+
+  // Convert <dbxref db="X" id="Y"/> to [X:Y]
+  cleaned = cleaned.replace(/<dbxref\s+db="([^"]+)"\s+id="([^"]+)"\s*\/?>/g, '[$1:$2]');
+
+  // Convert [[cite:PUBXXXXX]] to [PUBXXXXX]
+  cleaned = cleaned.replace(/\[\[cite:([^\]]+)\]\]/g, '[$1]');
+
+  // Decode common HTML entities
+  cleaned = cleaned.replace(/&amp;/g, '&');
+  cleaned = cleaned.replace(/&lt;/g, '<');
+  cleaned = cleaned.replace(/&gt;/g, '>');
+  cleaned = cleaned.replace(/&quot;/g, '"');
+  cleaned = cleaned.replace(/&#39;/g, "'");
+  cleaned = cleaned.replace(/&nbsp;/g, ' ');
+
+  // Remove any remaining HTML tags
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+
+  // Clean up extra whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  return cleaned;
+}
+
 interface InterProAnalysisProps {
   matches: InterProMatch[];
   sequenceLength: number;
@@ -71,8 +106,17 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
     };
   }, [loadingMetadata, loadingAlignment]);
 
-  const handleToggleMatch = (index: number) => {
-    setExpandedMatch(expandedMatch === index ? null : index);
+  const handleToggleMatch = (index: number, accession?: string, database?: string) => {
+    const newExpandedState = expandedMatch === index ? null : index;
+    setExpandedMatch(newExpandedState);
+
+    // Auto-trigger metadata fetch when expanding
+    if (newExpandedState !== null && accession && database) {
+      const key = `${accession}_${database}`;
+      if (!metadata[key] && !loadingMetadata[key] && !metadataError[key]) {
+        handleFetchMetadata(accession, database);
+      }
+    }
   };
 
   // Format elapsed time for loading operations
@@ -320,9 +364,10 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
             {meta.description.map((desc, idx) => {
               // Description can be string or object with {text, llm, checked, updated}
               const text = typeof desc === 'string' ? desc : (desc as any)?.text || '';
+              const cleanedText = cleanInterProDescription(text);
               return (
                 <p key={idx} className="text-sm text-blue-800 leading-relaxed">
-                  {text}
+                  {cleanedText}
                 </p>
               );
             })}
@@ -488,7 +533,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
           <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Match Header */}
             <button
-              onClick={() => handleToggleMatch(index)}
+              onClick={() => handleToggleMatch(index, accession, database)}
               className="w-full bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 p-4 text-left transition-colors border-b-2 border-purple-200"
             >
               <div className="flex items-center justify-between">
@@ -551,7 +596,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                 {signature.description && (
                   <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
                     <p className="text-sm text-blue-900">
-                      {signature.description}
+                      {cleanInterProDescription(signature.description)}
                     </p>
                   </div>
                 )}
