@@ -221,14 +221,19 @@ export async function searchPfamDomains(sequence: string): Promise<PfamSearchRes
       };
     }
 
-    // Submit search using hmmscan against Pfam
-    const formData = new FormData();
-    formData.append('seq', `>query\n${cleanSequence}`);
-    formData.append('hmmdb', 'pfam');
+    // Submit search using hmmscan against Pfam - API v1 expects JSON
+    const requestBody = {
+      input: cleanSequence,
+      database: 'pfam'
+    };
 
     const submitResponse = await fetch(`${HMMER_API_BASE}/api/v1/search/hmmscan`, {
       method: 'POST',
-      body: formData,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
     });
 
     if (!submitResponse.ok) {
