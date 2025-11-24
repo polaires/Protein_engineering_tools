@@ -11,7 +11,18 @@ import LibraryDesign from './LibraryDesign';
 
 type DNATab = 'assembly' | 'codon' | 'library';
 type VectorSelection = 'largest' | 'smallest' | 'manual';
-type GoldenGateEnzyme = 'BsaI-HFv2' | 'BsmBI-v2' | 'BbsI-HF' | 'Esp3I';
+type GoldenGateEnzyme = 'BsaI-HFv2' | 'BsmBI-v2' | 'BbsI-HF' | 'Esp3I' | 'SapI' | 'PaqCI';
+type BufferSystem = 'T4-ligase-buffer' | 'NEBridge-master-mix';
+
+// Enzyme information database
+const ENZYME_INFO: Record<GoldenGateEnzyme, { temp: number; overhang: number; recognition: string; notes: string }> = {
+  'BsaI-HFv2': { temp: 37, overhang: 4, recognition: "GGTCTC", notes: 'Most common, Time-Saver qualified' },
+  'BsmBI-v2': { temp: 42, overhang: 4, recognition: "CGTCTC", notes: 'Higher temp, good for GC-rich' },
+  'Esp3I': { temp: 37, overhang: 4, recognition: "CGTCTC", notes: 'BsmBI isoschizomer, faster at 37°C' },
+  'BbsI-HF': { temp: 37, overhang: 4, recognition: "GAAGAC", notes: 'Alternative recognition site' },
+  'SapI': { temp: 37, overhang: 3, recognition: "GCTCTTC", notes: '7bp recognition, 3bp overhang' },
+  'PaqCI': { temp: 37, overhang: 4, recognition: "CACCTGC", notes: '7bp recognition, reduces internal sites' },
+};
 
 interface DNAFragment {
   id: string;
@@ -62,6 +73,7 @@ export default function DNA() {
   const [vectorSelection, setVectorSelection] = useState<VectorSelection>('largest');
   const [manualVectorId, setManualVectorId] = useState<string | null>(null);
   const [enzyme, setEnzyme] = useState<GoldenGateEnzyme>('BsaI-HFv2');
+  const [bufferSystem, setBufferSystem] = useState<BufferSystem>('T4-ligase-buffer');
 
   // Results
   const [results, setResults] = useState<CalculationResult[] | null>(null);
@@ -305,14 +317,36 @@ export default function DNA() {
   }, 0) : 0;
 
   // NEB Golden Gate Assembly reagent volumes (based on 20 µL standard reaction)
-  // T4 DNA Ligase Buffer (10X): 1/10 of total volume
-  const bufferVolume = totalVolume / 10;
-  // T4 DNA Ligase: 1 µL per 20 µL reaction
-  const ligaseVolume = totalVolume / 20;
-  // Type IIS enzyme (BsaI-HFv2, BsmBI-v2, etc.): 1 µL per 20 µL reaction
-  const enzymeVolume = totalVolume / 20;
-  // Total reagent volume (buffer + ligase + enzyme)
-  const totalReagentVolume = bufferVolume + ligaseVolume + enzymeVolume;
+  // Buffer system determines reagent breakdown
+  const reagentVolumes = useMemo(() => {
+    if (bufferSystem === 'NEBridge-master-mix') {
+      // NEBridge Ligase Master Mix is 3X, so use 1/3 of total volume
+      // It contains T4 DNA Ligase + optimized buffer + ligation enhancer
+      const masterMixVolume = totalVolume / 3;
+      const enzymeVol = totalVolume / 20; // 1 µL per 20 µL
+      return {
+        masterMixVolume,
+        bufferVolume: 0,
+        ligaseVolume: 0,
+        enzymeVolume: enzymeVol,
+        totalReagentVolume: masterMixVolume + enzymeVol,
+      };
+    } else {
+      // T4 DNA Ligase Buffer system (individual components)
+      const bufferVol = totalVolume / 10; // 10X buffer
+      const ligaseVol = totalVolume / 20; // 1 µL per 20 µL
+      const enzymeVol = totalVolume / 20; // 1 µL per 20 µL
+      return {
+        masterMixVolume: 0,
+        bufferVolume: bufferVol,
+        ligaseVolume: ligaseVol,
+        enzymeVolume: enzymeVol,
+        totalReagentVolume: bufferVol + ligaseVol + enzymeVol,
+      };
+    }
+  }, [bufferSystem, totalVolume]);
+
+  const { masterMixVolume, bufferVolume, ligaseVolume, enzymeVolume, totalReagentVolume } = reagentVolumes;
 
   // Water volume (total - reagents - DNA)
   const waterVolume = totalVolume - totalReagentVolume - totalDNAVolume;
@@ -363,60 +397,19 @@ export default function DNA() {
         <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
           Protocol Information
         </h3>
-        <div className="text-sm text-slate-700 dark:text-slate-300 space-y-2">
-          <p><strong>Based on:</strong> NEB Golden Gate Assembly Kit Protocol</p>
-          <p><strong>Enzyme:</strong> {enzyme} (Type IIS restriction enzyme)</p>
-          <p><strong>Ratio:</strong> Insert:Vector - inserts at {insertRatio}× relative to vector (1×)</p>
-          <p><strong>Base amount:</strong> 0.05 pmol vector at 20 µL (scales with volume)</p>
-          <p><strong>Reagents:</strong> Buffer (10X) + T4 DNA Ligase + {enzyme}</p>
-          <p><strong>Smart Dilution:</strong> Volumes &lt;1 µL trigger smart dilutions for easy pipetting</p>
-        </div>
-      </div>
-
-      {/* Smart Recommendation */}
-      {fragments.length >= 2 && (
-        <div className={`card border-2 transition-all duration-300 ${
-          showRecommendationHighlight && insertRatio !== ratioRecommendation.ratio
-            ? 'ring-2 ring-primary-400 ring-offset-2 dark:ring-offset-slate-900'
-            : ''
-        } ${
-          ratioRecommendation.confidence === 'high'
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-            : ratioRecommendation.confidence === 'medium'
-            ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
-        }`}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <Info className={`w-5 h-5 mt-0.5 ${
-                ratioRecommendation.confidence === 'high' ? 'text-green-600 dark:text-green-400' :
-                ratioRecommendation.confidence === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
-                'text-slate-500'
-              }`} />
-              <div>
-                <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
-                  Smart Recommendation: {ratioRecommendation.ratio}:1 insert:vector
-                  {insertRatio === ratioRecommendation.ratio && (
-                    <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-normal">(applied)</span>
-                  )}
-                </h4>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {ratioRecommendation.reason}
-                </p>
-              </div>
-            </div>
-            {insertRatio !== ratioRecommendation.ratio && (
-              <button
-                onClick={applyRecommendationAndCalculate}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
-              >
-                <Sparkles className="w-4 h-4" />
-                Apply & Calculate
-              </button>
-            )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 dark:text-slate-300">
+          <div className="space-y-1">
+            <p><strong>Enzyme:</strong> {enzyme} ({ENZYME_INFO[enzyme].recognition}, {ENZYME_INFO[enzyme].overhang}bp overhang)</p>
+            <p><strong>Temperature:</strong> {ENZYME_INFO[enzyme].temp}°C</p>
+            <p><strong>Notes:</strong> {ENZYME_INFO[enzyme].notes}</p>
+          </div>
+          <div className="space-y-1">
+            <p><strong>Buffer:</strong> {bufferSystem === 'NEBridge-master-mix' ? 'NEBridge Ligase Master Mix (3X)' : 'T4 DNA Ligase Buffer (10X)'}</p>
+            <p><strong>Ratio:</strong> {insertRatio}:1 insert:vector</p>
+            <p><strong>Base:</strong> 0.05 pmol vector at 20 µL (scales with volume)</p>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Input Section */}
       <div className="card">
@@ -424,7 +417,7 @@ export default function DNA() {
           Reaction Setup
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="input-label">Total Reaction Volume (µL) *</label>
             <input
@@ -438,18 +431,44 @@ export default function DNA() {
             />
           </div>
           <div>
+            <label className="input-label">Buffer System</label>
+            <select
+              className="input-field"
+              value={bufferSystem}
+              onChange={(e) => setBufferSystem(e.target.value as BufferSystem)}
+            >
+              <option value="T4-ligase-buffer">T4 DNA Ligase Buffer (10X)</option>
+              <option value="NEBridge-master-mix">NEBridge Ligase Master Mix (3X)</option>
+            </select>
+            <div className="text-xs text-slate-500 mt-1">
+              {bufferSystem === 'NEBridge-master-mix' ? 'Better fidelity for complex assemblies' : 'Standard, economical option'}
+            </div>
+          </div>
+          <div>
             <label className="input-label">Type IIS Enzyme</label>
             <select
               className="input-field"
               value={enzyme}
               onChange={(e) => setEnzyme(e.target.value as GoldenGateEnzyme)}
             >
-              <option value="BsaI-HFv2">BsaI-HFv2</option>
-              <option value="BsmBI-v2">BsmBI-v2</option>
-              <option value="BbsI-HF">BbsI-HF</option>
-              <option value="Esp3I">Esp3I</option>
+              <optgroup label="4-bp overhang (common)">
+                <option value="BsaI-HFv2">BsaI-HFv2 (37°C) - Most common</option>
+                <option value="BsmBI-v2">BsmBI-v2 (42°C) - GC-rich DNA</option>
+                <option value="Esp3I">Esp3I (37°C) - BsmBI isoschizomer</option>
+                <option value="BbsI-HF">BbsI-HF (37°C) - Alternative site</option>
+                <option value="PaqCI">PaqCI (37°C) - 7bp recognition</option>
+              </optgroup>
+              <optgroup label="3-bp overhang">
+                <option value="SapI">SapI (37°C) - 7bp recognition, frame-conserving</option>
+              </optgroup>
             </select>
+            <div className="text-xs text-slate-500 mt-1">
+              {ENZYME_INFO[enzyme].recognition} | {ENZYME_INFO[enzyme].notes}
+            </div>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="input-label">
               Insert:Vector Ratio *
@@ -590,7 +609,52 @@ export default function DNA() {
           )})}
         </div>
 
-        <button onClick={calculate} className="btn-primary w-full mt-6">
+        {/* Smart Recommendation - Inline */}
+        {fragments.length >= 2 && (
+          <div className={`mt-4 p-3 rounded-lg border transition-all duration-300 ${
+            showRecommendationHighlight && insertRatio !== ratioRecommendation.ratio
+              ? 'ring-2 ring-primary-400'
+              : ''
+          } ${
+            ratioRecommendation.confidence === 'high'
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
+              : ratioRecommendation.confidence === 'medium'
+              ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700'
+              : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+          }`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Info className={`w-4 h-4 ${
+                  ratioRecommendation.confidence === 'high' ? 'text-green-600 dark:text-green-400' :
+                  ratioRecommendation.confidence === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                  'text-slate-500'
+                }`} />
+                <div>
+                  <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
+                    Recommended: {ratioRecommendation.ratio}:1
+                  </span>
+                  {insertRatio === ratioRecommendation.ratio && (
+                    <span className="ml-2 text-xs text-green-600 dark:text-green-400">(applied)</span>
+                  )}
+                  <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">
+                    — {ratioRecommendation.reason}
+                  </span>
+                </div>
+              </div>
+              {insertRatio !== ratioRecommendation.ratio && (
+                <button
+                  onClick={applyRecommendationAndCalculate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium rounded-lg transition-colors whitespace-nowrap"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Apply & Calculate
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <button onClick={calculate} className="btn-primary w-full mt-4">
           <Dna className="w-5 h-5 mr-2" />
           Calculate Assembly
         </button>
@@ -603,24 +667,40 @@ export default function DNA() {
             Assembly Protocol
           </h3>
 
-          {/* Reagents */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
-              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
-                T4 DNA Ligase Buffer (10X)
+          {/* Reagents - changes based on buffer system */}
+          <div className={`grid grid-cols-2 ${bufferSystem === 'NEBridge-master-mix' ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-3 mb-6`}>
+            {bufferSystem === 'NEBridge-master-mix' ? (
+              // NEBridge Master Mix system
+              <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                  NEBridge Ligase Master Mix (3X)
+                </div>
+                <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
+                  {masterMixVolume.toFixed(1)} µL
+                </div>
+                <div className="text-xs text-slate-500 mt-1">Contains T4 Ligase + Buffer</div>
               </div>
-              <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
-                {bufferVolume.toFixed(1)} µL
-              </div>
-            </div>
-            <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
-              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
-                T4 DNA Ligase
-              </div>
-              <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
-                {ligaseVolume.toFixed(1)} µL
-              </div>
-            </div>
+            ) : (
+              // T4 Ligase Buffer system (individual components)
+              <>
+                <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    T4 DNA Ligase Buffer (10X)
+                  </div>
+                  <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
+                    {bufferVolume.toFixed(1)} µL
+                  </div>
+                </div>
+                <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    T4 DNA Ligase
+                  </div>
+                  <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
+                    {ligaseVolume.toFixed(1)} µL
+                  </div>
+                </div>
+              </>
+            )}
             <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
               <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
                 {enzyme}
@@ -628,6 +708,7 @@ export default function DNA() {
               <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
                 {enzymeVolume.toFixed(1)} µL
               </div>
+              <div className="text-xs text-slate-500 mt-1">{ENZYME_INFO[enzyme].temp}°C</div>
             </div>
             <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
               <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
@@ -739,7 +820,7 @@ export default function DNA() {
             <h4 className="font-semibold mb-3 text-slate-800 dark:text-slate-200">
               Reaction Summary
             </h4>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
               <div>
                 <div className="text-slate-600 dark:text-slate-400">Total Volume</div>
                 <div className="font-mono font-bold">{totalVolume} µL</div>
@@ -759,6 +840,10 @@ export default function DNA() {
               <div>
                 <div className="text-slate-600 dark:text-slate-400">Enzyme</div>
                 <div className="font-mono font-bold text-orange-600 dark:text-orange-400">{enzyme}</div>
+              </div>
+              <div>
+                <div className="text-slate-600 dark:text-slate-400">Buffer</div>
+                <div className="font-mono font-bold text-xs">{bufferSystem === 'NEBridge-master-mix' ? 'NEBridge 3X' : 'T4 Buffer'}</div>
               </div>
             </div>
           </div>
