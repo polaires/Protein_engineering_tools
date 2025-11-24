@@ -102,17 +102,6 @@ export default function ProtParam() {
   const handleSearchDomains = async () => {
     setError(null);
 
-    // Run basic protein analysis if not already done
-    if (!result) {
-      try {
-        const analysis = analyzeProtein(sequence);
-        setResult(analysis);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Analysis failed');
-        return;
-      }
-    }
-
     // Search Pfam domains
     setPfamLoading(true);
     try {

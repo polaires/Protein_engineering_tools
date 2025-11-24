@@ -20,19 +20,30 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
   const [colorScheme, setColorScheme] = useState<ColorScheme>('consurf');
   const [showConservation, setShowConservation] = useState(true);
   const [fontSize, setFontSize] = useState(16);
+  const [showAllCompositions, setShowAllCompositions] = useState(false);
 
   if (!result.alignment) {
     return <div className="text-gray-500">No alignment data available</div>;
   }
 
   // Parse alignment based on format
-  const sequences =
+  let sequences =
     result.alignmentFormat === 'clustal'
       ? parseClustalAlignment(result.alignment)
       : parseAlignedFasta(result.alignment);
 
   if (sequences.length === 0) {
     return <div className="text-gray-500">Could not parse alignment</div>;
+  }
+
+  // Elevate query protein to first position
+  const queryIndex = sequences.findIndex(seq =>
+    seq.id.toLowerCase().includes('query') ||
+    seq.id.toLowerCase() === 'query'
+  );
+  if (queryIndex > 0) {
+    const querySeq = sequences[queryIndex];
+    sequences = [querySeq, ...sequences.slice(0, queryIndex), ...sequences.slice(queryIndex + 1)];
   }
 
   // Fixed width for sequence names (ConSurf-style)
@@ -323,6 +334,68 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
           </div>
         </div>
 
+        {/* Conserved Core Sequence */}
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h5 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            Conserved Core Sequence
+          </h5>
+          <div className="bg-white p-4 rounded border border-blue-200">
+            <div className="font-mono text-sm break-all">
+              {sequences[0].sequence.split('').map((_, idx) => {
+                const cons = conservation[idx];
+                const aa = sequences[0].sequence[idx]; // Use first sequence as reference
+
+                // Only show positions with >90% conservation
+                if (cons > 0.9 && aa !== '-' && aa !== '.') {
+                  return (
+                    <span
+                      key={idx}
+                      className="inline-block text-white font-bold px-1 rounded mx-px"
+                      style={{ backgroundColor: '#10b981' }}
+                      title={`Position ${idx + 1}: ${(cons * 100).toFixed(0)}% conserved`}
+                    >
+                      {aa}
+                    </span>
+                  );
+                } else if (cons > 0.7 && aa !== '-' && aa !== '.') {
+                  return (
+                    <span
+                      key={idx}
+                      className="text-gray-500"
+                      title={`Position ${idx + 1}: ${(cons * 100).toFixed(0)}% conserved`}
+                    >
+                      {aa}
+                    </span>
+                  );
+                } else {
+                  return (
+                    <span key={idx} className="text-gray-300">
+                      -
+                    </span>
+                  );
+                }
+              })}
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-xs text-blue-800">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <span>Highly conserved (&gt;90%)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-gray-500 rounded"></div>
+                <span>Moderately conserved (70-90%)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 bg-gray-300 rounded"></div>
+                <span>Variable (&lt;70%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Alignment Display with Horizontal Scrolling (ConSurf-style) */}
         <div className="relative">
           <div className="overflow-x-auto overflow-y-auto max-h-[600px] border border-gray-300 rounded-lg">
@@ -335,14 +408,24 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
       {/* Sequence Composition with Stacked Bars */}
       <div className="bg-gray-50 p-4 rounded-lg">
-        <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-          </svg>
-          Sequence Composition
-        </h5>
+        <div className="flex items-center justify-between mb-3">
+          <h5 className="font-semibold text-gray-900 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+            </svg>
+            Sequence Composition
+          </h5>
+          {sequences.length > 5 && (
+            <button
+              onClick={() => setShowAllCompositions(!showAllCompositions)}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              {showAllCompositions ? 'Show Less' : `Show All (${sequences.length})`}
+            </button>
+          )}
+        </div>
         <div className="space-y-3">
-          {sequences.map((seq, idx) => {
+          {(showAllCompositions ? sequences : sequences.slice(0, 5)).map((seq, idx) => {
             const cleanSeq = seq.sequence.replace(/-/g, '');
             const comp = analyzeSequenceComposition(cleanSeq);
             return (
