@@ -11,6 +11,7 @@ import LibraryDesign from './LibraryDesign';
 
 type DNATab = 'assembly' | 'codon' | 'library';
 type VectorSelection = 'largest' | 'smallest' | 'manual';
+type GoldenGateEnzyme = 'BsaI-HFv2' | 'BsmBI-v2' | 'BbsI-HF' | 'Esp3I';
 
 interface DNAFragment {
   id: string;
@@ -57,9 +58,10 @@ export default function DNA() {
     { id: '2', name: 'Insert 1', size: 1000, concentration: 100 },
   ]);
   const [insertRatio, setInsertRatio] = useState(2); // Default 2:1 insert:vector (NEB recommended)
-  const [totalVolume, setTotalVolume] = useState(15); // µl
+  const [totalVolume, setTotalVolume] = useState(20); // µl - NEB standard is 20 µL
   const [vectorSelection, setVectorSelection] = useState<VectorSelection>('largest');
   const [manualVectorId, setManualVectorId] = useState<string | null>(null);
+  const [enzyme, setEnzyme] = useState<GoldenGateEnzyme>('BsaI-HFv2');
 
   // Results
   const [results, setResults] = useState<CalculationResult[] | null>(null);
@@ -224,9 +226,9 @@ export default function DNA() {
       return;
     }
 
-    // Base pmol for vector (0.05 pmol at 15 µL standard reaction)
+    // Base pmol for vector (0.05 pmol at 20 µL standard reaction)
     // Scale proportionally with total volume to maintain proper DNA concentration
-    const standardVolume = 15; // µL - NEB standard reaction volume
+    const standardVolume = 20; // µL - NEB standard reaction volume
     const basePmol = 0.05 * (totalVolume / standardVolume);
 
     // Calculate for each fragment with proper insert:vector ratio
@@ -302,11 +304,18 @@ export default function DNA() {
       : r.volumeNeeded);
   }, 0) : 0;
 
-  // NEBuilder Master Mix volume (1/3 of total)
-  const masterMixVolume = totalVolume / 3;
+  // NEB Golden Gate Assembly reagent volumes (based on 20 µL standard reaction)
+  // T4 DNA Ligase Buffer (10X): 1/10 of total volume
+  const bufferVolume = totalVolume / 10;
+  // T4 DNA Ligase: 1 µL per 20 µL reaction
+  const ligaseVolume = totalVolume / 20;
+  // Type IIS enzyme (BsaI-HFv2, BsmBI-v2, etc.): 1 µL per 20 µL reaction
+  const enzymeVolume = totalVolume / 20;
+  // Total reagent volume (buffer + ligase + enzyme)
+  const totalReagentVolume = bufferVolume + ligaseVolume + enzymeVolume;
 
-  // Water volume
-  const waterVolume = totalVolume - masterMixVolume - totalDNAVolume;
+  // Water volume (total - reagents - DNA)
+  const waterVolume = totalVolume - totalReagentVolume - totalDNAVolume;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -356,9 +365,10 @@ export default function DNA() {
         </h3>
         <div className="text-sm text-slate-700 dark:text-slate-300 space-y-2">
           <p><strong>Based on:</strong> NEB Golden Gate Assembly Kit Protocol</p>
+          <p><strong>Enzyme:</strong> {enzyme} (Type IIS restriction enzyme)</p>
           <p><strong>Ratio:</strong> Insert:Vector - inserts at {insertRatio}× relative to vector (1×)</p>
-          <p><strong>Base amount:</strong> 0.05 pmol vector at 15 µL (scales with volume)</p>
-          <p><strong>Master Mix:</strong> 1/3 of total reaction volume</p>
+          <p><strong>Base amount:</strong> 0.05 pmol vector at 20 µL (scales with volume)</p>
+          <p><strong>Reagents:</strong> Buffer (10X) + T4 DNA Ligase + {enzyme}</p>
           <p><strong>Smart Dilution:</strong> Volumes &lt;1 µL trigger smart dilutions for easy pipetting</p>
         </div>
       </div>
@@ -414,18 +424,31 @@ export default function DNA() {
           Reaction Setup
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div>
             <label className="input-label">Total Reaction Volume (µL) *</label>
             <input
               type="number"
               className="input-field"
-              placeholder="15"
-              step="any"
-              min="1"
+              placeholder="20"
+              step="5"
+              min="10"
               value={totalVolume}
-              onChange={(e) => setTotalVolume(parseFloat(e.target.value) || 15)}
+              onChange={(e) => setTotalVolume(parseFloat(e.target.value) || 20)}
             />
+          </div>
+          <div>
+            <label className="input-label">Type IIS Enzyme</label>
+            <select
+              className="input-field"
+              value={enzyme}
+              onChange={(e) => setEnzyme(e.target.value as GoldenGateEnzyme)}
+            >
+              <option value="BsaI-HFv2">BsaI-HFv2</option>
+              <option value="BsmBI-v2">BsmBI-v2</option>
+              <option value="BbsI-HF">BbsI-HF</option>
+              <option value="Esp3I">Esp3I</option>
+            </select>
           </div>
           <div>
             <label className="input-label">
@@ -580,29 +603,42 @@ export default function DNA() {
             Assembly Protocol
           </h3>
 
-          {/* Master Mix and Water */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
-              <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">
-                NEBuilder Ligase Master Mix
+          {/* Reagents */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+            <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                T4 DNA Ligase Buffer (10X)
               </div>
-              <div className="text-2xl font-bold text-primary-700 dark:text-primary-300">
-                {masterMixVolume.toFixed(2)} µL
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                (1/3 of total volume)
+              <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
+                {bufferVolume.toFixed(1)} µL
               </div>
             </div>
-            <div className="p-4 bg-white/70 dark:bg-slate-800/70 rounded-xl">
-              <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">
+            <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                T4 DNA Ligase
+              </div>
+              <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
+                {ligaseVolume.toFixed(1)} µL
+              </div>
+            </div>
+            <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                {enzyme}
+              </div>
+              <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                {enzymeVolume.toFixed(1)} µL
+              </div>
+            </div>
+            <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+              <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
                 Nuclease-free Water
               </div>
-              <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                {waterVolume >= 0 ? waterVolume.toFixed(2) : '0.00'} µL
+              <div className="text-xl font-bold text-blue-700 dark:text-blue-300">
+                {waterVolume >= 0 ? waterVolume.toFixed(1) : '0.0'} µL
               </div>
               {waterVolume < 0 && (
                 <div className="text-xs text-red-600 dark:text-red-400 mt-1">
-                  ⚠️ Total DNA volume exceeds capacity
+                  ⚠️ Volume exceeds capacity
                 </div>
               )}
             </div>
@@ -703,14 +739,14 @@ export default function DNA() {
             <h4 className="font-semibold mb-3 text-slate-800 dark:text-slate-200">
               Reaction Summary
             </h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
               <div>
                 <div className="text-slate-600 dark:text-slate-400">Total Volume</div>
                 <div className="font-mono font-bold">{totalVolume} µL</div>
               </div>
               <div>
-                <div className="text-slate-600 dark:text-slate-400">Master Mix</div>
-                <div className="font-mono font-bold">{masterMixVolume.toFixed(2)} µL</div>
+                <div className="text-slate-600 dark:text-slate-400">Reagents</div>
+                <div className="font-mono font-bold">{totalReagentVolume.toFixed(1)} µL</div>
               </div>
               <div>
                 <div className="text-slate-600 dark:text-slate-400">Total DNA</div>
@@ -718,7 +754,11 @@ export default function DNA() {
               </div>
               <div>
                 <div className="text-slate-600 dark:text-slate-400">Water</div>
-                <div className="font-mono font-bold">{waterVolume >= 0 ? waterVolume.toFixed(2) : '0.00'} µL</div>
+                <div className="font-mono font-bold">{waterVolume >= 0 ? waterVolume.toFixed(1) : '0.0'} µL</div>
+              </div>
+              <div>
+                <div className="text-slate-600 dark:text-slate-400">Enzyme</div>
+                <div className="font-mono font-bold text-orange-600 dark:text-orange-400">{enzyme}</div>
               </div>
             </div>
           </div>
