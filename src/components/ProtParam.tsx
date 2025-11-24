@@ -4,12 +4,14 @@
  */
 
 import { useState } from 'react';
-import { Dna, Info, AlertCircle, Droplet, Search, Loader2, Database } from 'lucide-react';
+import { Dna, Info, AlertCircle, Droplet, Search, Loader2, Database, GitCompare } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
 import { searchPfamDomains, PfamSearchResult } from '@/services/pfamApi';
-import { submitInterProScan, InterProResult } from '@/services/interProApi';
+import { submitInterProScan, InterProResult, fetchSeedAlignment } from '@/services/interProApi';
+import { submitAlignment, AlignmentResult, AlignmentTool, AlignmentSequence } from '@/services/alignmentApi';
 import ProteinConcentration from './ProteinConcentration';
 import InterProAnalysis from './InterProAnalysis';
+import AlignmentViewer from './AlignmentViewer';
 
 type ProtParamTab = 'analysis' | 'concentration';
 
@@ -22,6 +24,10 @@ export default function ProtParam() {
   const [pfamLoading, setPfamLoading] = useState(false);
   const [interProResult, setInterProResult] = useState<InterProResult | null>(null);
   const [interProLoading, setInterProLoading] = useState(false);
+  const [alignmentResult, setAlignmentResult] = useState<AlignmentResult | null>(null);
+  const [alignmentLoading, setAlignmentLoading] = useState(false);
+  const [alignmentTool, setAlignmentTool] = useState<AlignmentTool>('muscle');
+  const [pfamAlignmentLoading, setPfamAlignmentLoading] = useState<Record<string, boolean>>({});
 
   const handleAnalyze = () => {
     setError(null);
@@ -41,6 +47,7 @@ export default function ProtParam() {
     setError(null);
     setPfamResult(null);
     setInterProResult(null);
+    setAlignmentResult(null);
   };
 
   const handleLoadExample = () => {
@@ -84,6 +91,102 @@ export default function ProtParam() {
       setInterProResult(null);
     } finally {
       setInterProLoading(false);
+    }
+  };
+
+  const handleAlign = async () => {
+    setError(null);
+    setAlignmentLoading(true);
+
+    try {
+      // Parse input - could be single sequence or multiple FASTA
+      const cleanSeq = sequence.trim();
+      const sequences: AlignmentSequence[] = [];
+
+      if (cleanSeq.includes('>')) {
+        // Multiple FASTA sequences
+        const lines = cleanSeq.split('\n');
+        let currentSeq: AlignmentSequence | null = null;
+
+        for (const line of lines) {
+          if (line.startsWith('>')) {
+            if (currentSeq && currentSeq.sequence) {
+              sequences.push(currentSeq);
+            }
+            currentSeq = { id: line.substring(1).trim() || `Seq${sequences.length + 1}`, sequence: '' };
+          } else if (currentSeq) {
+            currentSeq.sequence += line.replace(/\s/g, '').toUpperCase();
+          }
+        }
+
+        if (currentSeq && currentSeq.sequence) {
+          sequences.push(currentSeq);
+        }
+      } else {
+        // Single sequence - need at least 2 for alignment
+        setError('Please provide at least 2 sequences in FASTA format for alignment');
+        setAlignmentLoading(false);
+        return;
+      }
+
+      if (sequences.length < 2) {
+        setError('At least 2 sequences required for alignment. Use FASTA format with > headers.');
+        setAlignmentLoading(false);
+        return;
+      }
+
+      const alignData = await submitAlignment(sequences, alignmentTool);
+      setAlignmentResult(alignData);
+
+      if (!alignData.success && alignData.error) {
+        setError(alignData.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Alignment failed');
+      setAlignmentResult(null);
+    } finally {
+      setAlignmentLoading(false);
+    }
+  };
+
+  const handleAlignPfamDomain = async (pfamAccession: string) => {
+    setError(null);
+    setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: true });
+
+    try {
+      // Fetch seed alignment for this Pfam domain
+      const seedAlignment = await fetchSeedAlignment(pfamAccession, 'pfam');
+
+      if (!seedAlignment || seedAlignment.length === 0) {
+        setError(`No seed alignment available for ${pfamAccession}`);
+        setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
+        return;
+      }
+
+      // Convert to AlignmentSequence format and include query sequence
+      const sequences: AlignmentSequence[] = [
+        {
+          id: 'Query_Sequence',
+          sequence: sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase(),
+        },
+        ...seedAlignment.slice(0, 50).map(seq => ({
+          id: seq.name,
+          sequence: seq.sequence.replace(/-/g, ''), // Remove existing gaps
+        })),
+      ];
+
+      // Run alignment
+      const alignData = await submitAlignment(sequences, alignmentTool);
+      setAlignmentResult(alignData);
+
+      if (!alignData.success && alignData.error) {
+        setError(alignData.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Pfam alignment failed');
+      setAlignmentResult(null);
+    } finally {
+      setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
     }
   };
 
@@ -181,6 +284,45 @@ export default function ProtParam() {
               )}
             </button>
           </div>
+
+          {/* Alignment Section */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
+            <div className="flex items-center gap-3 mb-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Alignment Tool:
+              </label>
+              <select
+                value={alignmentTool}
+                onChange={(e) => setAlignmentTool(e.target.value as AlignmentTool)}
+                className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1 text-sm bg-white dark:bg-gray-800"
+                disabled={alignmentLoading}
+              >
+                <option value="muscle">MUSCLE (default)</option>
+                <option value="clustalo">Clustal Omega</option>
+              </select>
+            </div>
+            <button
+              onClick={handleAlign}
+              className="btn-primary w-full"
+              disabled={alignmentLoading || !sequence.trim()}
+            >
+              {alignmentLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Aligning sequences with {alignmentTool.toUpperCase()}...
+                </>
+              ) : (
+                <>
+                  <GitCompare className="w-5 h-5 mr-2" />
+                  Align Sequences ({alignmentTool.toUpperCase()})
+                </>
+              )}
+            </button>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Enter multiple sequences in FASTA format ({'>'}header followed by sequence)
+            </p>
+          </div>
+
           <div className="flex gap-3">
             <button onClick={handleLoadExample} className="btn-secondary">
               Load Example
@@ -410,10 +552,16 @@ export default function ProtParam() {
 
       {pfamResult && pfamResult.success && (
         <div className="card">
-          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
-            <Search className="w-5 h-5" />
-            Pfam Domain Search Results (Fast)
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Pfam Domain Search Results (Fast)
+            </h3>
+            <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
+              <GitCompare className="w-4 h-4" />
+              Click "Align" to align seed sequences with {alignmentTool.toUpperCase()}
+            </div>
+          </div>
 
           {pfamResult.domains.length === 0 ? (
             <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center">
@@ -471,6 +619,9 @@ export default function ProtParam() {
                       <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Bit Score
                       </th>
+                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -507,6 +658,26 @@ export default function ProtParam() {
                         </td>
                         <td className="p-3 text-right font-mono text-sm font-semibold">
                           {domain.bitscore.toFixed(1)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => handleAlignPfamDomain(domain.acc)}
+                            disabled={pfamAlignmentLoading[domain.acc]}
+                            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 mx-auto"
+                            title={`Align seed sequences with ${alignmentTool.toUpperCase()}`}
+                          >
+                            {pfamAlignmentLoading[domain.acc] ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Aligning...
+                              </>
+                            ) : (
+                              <>
+                                <GitCompare className="w-3 h-3" />
+                                Align
+                              </>
+                            )}
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -549,6 +720,18 @@ export default function ProtParam() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Alignment Results */}
+      {alignmentResult && alignmentResult.success && (
+        <div className="card">
+          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <GitCompare className="w-5 h-5" />
+            Multiple Sequence Alignment Results
+          </h3>
+
+          <AlignmentViewer result={alignmentResult} />
         </div>
       )}
         </>
