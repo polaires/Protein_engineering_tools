@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import FormData from 'form-data';
 import { Resend } from 'resend';
 
 dotenv.config();
@@ -1047,19 +1048,17 @@ app.post('/api/hmmer/search', async (req, res) => {
       return res.status(400).json({ error: 'Sequence is required' });
     }
 
-    // Submit search to HMMER API
-    // The HMMER API expects form data with 'seq' parameter
-    const formData = new URLSearchParams();
-    formData.append('seq', sequence); // Just the sequence, no FASTA header
+    // Create FormData for multipart/form-data request
+    const formData = new FormData();
+    formData.append('seq', `>${sequence.substring(0, 20)}\n${sequence}`);
 
     console.log('Submitting to HMMER API with sequence length:', sequence.length);
+
+    // Try the HMMER API endpoint with proper multipart form data
     const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer/search/hmmscan', {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
+      body: formData,
+      headers: formData.getHeaders(),
     });
 
     console.log('HMMER API response status:', submitResponse.status);
