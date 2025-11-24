@@ -1209,6 +1209,123 @@ app.get('/api/interpro/status/:jobId', async (req, res) => {
 });
 
 // ============================================================================
+// Alignment (MUSCLE/Clustal Omega) Proxy Endpoints
+// ============================================================================
+
+// Submit sequences for alignment
+app.post('/api/alignment/submit', async (req, res) => {
+  try {
+    console.log('Alignment submit request received');
+
+    const { sequences, tool, email } = req.body;
+
+    if (!sequences) {
+      console.error('No sequences provided');
+      return res.status(400).json({ error: 'Sequences are required' });
+    }
+
+    if (!tool || (tool !== 'muscle' && tool !== 'clustalo')) {
+      return res.status(400).json({ error: 'Invalid alignment tool. Use "muscle" or "clustalo"' });
+    }
+
+    const baseUrl = tool === 'muscle'
+      ? 'https://www.ebi.ac.uk/Tools/services/rest/muscle'
+      : 'https://www.ebi.ac.uk/Tools/services/rest/clustalo';
+
+    console.log(`Submitting to ${tool.toUpperCase()} API with sequences`);
+
+    // Prepare form data
+    const formData = new URLSearchParams();
+    formData.append('email', email || 'anonymous@example.com');
+    formData.append('sequence', sequences);
+    formData.append('format', 'fasta'); // Output format
+    formData.append('order', 'aligned'); // Keep aligned order
+
+    const submitResponse = await fetch(`${baseUrl}/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'text/plain'
+      },
+      body: formData.toString(),
+    });
+
+    console.log(`${tool.toUpperCase()} API response status:`, submitResponse.status);
+
+    if (!submitResponse.ok) {
+      const errorText = await submitResponse.text();
+      console.error(`${tool.toUpperCase()} submission failed:`, errorText);
+      throw new Error(`${tool.toUpperCase()} submission failed: ${submitResponse.status}`);
+    }
+
+    const jobId = (await submitResponse.text()).trim();
+    console.log(`${tool.toUpperCase()} job submitted:`, jobId);
+
+    res.json({ jobId });
+  } catch (error) {
+    console.error('Alignment submit proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check alignment job status and get results
+app.get('/api/alignment/status/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { tool } = req.query;
+
+    if (!tool || (tool !== 'muscle' && tool !== 'clustalo')) {
+      return res.status(400).json({ error: 'Invalid alignment tool parameter' });
+    }
+
+    const baseUrl = tool === 'muscle'
+      ? 'https://www.ebi.ac.uk/Tools/services/rest/muscle'
+      : 'https://www.ebi.ac.uk/Tools/services/rest/clustalo';
+
+    console.log(`Checking ${tool.toUpperCase()} status for job:`, jobId);
+
+    // Check status
+    const statusResponse = await fetch(`${baseUrl}/status/${jobId}`);
+
+    if (!statusResponse.ok) {
+      throw new Error(`Status check failed: ${statusResponse.status}`);
+    }
+
+    const status = (await statusResponse.text()).trim();
+    console.log(`${tool.toUpperCase()} job status:`, status);
+
+    if (status === 'FINISHED') {
+      // Fetch results - try different result types
+      const resultTypes = ['aln-fasta', 'fasta', 'aln-clustal', 'clustal'];
+      let alignment = null;
+
+      for (const resultType of resultTypes) {
+        try {
+          const resultResponse = await fetch(`${baseUrl}/result/${jobId}/${resultType}`);
+          if (resultResponse.ok) {
+            alignment = await resultResponse.text();
+            console.log(`${tool.toUpperCase()} results received for job:`, jobId);
+            break;
+          }
+        } catch (e) {
+          // Try next result type
+          continue;
+        }
+      }
+
+      res.json({ status: 'FINISHED', alignment });
+    } else if (status === 'RUNNING' || status === 'QUEUED') {
+      res.json({ status });
+    } else {
+      res.json({ status });
+    }
+  } catch (error) {
+    console.error('Alignment status proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
 // Health Check
 // ============================================================================
 
