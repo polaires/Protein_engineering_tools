@@ -3,13 +3,14 @@
  * Based on NEB NEBuilder Ligase Master Mix protocol
  */
 
-import { useState } from 'react';
-import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound, Info, Star } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import CodonOptimizerAdvanced from './CodonOptimizerAdvanced';
 import LibraryDesign from './LibraryDesign';
 
 type DNATab = 'assembly' | 'codon' | 'library';
+type VectorSelection = 'largest' | 'smallest' | 'manual';
 
 interface DNAFragment {
   id: string;
@@ -34,6 +35,14 @@ interface CalculationResult {
   volumeNeeded: number; // µl
   needsDilution: boolean;
   smartDilution?: SmartDilution;
+  isVector: boolean;
+  appliedRatio: number; // actual ratio applied (1 for vector, insertRatio for inserts)
+}
+
+interface RatioRecommendation {
+  ratio: number;
+  reason: string;
+  confidence: 'high' | 'medium' | 'low';
 }
 
 export default function DNA() {
@@ -44,21 +53,98 @@ export default function DNA() {
 
   // Input state
   const [fragments, setFragments] = useState<DNAFragment[]>([
-    { id: '1', name: 'Fragment 1', size: 3000, concentration: 100 },
+    { id: '1', name: 'Vector', size: 5000, concentration: 100 },
+    { id: '2', name: 'Insert 1', size: 1000, concentration: 100 },
   ]);
-  const [molarRatio, setMolarRatio] = useState(1); // Default 1:1
+  const [insertRatio, setInsertRatio] = useState(2); // Default 2:1 insert:vector (NEB recommended)
   const [totalVolume, setTotalVolume] = useState(15); // µl
+  const [vectorSelection, setVectorSelection] = useState<VectorSelection>('largest');
+  const [manualVectorId, setManualVectorId] = useState<string | null>(null);
 
   // Results
   const [results, setResults] = useState<CalculationResult[] | null>(null);
 
+  // Determine which fragment is the vector
+  const vectorId = useMemo(() => {
+    if (fragments.length === 0) return null;
+    if (vectorSelection === 'manual' && manualVectorId) {
+      return fragments.find(f => f.id === manualVectorId) ? manualVectorId : fragments[0].id;
+    }
+    // Auto-select based on size
+    const sorted = [...fragments].sort((a, b) => b.size - a.size);
+    return vectorSelection === 'largest' ? sorted[0].id : sorted[sorted.length - 1].id;
+  }, [fragments, vectorSelection, manualVectorId]);
+
+  // Get smart ratio recommendation based on fragment sizes
+  const ratioRecommendation = useMemo((): RatioRecommendation => {
+    if (fragments.length < 2 || !vectorId) {
+      return { ratio: 1, reason: 'Single fragment - equimolar', confidence: 'high' };
+    }
+
+    const vector = fragments.find(f => f.id === vectorId);
+    const inserts = fragments.filter(f => f.id !== vectorId);
+    if (!vector || inserts.length === 0) {
+      return { ratio: 1, reason: 'No inserts - equimolar', confidence: 'high' };
+    }
+
+    const smallestInsert = Math.min(...inserts.map(i => i.size));
+    const largestInsert = Math.max(...inserts.map(i => i.size));
+    const avgInsertSize = inserts.reduce((sum, i) => sum + i.size, 0) / inserts.length;
+
+    // NEB recommendations based on insert characteristics
+    // Small fragments (<250 bp): use 3:1 to 5:1
+    // Standard PCR amplicons (250-3000 bp): use 2:1
+    // Large fragments (>3000 bp): use 1:1 or consider precloning
+    // Multi-fragment: equimolar often works best
+
+    if (inserts.length > 3) {
+      return {
+        ratio: 1,
+        reason: 'Multi-fragment assembly (>3 inserts) - equimolar recommended for balanced ligation',
+        confidence: 'high'
+      };
+    }
+
+    if (smallestInsert < 250) {
+      return {
+        ratio: 5,
+        reason: `Small insert detected (${smallestInsert} bp < 250 bp) - higher ratio improves assembly`,
+        confidence: 'high'
+      };
+    }
+
+    if (largestInsert > 3000) {
+      return {
+        ratio: 1,
+        reason: `Large insert (${largestInsert} bp > 3 kb) - equimolar or consider precloning`,
+        confidence: 'medium'
+      };
+    }
+
+    if (avgInsertSize < 500) {
+      return {
+        ratio: 3,
+        reason: `Short inserts (avg ${Math.round(avgInsertSize)} bp) - 3:1 ratio recommended`,
+        confidence: 'high'
+      };
+    }
+
+    // Standard recommendation for typical inserts
+    return {
+      ratio: 2,
+      reason: 'Standard PCR amplicons - 2:1 insert:vector (NEB recommended)',
+      confidence: 'high'
+    };
+  }, [fragments, vectorId]);
+
   // Add new fragment
   const addFragment = () => {
-    const newId = (fragments.length + 1).toString();
+    const newId = Date.now().toString();
+    const insertNum = fragments.filter(f => f.id !== vectorId).length + 1;
     setFragments([...fragments, {
       id: newId,
-      name: `Fragment ${newId}`,
-      size: 3000,
+      name: `Insert ${insertNum}`,
+      size: 1000,
       concentration: 100,
     }]);
   };
@@ -111,13 +197,18 @@ export default function DNA() {
       return;
     }
 
-    // Target pmol for each fragment (0.05 pmol for equimolar ratio at 15 µL standard reaction)
+    // Base pmol for vector (0.05 pmol at 15 µL standard reaction)
     // Scale proportionally with total volume to maintain proper DNA concentration
     const standardVolume = 15; // µL - NEB standard reaction volume
-    const targetPmol = 0.05 * molarRatio * (totalVolume / standardVolume);
+    const basePmol = 0.05 * (totalVolume / standardVolume);
 
-    // Calculate for each fragment
+    // Calculate for each fragment with proper insert:vector ratio
+    // Vector gets 1x, inserts get insertRatio x
     const calculationResults: CalculationResult[] = fragments.map(fragment => {
+      const isVector = fragment.id === vectorId;
+      const appliedRatio = isVector ? 1 : insertRatio;
+      const targetPmol = basePmol * appliedRatio;
+
       const massNeeded = calculateMass(fragment.size, targetPmol);
       const volumeNeeded = massNeeded / fragment.concentration;
 
@@ -127,6 +218,8 @@ export default function DNA() {
         massNeeded,
         volumeNeeded,
         needsDilution: volumeNeeded < 1,
+        isVector,
+        appliedRatio,
       };
 
       // If volume is too small (<1 µl), suggest smart dilution
@@ -232,12 +325,48 @@ export default function DNA() {
           Protocol Information
         </h3>
         <div className="text-sm text-slate-700 dark:text-slate-300 space-y-2">
-          <p><strong>Based on:</strong> NEB NEBuilder Ligase Master Mix Protocol</p>
-          <p><strong>Target:</strong> 0.05 pmol of each fragment at 15 µL (scales with volume)</p>
+          <p><strong>Based on:</strong> NEB Golden Gate Assembly Kit Protocol</p>
+          <p><strong>Ratio:</strong> Insert:Vector - inserts at {insertRatio}× relative to vector (1×)</p>
+          <p><strong>Base amount:</strong> 0.05 pmol vector at 15 µL (scales with volume)</p>
           <p><strong>Master Mix:</strong> 1/3 of total reaction volume</p>
-          <p><strong>Smart Dilution:</strong> Volumes &lt;1 µL trigger smart dilutions using easy-to-pipette volumes</p>
+          <p><strong>Smart Dilution:</strong> Volumes &lt;1 µL trigger smart dilutions for easy pipetting</p>
         </div>
       </div>
+
+      {/* Smart Recommendation */}
+      {fragments.length >= 2 && (
+        <div className={`card border-2 ${
+          ratioRecommendation.confidence === 'high'
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+            : ratioRecommendation.confidence === 'medium'
+            ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+        }`}>
+          <div className="flex items-start gap-3">
+            <Info className={`w-5 h-5 mt-0.5 ${
+              ratioRecommendation.confidence === 'high' ? 'text-green-600 dark:text-green-400' :
+              ratioRecommendation.confidence === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
+              'text-slate-500'
+            }`} />
+            <div>
+              <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                Smart Recommendation: {ratioRecommendation.ratio}:1 insert:vector
+              </h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {ratioRecommendation.reason}
+              </p>
+              {insertRatio !== ratioRecommendation.ratio && (
+                <button
+                  onClick={() => setInsertRatio(ratioRecommendation.ratio)}
+                  className="mt-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline"
+                >
+                  Apply recommended ratio
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input Section */}
       <div className="card">
@@ -245,7 +374,7 @@ export default function DNA() {
           Reaction Setup
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
             <label className="input-label">Total Reaction Volume (µL) *</label>
             <input
@@ -260,18 +389,34 @@ export default function DNA() {
           </div>
           <div>
             <label className="input-label">
-              Molar Ratio *
-              <span className="text-xs text-slate-500 ml-2">(1 = equimolar)</span>
+              Insert:Vector Ratio *
+              <span className="text-xs text-slate-500 ml-2">(e.g., 2 = 2:1)</span>
             </label>
             <input
               type="number"
               className="input-field"
-              placeholder="1"
-              step="0.1"
-              min="0.1"
-              value={molarRatio}
-              onChange={(e) => setMolarRatio(parseFloat(e.target.value) || 1)}
+              placeholder="2"
+              step="0.5"
+              min="0.5"
+              max="10"
+              value={insertRatio}
+              onChange={(e) => setInsertRatio(parseFloat(e.target.value) || 2)}
             />
+            <div className="text-xs text-slate-500 mt-1">
+              Inserts at {insertRatio}× pmol vs vector at 1×
+            </div>
+          </div>
+          <div>
+            <label className="input-label">Vector Selection</label>
+            <select
+              className="input-field"
+              value={vectorSelection}
+              onChange={(e) => setVectorSelection(e.target.value as VectorSelection)}
+            >
+              <option value="largest">Auto: Largest fragment</option>
+              <option value="smallest">Auto: Smallest fragment</option>
+              <option value="manual">Manual selection</option>
+            </select>
           </div>
         </div>
 
@@ -288,20 +433,49 @@ export default function DNA() {
         </div>
 
         <div className="space-y-4">
-          {fragments.map((fragment, index) => (
-            <div key={fragment.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border-2 border-slate-200 dark:border-slate-700">
+          {fragments.map((fragment, index) => {
+            const isVector = fragment.id === vectorId;
+            return (
+            <div key={fragment.id} className={`p-4 rounded-lg border-2 ${
+              isVector
+                ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700'
+                : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+            }`}>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-slate-800 dark:text-slate-200">
-                  Fragment {index + 1}
-                </h4>
-                {fragments.length > 1 && (
-                  <button
-                    onClick={() => removeFragment(fragment.id)}
-                    className="btn-icon text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold text-slate-800 dark:text-slate-200">
+                    {fragment.name || `Fragment ${index + 1}`}
+                  </h4>
+                  {isVector && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 text-xs font-semibold rounded-full">
+                      <Star className="w-3 h-3" />
+                      Vector (1×)
+                    </span>
+                  )}
+                  {!isVector && (
+                    <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-full">
+                      Insert ({insertRatio}×)
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {vectorSelection === 'manual' && !isVector && (
+                    <button
+                      onClick={() => setManualVectorId(fragment.id)}
+                      className="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                    >
+                      Set as vector
+                    </button>
+                  )}
+                  {fragments.length > 1 && (
+                    <button
+                      onClick={() => removeFragment(fragment.id)}
+                      className="btn-icon text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -341,7 +515,7 @@ export default function DNA() {
                 </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
 
         <button onClick={calculate} className="btn-primary w-full mt-6">
@@ -392,14 +566,30 @@ export default function DNA() {
             </h4>
 
             {results.map((result) => (
-              <div key={result.fragment.id} className="p-4 bg-white dark:bg-slate-800 rounded-lg border-2 border-slate-200 dark:border-slate-700">
+              <div key={result.fragment.id} className={`p-4 rounded-lg border-2 ${
+                result.isVector
+                  ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+              }`}>
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h5 className="font-semibold text-slate-900 dark:text-slate-100">
-                      {result.fragment.name}
-                    </h5>
+                    <div className="flex items-center gap-2">
+                      <h5 className="font-semibold text-slate-900 dark:text-slate-100">
+                        {result.fragment.name}
+                      </h5>
+                      {result.isVector ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 text-xs font-semibold rounded-full">
+                          <Star className="w-3 h-3" />
+                          Vector
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-semibold rounded-full">
+                          Insert
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-slate-600 dark:text-slate-400">
-                      {result.fragment.size} bp • {result.fragment.concentration} ng/µL
+                      {result.fragment.size} bp • {result.fragment.concentration} ng/µL • {result.appliedRatio}× ratio
                     </div>
                   </div>
                   {result.needsDilution && (
