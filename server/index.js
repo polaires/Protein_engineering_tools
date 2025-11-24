@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import fetch from 'node-fetch';
 import { Resend } from 'resend';
 
 dotenv.config();
