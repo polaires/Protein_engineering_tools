@@ -1038,39 +1038,52 @@ app.delete('/api/measurements/:id', authenticateToken, async (req, res) => {
 
 app.post('/api/hmmer/search', async (req, res) => {
   try {
+    console.log('HMMER search request received:', { hasSequence: !!req.body.sequence, database: req.body.database });
+
     const { sequence, database } = req.body;
 
     if (!sequence) {
+      console.error('No sequence provided');
       return res.status(400).json({ error: 'Sequence is required' });
     }
 
     // Submit search to HMMER API
+    // The HMMER API expects form data with 'seq' parameter
     const formData = new URLSearchParams();
-    formData.append('seq', `>query\n${sequence}`);
-    formData.append('hmmdb', database || 'pfam');
+    formData.append('seq', sequence); // Just the sequence, no FASTA header
 
+    console.log('Submitting to HMMER API with sequence length:', sequence.length);
     const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer/search/hmmscan', {
       method: 'POST',
       headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: formData.toString(),
     });
 
+    console.log('HMMER API response status:', submitResponse.status);
+
     if (!submitResponse.ok) {
+      const errorText = await submitResponse.text();
+      console.error('HMMER API error response:', errorText);
       throw new Error(`HMMER API error: ${submitResponse.status} ${submitResponse.statusText}`);
     }
 
     const submitData = await submitResponse.json();
+    console.log('HMMER API response data:', submitData);
 
     if (!submitData.job || !submitData.job.id) {
+      console.error('No job ID in response:', submitData);
       throw new Error('Failed to get job ID from HMMER API');
     }
 
+    console.log('HMMER search successful, job ID:', submitData.job.id);
     res.json({ jobId: submitData.job.id });
   } catch (error) {
     console.error('HMMER search proxy error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: error.message, details: error.toString() });
   }
 });
 
@@ -1100,6 +1113,32 @@ app.get('/api/hmmer/results/:jobId', async (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Test endpoint for fetch availability
+app.get('/api/hmmer/test', async (req, res) => {
+  try {
+    console.log('Test endpoint called');
+    console.log('fetch available:', typeof fetch);
+
+    // Test a simple fetch call
+    const testResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer');
+    console.log('Test fetch status:', testResponse.status);
+
+    res.json({
+      success: true,
+      fetchAvailable: typeof fetch !== 'undefined',
+      testStatus: testResponse.status,
+      message: 'Fetch is working correctly'
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      fetchAvailable: typeof fetch !== 'undefined'
+    });
+  }
 });
 
 app.get('/', (req, res) => {
