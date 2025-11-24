@@ -35,14 +35,23 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
     return <div className="text-gray-500">Could not parse alignment</div>;
   }
 
-  const maxNameLen = Math.max(...sequences.map(s => s.id.length));
+  // Fixed width for sequence names (ConSurf-style)
+  const NAME_WIDTH = 25; // characters
   const alignmentLength = sequences[0].sequence.length;
   const blockSize = 60;
 
   // Calculate conservation at each position
   const conservation = calculateConservation(sequences.map(s => s.sequence));
 
-  // Render alignment in blocks
+  // Truncate or pad sequence name to fixed width
+  const formatSequenceName = (name: string): string => {
+    if (name.length > NAME_WIDTH) {
+      return name.substring(0, NAME_WIDTH - 3) + '...';
+    }
+    return name.padEnd(NAME_WIDTH, ' ');
+  };
+
+  // Render alignment in blocks (ConSurf-style)
   const renderAlignment = () => {
     const blocks: JSX.Element[] = [];
 
@@ -57,22 +66,33 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
       const blockElements: JSX.Element[] = [];
 
-      // Add ruler
+      // Add ruler with proper spacing
       blockElements.push(
-        <div key={`ruler-${pos}`} className="text-gray-400 font-mono mb-1" style={{ fontSize: `${fontSize}px` }}>
-          {' '.repeat((maxNameLen + 2) * 0.6)}{ruler.join('')}
+        <div key={`ruler-${pos}`} className="font-mono mb-1 flex" style={{ fontSize: `${fontSize}px` }}>
+          <span className="text-gray-400 select-none" style={{ width: `${NAME_WIDTH}ch`, flexShrink: 0 }}>
+            {' '}
+          </span>
+          <span className="text-gray-400 whitespace-nowrap">
+            {ruler.join('')}
+          </span>
         </div>
       );
 
       // Add sequences
       sequences.forEach((seq, seqIdx) => {
         const seqBlock = seq.sequence.substring(pos, end);
-        const paddedName = seq.id.padEnd(maxNameLen, ' ');
+        const formattedName = formatSequenceName(seq.id);
 
         blockElements.push(
-          <div key={`${pos}-${seqIdx}`} className="font-mono flex items-center gap-1 mb-0.5" style={{ fontSize: `${fontSize}px` }}>
-            <span className="text-gray-400 sticky left-0 bg-gray-900 pr-2 z-10">{paddedName}</span>
-            <span className="flex">
+          <div key={`${pos}-${seqIdx}`} className="font-mono flex mb-0.5" style={{ fontSize: `${fontSize}px` }}>
+            <span
+              className="text-gray-400 select-none flex-shrink-0"
+              style={{ width: `${NAME_WIDTH}ch` }}
+              title={seq.id}
+            >
+              {formattedName}
+            </span>
+            <span className="whitespace-nowrap">
               {seqBlock.split('').map((aa, aaIdx) => {
                 const color = getAAColor(aa, colorScheme);
                 const globalPos = pos + aaIdx;
@@ -81,7 +101,7 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
                 return (
                   <span
                     key={aaIdx}
-                    className="px-0.5 relative group cursor-help transition-transform hover:scale-110"
+                    className="relative group cursor-help transition-transform hover:scale-110"
                     style={{
                       backgroundColor: color,
                       color: colorScheme === 'none' ? 'inherit' : '#fff',
@@ -102,11 +122,13 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
       if (showConservation) {
         const consBlock = conservation.slice(pos, end);
         blockElements.push(
-          <div key={`cons-${pos}`} className="font-mono text-xs flex items-center gap-1 mb-1">
-            <span className="text-gray-400 text-xs">{' '.repeat(maxNameLen)}</span>
-            <span className="flex text-xs text-gray-600">
+          <div key={`cons-${pos}`} className="font-mono text-xs flex mb-1">
+            <span className="text-gray-400 select-none" style={{ width: `${NAME_WIDTH}ch`, flexShrink: 0 }}>
+              {' '}
+            </span>
+            <span className="whitespace-nowrap text-xs text-gray-600">
               {consBlock.map((cons, idx) => (
-                <span key={idx} className="px-0.5">
+                <span key={idx}>
                   {cons > 0.9 ? '*' : cons > 0.7 ? ':' : cons > 0.5 ? '.' : ' '}
                 </span>
               ))}
@@ -295,11 +317,11 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
           </div>
         </div>
 
-        {/* Alignment Display with Sticky Headers */}
+        {/* Alignment Display with Horizontal Scrolling (ConSurf-style) */}
         <div className="relative">
-          <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
-            <div className="bg-gray-900 p-4 min-w-full">
-              <div className="text-white font-mono">{renderAlignment()}</div>
+          <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
+            <div className="bg-gray-900 p-4 inline-block min-w-full">
+              <div className="text-white font-mono whitespace-nowrap">{renderAlignment()}</div>
             </div>
           </div>
         </div>
