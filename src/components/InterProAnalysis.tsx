@@ -526,46 +526,68 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
 
         return (
           <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* Match Header */}
-            <div className="w-full bg-gradient-to-r from-purple-50 to-blue-50 p-4 border-b-2 border-purple-200">
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-purple-900 mb-2">
-                  {displayName}
-                </h3>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
-                    {database}
-                  </span>
-                  <span className="px-3 py-1 bg-gray-600 text-white text-xs font-mono rounded-full">
-                    {accession}
-                  </span>
-                  {signature.signatureLibraryRelease?.version && (
-                    <span className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full">
-                      v{signature.signatureLibraryRelease.version}
+            {/* Match Header - Clickable to expand/collapse */}
+            <button
+              onClick={() => handleToggleMatch(index)}
+              className="w-full bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 p-4 border-b-2 border-purple-200 text-left transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-purple-900 mb-2">
+                    {displayName}
+                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                      {database}
                     </span>
-                  )}
-                  {match.evalue && (
-                    <span className="px-3 py-1 bg-green-600 text-white text-xs rounded-full">
-                      E: {match.evalue.toExponential(2)}
+                    <span className="px-3 py-1 bg-gray-600 text-white text-xs font-mono rounded-full">
+                      {accession}
                     </span>
-                  )}
-                  {match.score && (
-                    <span className="px-3 py-1 bg-orange-600 text-white text-xs rounded-full">
-                      Score: {match.score.toFixed(1)}
+                    {signature.signatureLibraryRelease?.version && (
+                      <span className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full">
+                        v{signature.signatureLibraryRelease.version}
+                      </span>
+                    )}
+                    {match.evalue && (
+                      <span className="px-3 py-1 bg-green-600 text-white text-xs rounded-full">
+                        E: {match.evalue.toExponential(2)}
+                      </span>
+                    )}
+                    {match.score && (
+                      <span className="px-3 py-1 bg-orange-600 text-white text-xs rounded-full">
+                        Score: {match.score.toFixed(1)}
+                      </span>
+                    )}
+                    <span className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-full">
+                      {match.locations.length} region{match.locations.length !== 1 ? 's' : ''}
                     </span>
-                  )}
-                  <span className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-full">
-                    {match.locations.length} region{match.locations.length !== 1 ? 's' : ''}
-                  </span>
-                  <span className="px-3 py-1 bg-teal-600 text-white text-xs rounded-full">
-                    {coveragePercent}% coverage
-                  </span>
+                    <span className="px-3 py-1 bg-teal-600 text-white text-xs rounded-full">
+                      {coveragePercent}% coverage
+                    </span>
+                  </div>
                 </div>
+                {/* Chevron icon */}
+                <svg
+                  className={`w-6 h-6 text-purple-600 transform transition-transform flex-shrink-0 ml-4 ${
+                    isExpanded ? 'rotate-180' : ''
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
               </div>
-            </div>
+            </button>
 
-            {/* Match Details - Always shown */}
-            <div className="p-4 space-y-4">
+            {/* Match Details - Only shown when expanded */}
+            {isExpanded && (
+              <div className="p-4 space-y-4">
                 {/* Description */}
                 {signature.description && (
                   <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
@@ -924,6 +946,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                   </div>
                 )}
               </div>
+            )}
           </div>
         );
       })}
