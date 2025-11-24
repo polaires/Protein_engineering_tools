@@ -130,9 +130,18 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       return <p className="text-gray-500">No alignment data available</p>;
     }
 
-    const maxNameLen = Math.max(...sequences.map(s => s.name.length));
+    // Fixed width for sequence names (ConSurf-style)
+    const NAME_WIDTH = 25;
     const seqLength = sequences[0].sequence.length;
     const blockSize = 60;
+
+    // Truncate or pad sequence name to fixed width
+    const formatSequenceName = (name: string): string => {
+      if (name.length > NAME_WIDTH) {
+        return name.substring(0, NAME_WIDTH - 3) + '...';
+      }
+      return name.padEnd(NAME_WIDTH, ' ');
+    };
 
     const blocks: JSX.Element[] = [];
 
@@ -147,27 +156,38 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
 
       const blockElements: JSX.Element[] = [];
 
+      // Add ruler with proper spacing
       blockElements.push(
-        <div key={`ruler-${pos}`} className="text-gray-400 ml-2 font-mono text-xs">
-          {' '.repeat((maxNameLen + 2) * 0.6)}{ruler.join('')}
+        <div key={`ruler-${pos}`} className="font-mono text-xs flex mb-1">
+          <span className="text-gray-400 select-none" style={{ width: `${NAME_WIDTH}ch`, flexShrink: 0 }}>
+            {' '}
+          </span>
+          <span className="text-gray-400 whitespace-nowrap">
+            {ruler.join('')}
+          </span>
         </div>
       );
 
       // Sequences
       sequences.forEach((seq, seqIdx) => {
         const seqBlock = seq.sequence.substring(pos, end);
-        const paddedName = seq.name.padEnd(maxNameLen, ' ');
+        const formattedName = formatSequenceName(seq.name);
 
         blockElements.push(
-          <div key={`${pos}-${seqIdx}`} className="font-mono text-xs flex items-center gap-1 mb-0.5">
-            <span className="text-gray-500">{paddedName}</span>
-            <span className="flex">
+          <div key={`${pos}-${seqIdx}`} className="font-mono text-xs flex mb-0.5">
+            <span
+              className="text-gray-500 select-none flex-shrink-0"
+              style={{ width: `${NAME_WIDTH}ch` }}
+              title={seq.name}
+            >
+              {formattedName}
+            </span>
+            <span className="whitespace-nowrap">
               {seqBlock.split('').map((aa, aaIdx) => {
                 const color = getAAColor(aa, scheme);
                 return (
                   <span
                     key={aaIdx}
-                    className="px-0.5"
                     style={{
                       backgroundColor: color,
                       color: scheme === 'none' ? 'inherit' : '#fff',
@@ -189,7 +209,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       );
     }
 
-    return <div>{blocks}</div>;
+    return <div className="whitespace-nowrap">{blocks}</div>;
   };
 
   const renderMetadata = (meta: InterProMetadata) => {
@@ -744,9 +764,11 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                       </select>
                     </div>
 
-                    {/* Alignment Visualization */}
-                    <div className="bg-gray-900 p-4 rounded-lg overflow-x-auto max-h-96 overflow-y-auto">
-                      {renderAlignment(alignment[key]!, colorScheme[key] || 'clustal2')}
+                    {/* Alignment Visualization (ConSurf-style with horizontal scrolling) */}
+                    <div className="bg-gray-900 p-4 rounded-lg overflow-x-auto max-h-[500px] overflow-y-auto">
+                      <div className="inline-block min-w-full">
+                        {renderAlignment(alignment[key]!, colorScheme[key] || 'clustal2')}
+                      </div>
                     </div>
                   </div>
                 )}
