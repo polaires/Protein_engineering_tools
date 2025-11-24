@@ -96,7 +96,7 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
           <span className="text-gray-600 select-none flex-shrink-0 bg-white" style={{ width: `${NAME_WIDTH}ch` }}>
             {' '}
           </span>
-          <span className="text-gray-600 whitespace-nowrap pl-1">
+          <span className="text-gray-600 whitespace-nowrap">
             {rulerMarks}
           </span>
         </div>
@@ -370,18 +370,37 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
             </div>
           </div>
           <div className="bg-white p-4 rounded border border-blue-200 overflow-x-auto">
-            {/* Position Ruler */}
+            {/* Position Ruler - aligned with sequence characters */}
             <div className="font-mono text-xs text-gray-400 mb-2 whitespace-nowrap">
               {sequences[0].sequence.split('').map((_, idx) => {
-                if (idx % 10 === 0) {
+                // Show position number every 10 positions
+                if ((idx + 1) % 10 === 0) {
                   const label = String(idx + 1);
+                  // Right-align the number so it ends at this position
                   return (
-                    <span key={idx} className="inline-block text-center" style={{ width: '10ch' }}>
+                    <span key={idx} className="inline-block text-right" style={{ width: `${label.length}ch` }}>
                       {label}
                     </span>
                   );
+                } else if ((idx + 2) % 10 === 0) {
+                  // Skip the position before a label (for 2-digit numbers)
+                  const nextLabel = String(idx + 2);
+                  if (nextLabel.length === 2) {
+                    return <span key={idx} style={{ width: '1ch', display: 'inline-block' }}> </span>;
+                  }
+                } else if ((idx + 3) % 10 === 0) {
+                  // Skip 2 positions before a label (for 3-digit numbers)
+                  const nextLabel = String(idx + 3);
+                  if (nextLabel.length === 3) {
+                    return <span key={idx} style={{ width: '1ch', display: 'inline-block' }}> </span>;
+                  }
                 }
-                return null;
+                // Default: show tick mark or space
+                return (
+                  <span key={idx} className="inline-block text-center" style={{ width: '1ch' }}>
+                    {(idx + 1) % 5 === 0 ? '·' : ' '}
+                  </span>
+                );
               })}
             </div>
 
