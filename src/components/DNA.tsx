@@ -18,17 +18,22 @@ interface DNAFragment {
   concentration: number; // ng/µl
 }
 
+interface SmartDilution {
+  stockVolume: number; // µL of stock DNA to take (round number like 1)
+  waterForDilution: number; // µL of water to add for dilution
+  totalDilutionVolume: number; // total volume of diluted stock
+  dilutedConcentration: number; // ng/µL after dilution
+  volumeToUse: number; // µL of diluted stock to add to reaction
+  waterSaved: number; // µL of water replaced by using diluted stock
+}
+
 interface CalculationResult {
   fragment: DNAFragment;
   targetPmol: number; // pmol
   massNeeded: number; // ng
   volumeNeeded: number; // µl
   needsDilution: boolean;
-  suggestedDilution?: {
-    factor: number;
-    newConcentration: number;
-    volumeToUse: number;
-  };
+  smartDilution?: SmartDilution;
 }
 
 export default function DNA() {
@@ -124,18 +129,39 @@ export default function DNA() {
         needsDilution: volumeNeeded < 1,
       };
 
-      // If volume is too small (<1 µl), suggest dilution
+      // If volume is too small (<1 µl), suggest smart dilution
+      // Smart dilution: take 1 µL of stock, dilute with water, use more of diluted stock
+      // This replaces part of the water addition and makes pipetting easier
       if (volumeNeeded < 1) {
-        // Calculate dilution factor to bring volume to at least 2 µl
-        const targetVolume = 2;
-        const dilutionFactor = Math.ceil(targetVolume / volumeNeeded);
-        const newConcentration = fragment.concentration / dilutionFactor;
-        const volumeToUse = massNeeded / newConcentration;
+        // Use 1 µL of stock DNA (easy to pipette)
+        const stockVolume = 1;
+        // Target: use 2-3 µL of diluted stock for easy pipetting
+        const targetDilutedVolume = 2;
 
-        result.suggestedDilution = {
-          factor: dilutionFactor,
-          newConcentration,
+        // Calculate dilution factor: we have stockVolume µL, want to pipette targetDilutedVolume µL
+        // massNeeded = stockVolume * concentration / dilutionFactor * (targetDilutedVolume / totalDilutionVolume)
+        // Actually: stockVolume * concentration = total mass in diluted stock
+        // We need massNeeded, so: volumeToUse = massNeeded / dilutedConcentration
+        // dilutedConcentration = (stockVolume * concentration) / totalDilutionVolume
+        // For easy math: if we want volumeToUse = targetDilutedVolume,
+        // then totalDilutionVolume = (stockVolume * concentration * targetDilutedVolume) / massNeeded
+
+        const totalDilutionVolume = (stockVolume * fragment.concentration * targetDilutedVolume) / massNeeded;
+        const waterForDilution = totalDilutionVolume - stockVolume;
+        const dilutedConcentration = (stockVolume * fragment.concentration) / totalDilutionVolume;
+        const volumeToUse = targetDilutedVolume;
+
+        // Water saved = (volumeToUse from diluted stock) - (original volumeNeeded)
+        // This extra volume replaces water in the reaction
+        const waterSaved = volumeToUse - volumeNeeded;
+
+        result.smartDilution = {
+          stockVolume,
+          waterForDilution: Math.round(waterForDilution * 10) / 10, // Round to 0.1 µL
+          totalDilutionVolume: Math.round(totalDilutionVolume * 10) / 10,
+          dilutedConcentration,
           volumeToUse,
+          waterSaved,
         };
       }
 
@@ -148,8 +174,8 @@ export default function DNA() {
 
   // Calculate total DNA volume
   const totalDNAVolume = results ? results.reduce((sum, r) => {
-    return sum + (r.needsDilution && r.suggestedDilution
-      ? r.suggestedDilution.volumeToUse
+    return sum + (r.needsDilution && r.smartDilution
+      ? r.smartDilution.volumeToUse
       : r.volumeNeeded);
   }, 0) : 0;
 
@@ -209,7 +235,7 @@ export default function DNA() {
           <p><strong>Based on:</strong> NEB NEBuilder Ligase Master Mix Protocol</p>
           <p><strong>Target:</strong> 0.05 pmol of each fragment at 15 µL (scales with volume)</p>
           <p><strong>Master Mix:</strong> 1/3 of total reaction volume</p>
-          <p><strong>Note:</strong> Volumes &lt;1 µl are difficult to pipette accurately. Dilutions will be suggested.</p>
+          <p><strong>Smart Dilution:</strong> Volumes &lt;1 µL trigger smart dilutions using easy-to-pipette volumes</p>
         </div>
       </div>
 
@@ -400,30 +426,31 @@ export default function DNA() {
                   <div>
                     <div className="text-slate-600 dark:text-slate-400">Add to reaction</div>
                     <div className="font-mono font-bold text-lg text-primary-700 dark:text-primary-300">
-                      {result.needsDilution && result.suggestedDilution
-                        ? result.suggestedDilution.volumeToUse.toFixed(2)
+                      {result.needsDilution && result.smartDilution
+                        ? result.smartDilution.volumeToUse.toFixed(1)
                         : result.volumeNeeded.toFixed(2)} µL
+                      {result.needsDilution && <span className="text-xs font-normal ml-1">(diluted)</span>}
                     </div>
                   </div>
                 </div>
 
-                {result.needsDilution && result.suggestedDilution && (
-                  <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-                    <div className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2">
-                      📋 Dilution Required
+                {result.needsDilution && result.smartDilution && (
+                  <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-2">
+                      Smart Dilution (Easy Pipetting)
                     </div>
-                    <div className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
-                      <div>
-                        <strong>Reason:</strong> Volume of {result.volumeNeeded.toFixed(2)} µL is too small to pipette accurately
+                    <div className="text-sm text-green-700 dark:text-green-300 space-y-2">
+                      <div className="p-2 bg-white/50 dark:bg-slate-800/50 rounded">
+                        <strong>Step 1:</strong> Take <span className="font-mono font-bold">{result.smartDilution.stockVolume} µL</span> of stock DNA ({result.fragment.concentration} ng/µL)
                       </div>
-                      <div>
-                        <strong>Dilution:</strong> {result.suggestedDilution.factor}× dilution
+                      <div className="p-2 bg-white/50 dark:bg-slate-800/50 rounded">
+                        <strong>Step 2:</strong> Add <span className="font-mono font-bold">{result.smartDilution.waterForDilution} µL</span> water → {result.smartDilution.totalDilutionVolume} µL total at {result.smartDilution.dilutedConcentration.toFixed(2)} ng/µL
                       </div>
-                      <div>
-                        <strong>New concentration:</strong> {result.suggestedDilution.newConcentration.toFixed(2)} ng/µL
+                      <div className="p-2 bg-white/50 dark:bg-slate-800/50 rounded">
+                        <strong>Step 3:</strong> Use <span className="font-mono font-bold">{result.smartDilution.volumeToUse} µL</span> of diluted stock in reaction
                       </div>
-                      <div>
-                        <strong>Volume to use:</strong> {result.suggestedDilution.volumeToUse.toFixed(2)} µL (from diluted stock)
+                      <div className="text-xs text-green-600 dark:text-green-400 mt-2 italic">
+                        This replaces {result.smartDilution.waterSaved.toFixed(1)} µL of water in the reaction (already accounted for above)
                       </div>
                     </div>
                   </div>
