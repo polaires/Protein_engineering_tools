@@ -1048,14 +1048,15 @@ app.post('/api/hmmer/search', async (req, res) => {
     }
 
     // Submit search to HMMER API
+    // The HMMER API expects form data with 'seq' parameter
     const formData = new URLSearchParams();
-    formData.append('seq', `>query\n${sequence}`);
-    formData.append('hmmdb', database || 'pfam');
+    formData.append('seq', sequence); // Just the sequence, no FASTA header
 
-    console.log('Submitting to HMMER API...');
+    console.log('Submitting to HMMER API with sequence length:', sequence.length);
     const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer/search/hmmscan', {
       method: 'POST',
       headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: formData.toString(),
