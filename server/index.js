@@ -1032,6 +1032,68 @@ app.delete('/api/measurements/:id', authenticateToken, async (req, res) => {
 });
 
 // ============================================================================
+// HMMER/Pfam Proxy (for CORS handling)
+// ============================================================================
+
+app.post('/api/hmmer/search', async (req, res) => {
+  try {
+    const { sequence, database } = req.body;
+
+    if (!sequence) {
+      return res.status(400).json({ error: 'Sequence is required' });
+    }
+
+    // Submit search to HMMER API
+    const formData = new URLSearchParams();
+    formData.append('seq', `>query\n${sequence}`);
+    formData.append('hmmdb', database || 'pfam');
+
+    const submitResponse = await fetch('https://www.ebi.ac.uk/Tools/hmmer/search/hmmscan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
+    });
+
+    if (!submitResponse.ok) {
+      throw new Error(`HMMER API error: ${submitResponse.status} ${submitResponse.statusText}`);
+    }
+
+    const submitData = await submitResponse.json();
+
+    if (!submitData.job || !submitData.job.id) {
+      throw new Error('Failed to get job ID from HMMER API');
+    }
+
+    res.json({ jobId: submitData.job.id });
+  } catch (error) {
+    console.error('HMMER search proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/hmmer/results/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    const response = await fetch(`https://www.ebi.ac.uk/Tools/hmmer/results/${jobId}/score`);
+
+    if (response.status === 200) {
+      const data = await response.json();
+      res.json({ status: 'complete', data });
+    } else if (response.status === 202) {
+      res.json({ status: 'running' });
+    } else {
+      throw new Error(`HMMER API error: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error('HMMER results proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
 // Health Check
 // ============================================================================
 
