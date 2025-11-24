@@ -1102,8 +1102,11 @@ app.get('/api/hmmer/results/:jobId', async (req, res) => {
 
     if (response.status === 200) {
       const data = await response.json();
+      console.log('HMMER results received for job:', jobId);
+      console.log('Results structure:', JSON.stringify(data, null, 2).substring(0, 2000)); // Log first 2000 chars
       res.json({ status: 'complete', data });
     } else if (response.status === 202) {
+      console.log('Job still running:', jobId);
       res.json({ status: 'running' });
     } else {
       throw new Error(`HMMER API error: ${response.status} ${response.statusText}`);
