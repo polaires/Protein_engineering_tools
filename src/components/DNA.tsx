@@ -4,12 +4,12 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound, Info, Star, Sparkles } from 'lucide-react';
+import { Dna, Plus, Trash2, AlertCircle, Zap, FlaskRound, Info, Star, Sparkles, GitMerge } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import CodonOptimizerAdvanced from './CodonOptimizerAdvanced';
 import LibraryDesign from './LibraryDesign';
 
-type DNATab = 'assembly' | 'codon' | 'library';
+type DNATab = 'assembly' | 'hifi' | 'codon' | 'library';
 type VectorSelection = 'largest' | 'smallest' | 'manual';
 type GoldenGateEnzyme = 'BsaI-HFv2' | 'BsmBI-v2' | 'BbsI-HF' | 'Esp3I' | 'SapI' | 'PaqCI';
 type BufferSystem = 'T4-ligase-buffer' | 'NEBridge-master-mix';
@@ -171,6 +171,60 @@ interface RatioRecommendation {
   confidence: 'high' | 'medium' | 'low';
 }
 
+// HiFi Assembly specific interfaces
+interface HiFiFragment {
+  id: string;
+  name: string;
+  size: number; // base pairs
+  concentration: number; // ng/µl
+  isVector: boolean;
+  overlapLength: number; // bp overlap with adjacent fragment
+}
+
+interface HiFiCalculationResult {
+  fragment: HiFiFragment;
+  targetPmol: number;
+  massNeeded: number; // ng
+  volumeNeeded: number; // µL
+  needsDilution: boolean;
+  smartDilution?: SmartDilution;
+}
+
+// HiFi Assembly protocol info based on NEB recommendations
+function getHiFiProtocol(fragmentCount: number): {
+  overlapRecommendation: string;
+  pmolRange: string;
+  insertRatio: string;
+  incubationTime: string;
+  notes: string;
+} {
+  if (fragmentCount <= 3) {
+    return {
+      overlapRecommendation: '15-20 bp',
+      pmolRange: '0.03-0.2 pmol total',
+      insertRatio: '2:1 (insert:vector)',
+      incubationTime: '15 min at 50°C',
+      notes: 'Simple assembly - short incubation sufficient'
+    };
+  } else if (fragmentCount <= 6) {
+    return {
+      overlapRecommendation: '20-30 bp',
+      pmolRange: '0.2-0.5 pmol total',
+      insertRatio: '1:1 (equimolar)',
+      incubationTime: '60 min at 50°C',
+      notes: 'Multi-fragment assembly - longer overlaps improve efficiency'
+    };
+  } else {
+    return {
+      overlapRecommendation: '25-40 bp',
+      pmolRange: '0.5-1.0 pmol total',
+      insertRatio: '1:1 (equimolar)',
+      incubationTime: '60 min at 50°C',
+      notes: 'Complex assembly - consider splitting into sub-assemblies'
+    };
+  }
+}
+
 export default function DNA() {
   const { showToast } = useApp();
 
@@ -192,6 +246,19 @@ export default function DNA() {
 
   // Results
   const [results, setResults] = useState<CalculationResult[] | null>(null);
+
+  // ============ HiFi Assembly State ============
+  const [hifiFragments, setHifiFragments] = useState<HiFiFragment[]>([
+    { id: '1', name: 'Vector', size: 5000, concentration: 100, isVector: true, overlapLength: 20 },
+    { id: '2', name: 'Insert 1', size: 1500, concentration: 50, isVector: false, overlapLength: 20 },
+  ]);
+  const [hifiTotalVolume, setHifiTotalVolume] = useState(20); // Standard 20 µL reaction
+  const [hifiResults, setHifiResults] = useState<HiFiCalculationResult[] | null>(null);
+
+  // HiFi protocol recommendation based on fragment count
+  const hifiProtocol = useMemo(() => {
+    return getHiFiProtocol(hifiFragments.length);
+  }, [hifiFragments.length]);
 
   // Track if recommendation should be highlighted (after size change)
   const [showRecommendationHighlight, setShowRecommendationHighlight] = useState(false);
@@ -456,6 +523,147 @@ export default function DNA() {
       : r.volumeNeeded);
   }, 0) : 0;
 
+  // ============ HiFi Assembly Functions ============
+
+  // Add HiFi fragment
+  const addHifiFragment = () => {
+    const newId = Date.now().toString();
+    const insertNum = hifiFragments.filter(f => !f.isVector).length + 1;
+    setHifiFragments([...hifiFragments, {
+      id: newId,
+      name: `Insert ${insertNum}`,
+      size: 1000,
+      concentration: 50,
+      isVector: false,
+      overlapLength: hifiFragments.length <= 3 ? 20 : 25, // Longer overlaps for more fragments
+    }]);
+  };
+
+  // Remove HiFi fragment
+  const removeHifiFragment = (id: string) => {
+    if (hifiFragments.length > 1) {
+      setHifiFragments(hifiFragments.filter(f => f.id !== id));
+    } else {
+      showToast('error', 'At least one fragment is required');
+    }
+  };
+
+  // Update HiFi fragment
+  const updateHifiFragment = (id: string, field: keyof HiFiFragment, value: string | number | boolean) => {
+    setHifiFragments(hifiFragments.map(f =>
+      f.id === id ? { ...f, [field]: value } : f
+    ));
+  };
+
+  // Set vector for HiFi
+  const setHifiVector = (id: string) => {
+    setHifiFragments(hifiFragments.map(f => ({
+      ...f,
+      isVector: f.id === id
+    })));
+  };
+
+  // Calculate HiFi Assembly
+  // Based on NEB: pmol = (weight in ng) × 1000 / (bp × 650)
+  // Rearranged: ng = pmol × bp × 650 / 1000 = pmol × bp × 0.65
+  const calculateHifi = () => {
+    if (hifiFragments.length === 0) {
+      showToast('error', 'Please add at least one DNA fragment');
+      return;
+    }
+
+    // Validate inputs
+    for (const fragment of hifiFragments) {
+      if (!fragment.size || fragment.size <= 0) {
+        showToast('error', `Invalid size for ${fragment.name}`);
+        return;
+      }
+      if (!fragment.concentration || fragment.concentration <= 0) {
+        showToast('error', `Invalid concentration for ${fragment.name}`);
+        return;
+      }
+    }
+
+    const vectorFragment = hifiFragments.find(f => f.isVector);
+    if (!vectorFragment) {
+      showToast('error', 'Please select a vector fragment');
+      return;
+    }
+
+    // NEB recommendations for pmol amounts
+    // 2-3 fragments: 0.03-0.2 pmol total, 2:1 insert:vector
+    // 4-6 fragments: 0.2-0.5 pmol total, equimolar
+    // >6 fragments: 0.5-1.0 pmol total, equimolar
+    const fragmentCount = hifiFragments.length;
+    let vectorPmol: number;
+    let insertPmol: number;
+
+    if (fragmentCount <= 3) {
+      // 2:1 ratio, ~0.05 pmol vector, ~0.1 pmol each insert
+      vectorPmol = 0.05;
+      insertPmol = 0.1;
+    } else if (fragmentCount <= 6) {
+      // Equimolar, ~0.05 pmol each (total ~0.2-0.3 pmol)
+      vectorPmol = 0.05;
+      insertPmol = 0.05;
+    } else {
+      // Equimolar but slightly higher for complex assemblies
+      vectorPmol = 0.075;
+      insertPmol = 0.075;
+    }
+
+    const calculationResults: HiFiCalculationResult[] = hifiFragments.map(fragment => {
+      const targetPmol = fragment.isVector ? vectorPmol : insertPmol;
+      // mass (ng) = pmol × bp × 650 / 1000
+      const massNeeded = targetPmol * fragment.size * 0.65;
+      const volumeNeeded = massNeeded / fragment.concentration;
+
+      let result: HiFiCalculationResult = {
+        fragment,
+        targetPmol,
+        massNeeded,
+        volumeNeeded,
+        needsDilution: volumeNeeded < 1,
+      };
+
+      // Smart dilution for small volumes
+      if (volumeNeeded < 1) {
+        const stockVolume = 1;
+        const targetDilutedVolume = 2;
+        const totalDilutionVolume = (stockVolume * fragment.concentration * targetDilutedVolume) / massNeeded;
+        const waterForDilution = totalDilutionVolume - stockVolume;
+        const dilutedConcentration = (stockVolume * fragment.concentration) / totalDilutionVolume;
+        const volumeToUse = targetDilutedVolume;
+        const waterSaved = volumeToUse - volumeNeeded;
+
+        result.smartDilution = {
+          stockVolume,
+          waterForDilution: Math.round(waterForDilution * 10) / 10,
+          totalDilutionVolume: Math.round(totalDilutionVolume * 10) / 10,
+          dilutedConcentration,
+          volumeToUse,
+          waterSaved,
+        };
+      }
+
+      return result;
+    });
+
+    setHifiResults(calculationResults);
+    showToast('success', 'HiFi Assembly calculated');
+  };
+
+  // Calculate HiFi total DNA volume
+  const hifiTotalDNAVolume = hifiResults ? hifiResults.reduce((sum, r) => {
+    return sum + (r.needsDilution && r.smartDilution
+      ? r.smartDilution.volumeToUse
+      : r.volumeNeeded);
+  }, 0) : 0;
+
+  // HiFi master mix is 2X, so use 10 µL for 20 µL reaction
+  const hifiMasterMixVolume = hifiTotalVolume / 2;
+  const hifiWaterVolume = hifiTotalVolume - hifiMasterMixVolume - hifiTotalDNAVolume;
+
   // NEB Golden Gate Assembly reagent volumes
   // Enzyme amount is based on fragment count, not volume (NEB protocol)
   // ≤10 inserts: 1 µL enzyme mix, >10 inserts: 2 µL enzyme mix
@@ -503,7 +711,7 @@ export default function DNA() {
           DNA Tools
         </h2>
         <p className="text-slate-600 dark:text-slate-400 mb-4">
-          Golden Gate Assembly and Codon Optimization for E. coli
+          DNA Assembly, Codon Optimization, and Library Design
         </p>
 
         {/* Tab Navigation */}
@@ -513,7 +721,14 @@ export default function DNA() {
             className={`calc-mode-tab ${activeTab === 'assembly' ? 'active' : ''}`}
           >
             <Dna className="w-4 h-4 inline mr-2" />
-            Golden Gate Assembly
+            Golden Gate
+          </button>
+          <button
+            onClick={() => setActiveTab('hifi')}
+            className={`calc-mode-tab ${activeTab === 'hifi' ? 'active' : ''}`}
+          >
+            <GitMerge className="w-4 h-4 inline mr-2" />
+            HiFi Assembly
           </button>
           <button
             onClick={() => setActiveTab('codon')}
@@ -1015,6 +1230,343 @@ export default function DNA() {
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {/* HiFi Assembly Tab */}
+      {activeTab === 'hifi' && (
+        <>
+          {/* Protocol Information */}
+          <div className="card bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800">
+            <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
+              NEBuilder HiFi DNA Assembly Protocol
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700 dark:text-slate-300">
+              <div className="space-y-1">
+                <p><strong>Method:</strong> Exonuclease + Polymerase + Ligase</p>
+                <p><strong>Temperature:</strong> 50°C (isothermal)</p>
+                <p><strong>Master Mix:</strong> NEBuilder HiFi (2X)</p>
+              </div>
+              <div className="space-y-1">
+                <p><strong>Overlaps:</strong> {hifiProtocol.overlapRecommendation}</p>
+                <p><strong>DNA Amount:</strong> {hifiProtocol.pmolRange}</p>
+                <p><strong>Ratio:</strong> {hifiProtocol.insertRatio}</p>
+              </div>
+              <div className="space-y-1">
+                <p><strong>Incubation:</strong></p>
+                <p className="text-xs font-mono bg-green-100 dark:bg-green-800/50 text-green-800 dark:text-green-200 p-2 rounded border border-green-200 dark:border-green-700">
+                  {hifiProtocol.incubationTime}
+                </p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{hifiProtocol.notes}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Input Section */}
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">
+              Reaction Setup
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="input-label">Total Reaction Volume (µL) *</label>
+                <input
+                  type="number"
+                  className="input-field"
+                  placeholder="20"
+                  step="5"
+                  min="10"
+                  value={hifiTotalVolume}
+                  onChange={(e) => setHifiTotalVolume(parseFloat(e.target.value) || 20)}
+                />
+                <div className="text-xs text-slate-500 mt-1">
+                  Standard: 20 µL (10 µL master mix + DNA + water)
+                </div>
+              </div>
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-1">
+                  Fragments: {hifiFragments.length}
+                </div>
+                <div className="text-xs text-green-700 dark:text-green-300">
+                  {hifiFragments.length <= 3 ? '2-3 fragments: 15 min incubation' :
+                   hifiFragments.length <= 6 ? '4-6 fragments: 60 min incubation' :
+                   '>6 fragments: 60 min, consider sub-assemblies'}
+                </div>
+              </div>
+            </div>
+
+            <div className="divider" />
+
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                DNA Fragments
+              </h3>
+              <button onClick={addHifiFragment} className="btn-secondary">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Fragment
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {hifiFragments.map((fragment, index) => (
+                <div key={fragment.id} className={`p-4 rounded-lg border-2 ${
+                  fragment.isVector
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700'
+                    : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+                }`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-200">
+                        {fragment.name || `Fragment ${index + 1}`}
+                      </h4>
+                      {fragment.isVector && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 text-xs font-semibold rounded-full">
+                          <Star className="w-3 h-3" />
+                          Vector
+                        </span>
+                      )}
+                      {!fragment.isVector && (
+                        <span className="inline-flex items-center px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs font-semibold rounded-full">
+                          Insert
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!fragment.isVector && (
+                        <button
+                          onClick={() => setHifiVector(fragment.id)}
+                          className="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                        >
+                          Set as vector
+                        </button>
+                      )}
+                      {hifiFragments.length > 1 && (
+                        <button
+                          onClick={() => removeHifiFragment(fragment.id)}
+                          className="btn-icon text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="input-label">Name</label>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Fragment name"
+                        value={fragment.name}
+                        onChange={(e) => updateHifiFragment(fragment.id, 'name', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="input-label">Size (bp) *</label>
+                      <input
+                        type="number"
+                        className="input-field"
+                        placeholder="e.g., 3000"
+                        step="1"
+                        min="1"
+                        value={fragment.size}
+                        onChange={(e) => updateHifiFragment(fragment.id, 'size', parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="input-label">Concentration (ng/µL) *</label>
+                      <input
+                        type="number"
+                        className="input-field"
+                        placeholder="e.g., 50"
+                        step="any"
+                        min="0.01"
+                        value={fragment.concentration}
+                        onChange={(e) => updateHifiFragment(fragment.id, 'concentration', parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <label className="input-label">Overlap (bp)</label>
+                      <input
+                        type="number"
+                        className="input-field"
+                        placeholder="20"
+                        step="1"
+                        min="15"
+                        max="40"
+                        value={fragment.overlapLength}
+                        onChange={(e) => updateHifiFragment(fragment.id, 'overlapLength', parseFloat(e.target.value) || 20)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={calculateHifi} className="btn-primary w-full mt-4">
+              <GitMerge className="w-5 h-5 mr-2" />
+              Calculate HiFi Assembly
+            </button>
+          </div>
+
+          {/* Results */}
+          {hifiResults && (
+            <div className="card bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800">
+              <h3 className="text-xl font-bold mb-6 text-slate-800 dark:text-slate-200">
+                Assembly Protocol
+              </h3>
+
+              {/* Reagents */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+                <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    NEBuilder HiFi Master Mix (2X)
+                  </div>
+                  <div className="text-xl font-bold text-green-700 dark:text-green-300">
+                    {hifiMasterMixVolume.toFixed(1)} µL
+                  </div>
+                </div>
+                <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    Total DNA
+                  </div>
+                  <div className="text-xl font-bold text-primary-700 dark:text-primary-300">
+                    {hifiTotalDNAVolume.toFixed(2)} µL
+                  </div>
+                </div>
+                <div className="p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl">
+                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    Nuclease-free Water
+                  </div>
+                  <div className="text-xl font-bold text-blue-700 dark:text-blue-300">
+                    {hifiWaterVolume >= 0 ? hifiWaterVolume.toFixed(1) : '0.0'} µL
+                  </div>
+                  {hifiWaterVolume < 0 && (
+                    <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      Volume exceeds capacity
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* DNA Fragments */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200">
+                  DNA Fragments
+                </h4>
+
+                {hifiResults.map((result) => (
+                  <div key={result.fragment.id} className={`p-4 rounded-lg border-2 ${
+                    result.fragment.isVector
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                  }`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h5 className="font-semibold text-slate-900 dark:text-slate-100">
+                            {result.fragment.name}
+                          </h5>
+                          {result.fragment.isVector ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 text-xs font-semibold rounded-full">
+                              <Star className="w-3 h-3" />
+                              Vector
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-xs font-semibold rounded-full">
+                              Insert
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400">
+                          {result.fragment.size} bp • {result.fragment.concentration} ng/µL • {result.fragment.overlapLength} bp overlap
+                        </div>
+                      </div>
+                      {result.needsDilution && (
+                        <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-xs font-semibold">Dilution needed</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <div className="text-slate-600 dark:text-slate-400">Target</div>
+                        <div className="font-mono font-semibold">{result.targetPmol.toFixed(3)} pmol</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-600 dark:text-slate-400">Mass needed</div>
+                        <div className="font-mono font-semibold">{result.massNeeded.toFixed(2)} ng</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-600 dark:text-slate-400">Volume needed</div>
+                        <div className="font-mono font-semibold">{result.volumeNeeded.toFixed(2)} µL</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-600 dark:text-slate-400">Add to reaction</div>
+                        <div className="font-mono font-bold text-lg text-green-700 dark:text-green-300">
+                          {result.needsDilution && result.smartDilution
+                            ? result.smartDilution.volumeToUse.toFixed(1)
+                            : result.volumeNeeded.toFixed(2)} µL
+                          {result.needsDilution && <span className="text-xs font-normal ml-1">(diluted)</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {result.needsDilution && result.smartDilution && (
+                      <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="text-sm font-semibold text-green-800 dark:text-green-200 mb-2">
+                          Smart Dilution (Easy Pipetting)
+                        </div>
+                        <div className="text-sm text-green-700 dark:text-green-300 space-y-2">
+                          <div className="p-2 bg-white/50 dark:bg-slate-800/50 rounded">
+                            <strong>Step 1:</strong> Take <span className="font-mono font-bold">{result.smartDilution.stockVolume} µL</span> of stock DNA ({result.fragment.concentration} ng/µL)
+                          </div>
+                          <div className="p-2 bg-white/50 dark:bg-slate-800/50 rounded">
+                            <strong>Step 2:</strong> Add <span className="font-mono font-bold">{result.smartDilution.waterForDilution} µL</span> water → {result.smartDilution.totalDilutionVolume} µL total
+                          </div>
+                          <div className="p-2 bg-white/50 dark:bg-slate-800/50 rounded">
+                            <strong>Step 3:</strong> Use <span className="font-mono font-bold">{result.smartDilution.volumeToUse} µL</span> of diluted stock in reaction
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Summary */}
+              <div className="mt-6 p-4 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <h4 className="font-semibold mb-3 text-slate-800 dark:text-slate-200">
+                  Reaction Summary
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <div className="text-slate-600 dark:text-slate-400">Total Volume</div>
+                    <div className="font-mono font-bold">{hifiTotalVolume} µL</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-600 dark:text-slate-400">Master Mix</div>
+                    <div className="font-mono font-bold">{hifiMasterMixVolume.toFixed(1)} µL</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-600 dark:text-slate-400">Total DNA</div>
+                    <div className="font-mono font-bold">{hifiTotalDNAVolume.toFixed(2)} µL</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-600 dark:text-slate-400">Incubation</div>
+                    <div className="font-mono font-bold text-green-600 dark:text-green-400">{hifiProtocol.incubationTime}</div>
+                  </div>
+                </div>
+                <div className="mt-3 p-2 bg-white/50 dark:bg-slate-800/50 rounded text-xs text-slate-600 dark:text-slate-400">
+                  <strong>Next:</strong> Transform 2 µL into competent cells. Use NEB 5-alpha for routine assemblies, NEB 10-beta for &gt;15 kb constructs.
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
