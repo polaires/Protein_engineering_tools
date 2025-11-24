@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Dna, Info, AlertCircle, Droplet, Search, Loader2, Database, GitCompare } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
 import { searchPfamDomains, PfamSearchResult } from '@/services/pfamApi';
-import { submitInterProScan, InterProResult } from '@/services/interProApi';
+import { submitInterProScan, InterProResult, fetchSeedAlignment } from '@/services/interProApi';
 import { submitAlignment, AlignmentResult, AlignmentTool, AlignmentSequence } from '@/services/alignmentApi';
 import ProteinConcentration from './ProteinConcentration';
 import InterProAnalysis from './InterProAnalysis';
@@ -27,6 +27,7 @@ export default function ProtParam() {
   const [alignmentResult, setAlignmentResult] = useState<AlignmentResult | null>(null);
   const [alignmentLoading, setAlignmentLoading] = useState(false);
   const [alignmentTool, setAlignmentTool] = useState<AlignmentTool>('muscle');
+  const [pfamAlignmentLoading, setPfamAlignmentLoading] = useState<Record<string, boolean>>({});
 
   const handleAnalyze = () => {
     setError(null);
@@ -145,6 +146,47 @@ export default function ProtParam() {
       setAlignmentResult(null);
     } finally {
       setAlignmentLoading(false);
+    }
+  };
+
+  const handleAlignPfamDomain = async (pfamAccession: string) => {
+    setError(null);
+    setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: true });
+
+    try {
+      // Fetch seed alignment for this Pfam domain
+      const seedAlignment = await fetchSeedAlignment(pfamAccession, 'pfam');
+
+      if (!seedAlignment || seedAlignment.length === 0) {
+        setError(`No seed alignment available for ${pfamAccession}`);
+        setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
+        return;
+      }
+
+      // Convert to AlignmentSequence format and include query sequence
+      const sequences: AlignmentSequence[] = [
+        {
+          id: 'Query_Sequence',
+          sequence: sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase(),
+        },
+        ...seedAlignment.slice(0, 50).map(seq => ({
+          id: seq.name,
+          sequence: seq.sequence.replace(/-/g, ''), // Remove existing gaps
+        })),
+      ];
+
+      // Run alignment
+      const alignData = await submitAlignment(sequences, alignmentTool);
+      setAlignmentResult(alignData);
+
+      if (!alignData.success && alignData.error) {
+        setError(alignData.error);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Pfam alignment failed');
+      setAlignmentResult(null);
+    } finally {
+      setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
     }
   };
 
@@ -277,7 +319,7 @@ export default function ProtParam() {
               )}
             </button>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Enter multiple sequences in FASTA format (>header followed by sequence)
+              Enter multiple sequences in FASTA format ({'>'}header followed by sequence)
             </p>
           </div>
 
@@ -510,10 +552,16 @@ export default function ProtParam() {
 
       {pfamResult && pfamResult.success && (
         <div className="card">
-          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
-            <Search className="w-5 h-5" />
-            Pfam Domain Search Results (Fast)
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Pfam Domain Search Results (Fast)
+            </h3>
+            <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
+              <GitCompare className="w-4 h-4" />
+              Click "Align" to align seed sequences with {alignmentTool.toUpperCase()}
+            </div>
+          </div>
 
           {pfamResult.domains.length === 0 ? (
             <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center">
@@ -571,6 +619,9 @@ export default function ProtParam() {
                       <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Bit Score
                       </th>
+                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -607,6 +658,26 @@ export default function ProtParam() {
                         </td>
                         <td className="p-3 text-right font-mono text-sm font-semibold">
                           {domain.bitscore.toFixed(1)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => handleAlignPfamDomain(domain.acc)}
+                            disabled={pfamAlignmentLoading[domain.acc]}
+                            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 mx-auto"
+                            title={`Align seed sequences with ${alignmentTool.toUpperCase()}`}
+                          >
+                            {pfamAlignmentLoading[domain.acc] ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Aligning...
+                              </>
+                            ) : (
+                              <>
+                                <GitCompare className="w-3 h-3" />
+                                Align
+                              </>
+                            )}
+                          </button>
                         </td>
                       </tr>
                     ))}
