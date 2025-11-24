@@ -254,7 +254,8 @@ export async function searchPfamDomains(sequence: string): Promise<PfamSearchRes
     let resultsData: any = null;
 
     while (retries < MAX_RETRIES) {
-      const pollResponse = await fetch(`${HMMER_API_BASE}/api/v1/results/${jobId}/score`);
+      // Correct API v1 endpoint: /result/{id} (singular, no /score)
+      const pollResponse = await fetch(`${HMMER_API_BASE}/api/v1/result/${jobId}`);
 
       if (pollResponse.status === 200) {
         resultsData = await pollResponse.json();
