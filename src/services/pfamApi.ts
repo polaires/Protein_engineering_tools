@@ -242,11 +242,12 @@ export async function searchPfamDomains(sequence: string): Promise<PfamSearchRes
 
     const submitData = await submitResponse.json();
 
-    if (!submitData.job || !submitData.job.id) {
+    // API v1 returns { id: "..." } directly
+    const jobId = submitData.id || submitData.job?.id;
+
+    if (!jobId) {
       throw new Error('Failed to get job ID from HMMER API');
     }
-
-    const jobId = submitData.job.id;
 
     // Poll for results
     let retries = 0;
