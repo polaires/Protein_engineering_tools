@@ -14,14 +14,44 @@ type VectorSelection = 'largest' | 'smallest' | 'manual';
 type GoldenGateEnzyme = 'BsaI-HFv2' | 'BsmBI-v2' | 'BbsI-HF' | 'Esp3I' | 'SapI' | 'PaqCI';
 type BufferSystem = 'T4-ligase-buffer' | 'NEBridge-master-mix';
 
-// Enzyme information database
-const ENZYME_INFO: Record<GoldenGateEnzyme, { temp: number; overhang: number; recognition: string; notes: string }> = {
-  'BsaI-HFv2': { temp: 37, overhang: 4, recognition: "GGTCTC", notes: 'Most common, Time-Saver qualified' },
-  'BsmBI-v2': { temp: 42, overhang: 4, recognition: "CGTCTC", notes: 'Higher temp, good for GC-rich' },
-  'Esp3I': { temp: 37, overhang: 4, recognition: "CGTCTC", notes: 'BsmBI isoschizomer, faster at 37°C' },
-  'BbsI-HF': { temp: 37, overhang: 4, recognition: "GAAGAC", notes: 'Alternative recognition site' },
-  'SapI': { temp: 37, overhang: 3, recognition: "GCTCTTC", notes: '7bp recognition, 3bp overhang' },
-  'PaqCI': { temp: 37, overhang: 4, recognition: "CACCTGC", notes: '7bp recognition, reduces internal sites' },
+// Enzyme information database with cycling protocols
+const ENZYME_INFO: Record<GoldenGateEnzyme, {
+  temp: number;
+  overhang: number;
+  recognition: string;
+  notes: string;
+  cyclingProtocol: string;
+}> = {
+  'BsaI-HFv2': {
+    temp: 37, overhang: 4, recognition: "GGTCTC",
+    notes: 'Most common, Time-Saver qualified',
+    cyclingProtocol: '30 cycles: 37°C 1min → 16°C 1min, then 60°C 5min'
+  },
+  'BsmBI-v2': {
+    temp: 42, overhang: 4, recognition: "CGTCTC",
+    notes: 'Higher temp, good for GC-rich',
+    cyclingProtocol: '30 cycles: 42°C 1min → 16°C 1min, then 60°C 5min'
+  },
+  'Esp3I': {
+    temp: 37, overhang: 4, recognition: "CGTCTC",
+    notes: 'BsmBI isoschizomer, faster at 37°C',
+    cyclingProtocol: '30 cycles: 37°C 1min → 16°C 1min, then 60°C 5min'
+  },
+  'BbsI-HF': {
+    temp: 37, overhang: 4, recognition: "GAAGAC",
+    notes: 'Alternative recognition site',
+    cyclingProtocol: '30 cycles: 37°C 1min → 16°C 1min, then 65°C 5min'
+  },
+  'SapI': {
+    temp: 37, overhang: 3, recognition: "GCTCTTC",
+    notes: '7bp recognition, 3bp overhang',
+    cyclingProtocol: '30 cycles: 37°C 1min → 16°C 1min, then 65°C 20min'
+  },
+  'PaqCI': {
+    temp: 37, overhang: 4, recognition: "CACCTGC",
+    notes: '7bp recognition, reduces internal sites',
+    cyclingProtocol: '30 cycles: 37°C 1min → 16°C 1min, then 60°C 5min'
+  },
 };
 
 interface DNAFragment {
@@ -69,7 +99,7 @@ export default function DNA() {
     { id: '2', name: 'Insert 1', size: 1000, concentration: 100 },
   ]);
   const [insertRatio, setInsertRatio] = useState(2); // Default 2:1 insert:vector (NEB recommended)
-  const [totalVolume, setTotalVolume] = useState(20); // µl - NEB standard is 20 µL
+  const [totalVolume, setTotalVolume] = useState(20); // µl - T4 buffer: 20 µL, NEBridge: 15 µL
   const [vectorSelection, setVectorSelection] = useState<VectorSelection>('largest');
   const [manualVectorId, setManualVectorId] = useState<string | null>(null);
   const [enzyme, setEnzyme] = useState<GoldenGateEnzyme>('BsaI-HFv2');
@@ -81,6 +111,25 @@ export default function DNA() {
   // Track if recommendation should be highlighted (after size change)
   const [showRecommendationHighlight, setShowRecommendationHighlight] = useState(false);
   const prevRecommendationRef = useRef<number>(2);
+
+  // Standard volumes for each buffer system (NEB protocols)
+  // T4 DNA Ligase Buffer: 20 µL standard reaction
+  // NEBridge Ligase Master Mix: 15 µL standard reaction
+  const getStandardVolume = (buffer: BufferSystem): number => {
+    return buffer === 'NEBridge-master-mix' ? 15 : 20;
+  };
+
+  // Update total volume when buffer system changes (only if at standard volume)
+  const prevBufferRef = useRef<BufferSystem>(bufferSystem);
+  useEffect(() => {
+    const oldStandard = getStandardVolume(prevBufferRef.current);
+    const newStandard = getStandardVolume(bufferSystem);
+    // Only auto-update if user hasn't changed volume from the previous standard
+    if (totalVolume === oldStandard) {
+      setTotalVolume(newStandard);
+    }
+    prevBufferRef.current = bufferSystem;
+  }, [bufferSystem, totalVolume]);
 
   // Determine which fragment is the vector
   const vectorId = useMemo(() => {
@@ -238,9 +287,10 @@ export default function DNA() {
       return;
     }
 
-    // Base pmol for vector (0.05 pmol at 20 µL standard reaction)
+    // Base pmol for vector (0.05 pmol at standard reaction volume)
     // Scale proportionally with total volume to maintain proper DNA concentration
-    const standardVolume = 20; // µL - NEB standard reaction volume
+    // T4 buffer: 20 µL standard, NEBridge: 15 µL standard
+    const standardVolume = getStandardVolume(bufferSystem);
     const basePmol = 0.05 * (totalVolume / standardVolume);
 
     // Calculate for each fragment with proper insert:vector ratio
@@ -397,7 +447,7 @@ export default function DNA() {
         <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
           Protocol Information
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700 dark:text-slate-300">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700 dark:text-slate-300">
           <div className="space-y-1">
             <p><strong>Enzyme:</strong> {enzyme} ({ENZYME_INFO[enzyme].recognition}, {ENZYME_INFO[enzyme].overhang}bp overhang)</p>
             <p><strong>Temperature:</strong> {ENZYME_INFO[enzyme].temp}°C</p>
@@ -406,7 +456,11 @@ export default function DNA() {
           <div className="space-y-1">
             <p><strong>Buffer:</strong> {bufferSystem === 'NEBridge-master-mix' ? 'NEBridge Ligase Master Mix (3X)' : 'T4 DNA Ligase Buffer (10X)'}</p>
             <p><strong>Ratio:</strong> {insertRatio}:1 insert:vector</p>
-            <p><strong>Base:</strong> 0.05 pmol vector at 20 µL (scales with volume)</p>
+            <p><strong>Base:</strong> 0.05 pmol vector at {getStandardVolume(bufferSystem)} µL (scales with volume)</p>
+          </div>
+          <div className="space-y-1">
+            <p><strong>Cycling Protocol:</strong></p>
+            <p className="text-xs">{ENZYME_INFO[enzyme].cyclingProtocol}</p>
           </div>
         </div>
       </div>
@@ -423,12 +477,15 @@ export default function DNA() {
             <input
               type="number"
               className="input-field"
-              placeholder="20"
+              placeholder={bufferSystem === 'NEBridge-master-mix' ? '15' : '20'}
               step="5"
               min="10"
               value={totalVolume}
-              onChange={(e) => setTotalVolume(parseFloat(e.target.value) || 20)}
+              onChange={(e) => setTotalVolume(parseFloat(e.target.value) || getStandardVolume(bufferSystem))}
             />
+            <div className="text-xs text-slate-500 mt-1">
+              Standard: {getStandardVolume(bufferSystem)} µL for {bufferSystem === 'NEBridge-master-mix' ? 'NEBridge' : 'T4 buffer'}
+            </div>
           </div>
           <div>
             <label className="input-label">Buffer System</label>
