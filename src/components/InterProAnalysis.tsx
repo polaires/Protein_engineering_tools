@@ -106,7 +106,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
     };
   }, [loadingMetadata, loadingAlignment]);
 
-  const handleToggleMatch = (index: number, accession?: string, database?: string) => {
+  const handleToggleMatch = (index: number) => {
     const newExpandedState = expandedMatch === index ? null : index;
     setExpandedMatch(newExpandedState);
 
@@ -527,7 +527,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
           <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Match Header */}
             <button
-              onClick={() => handleToggleMatch(index, accession, database)}
+              onClick={() => handleToggleMatch(index)}
               className="w-full bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 p-4 text-left transition-colors border-b-2 border-purple-200"
             >
               <div className="flex items-center justify-between">
