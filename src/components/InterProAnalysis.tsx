@@ -225,10 +225,10 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
         {/* Statistics */}
         {meta.counters && (
           <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="font-semibold text-gray-900 mb-3">Statistics</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <h4 className="font-semibold text-gray-900 mb-3">Database Statistics</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {meta.counters.proteins && (
-                <div className="bg-white p-3 rounded shadow-sm">
+                <div className="bg-white p-3 rounded shadow-sm border-l-4 border-purple-500">
                   <div className="text-2xl font-bold text-purple-600">
                     {meta.counters.proteins.toLocaleString()}
                   </div>
@@ -236,22 +236,48 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                 </div>
               )}
               {meta.counters.structures && (
-                <div className="bg-white p-3 rounded shadow-sm">
+                <div className="bg-white p-3 rounded shadow-sm border-l-4 border-green-500">
                   <div className="text-2xl font-bold text-green-600">
                     {meta.counters.structures.toLocaleString()}
                   </div>
-                  <div className="text-xs text-gray-600">Structures</div>
+                  <div className="text-xs text-gray-600">3D Structures</div>
                 </div>
               )}
               {meta.counters.taxa && (
-                <div className="bg-white p-3 rounded shadow-sm">
+                <div className="bg-white p-3 rounded shadow-sm border-l-4 border-blue-500">
                   <div className="text-2xl font-bold text-blue-600">
                     {meta.counters.taxa.toLocaleString()}
                   </div>
-                  <div className="text-xs text-gray-600">Taxa</div>
+                  <div className="text-xs text-gray-600">Organisms</div>
+                </div>
+              )}
+              {meta.counters.proteomes && (
+                <div className="bg-white p-3 rounded shadow-sm border-l-4 border-orange-500">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {meta.counters.proteomes.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600">Proteomes</div>
+                </div>
+              )}
+              {meta.counters.domain_architectures && (
+                <div className="bg-white p-3 rounded shadow-sm border-l-4 border-pink-500">
+                  <div className="text-2xl font-bold text-pink-600">
+                    {meta.counters.domain_architectures.toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-600">Architectures</div>
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Set Information (for InterPro entries that are part of a set) */}
+        {meta.set_info && (
+          <div className="bg-teal-50 p-4 rounded-lg border-l-4 border-teal-500">
+            <h4 className="font-semibold text-teal-900 mb-2">Member of Set</h4>
+            <p className="text-sm text-teal-800">
+              <strong>{meta.set_info.name}</strong> ({meta.set_info.accession})
+            </p>
           </div>
         )}
 
@@ -435,51 +461,66 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
 
                 {/* Domain Visualization */}
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-3">Domain Locations</h4>
+                  <h4 className="font-semibold text-gray-900 mb-3">Domain Locations on Protein Sequence</h4>
 
-                  {/* Linear Domain Map (SVG) */}
+                  {/* Linear Domain Map (SVG) - Fixed scaling */}
                   <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
                     <svg
                       width="100%"
                       height="120"
-                      viewBox={`0 0 ${Math.max(600, sequenceLength + 100)} 120`}
+                      viewBox="0 0 1000 120"
+                      preserveAspectRatio="xMidYMid meet"
                       className="overflow-visible"
                     >
                       {/* Protein sequence line */}
                       <line
                         x1="50"
                         y1="60"
-                        x2={50 + sequenceLength}
+                        x2="950"
                         y2="60"
                         stroke="#94a3b8"
-                        strokeWidth="2"
+                        strokeWidth="3"
                       />
 
                       {/* Start position marker */}
-                      <text x="50" y="80" fontSize="10" fill="#64748b" textAnchor="middle">
+                      <text x="50" y="85" fontSize="12" fill="#64748b" textAnchor="middle" fontWeight="bold">
                         1
                       </text>
 
                       {/* End position marker */}
                       <text
-                        x={50 + sequenceLength}
-                        y="80"
-                        fontSize="10"
+                        x="950"
+                        y="85"
+                        fontSize="12"
                         fill="#64748b"
                         textAnchor="middle"
+                        fontWeight="bold"
                       >
                         {sequenceLength}
+                      </text>
+
+                      {/* Middle marker */}
+                      <text
+                        x="500"
+                        y="85"
+                        fontSize="11"
+                        fill="#94a3b8"
+                        textAnchor="middle"
+                      >
+                        {Math.floor(sequenceLength / 2)}
                       </text>
 
                       {/* Domain blocks */}
                       {match.locations.map((loc, locIdx) => {
                         const colors = [
                           '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
-                          '#ef4444', '#14b8a6', '#f97316', '#8b5cf6'
+                          '#ef4444', '#14b8a6', '#f97316', '#6366f1'
                         ];
                         const color = colors[locIdx % colors.length];
-                        const xStart = 50 + (loc.start - 1);
-                        const width = loc.end - loc.start + 1;
+                        // Scale positions to fit in the 50-950 range
+                        const scale = 900 / sequenceLength;
+                        const xStart = 50 + ((loc.start - 1) * scale);
+                        const width = (loc.end - loc.start + 1) * scale;
 
                         return (
                           <g key={locIdx}>
@@ -487,13 +528,13 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                             <rect
                               x={xStart}
                               y="40"
-                              width={width}
+                              width={Math.max(width, 3)}
                               height="40"
                               fill={color}
-                              fillOpacity="0.7"
+                              fillOpacity="0.8"
                               stroke={color}
                               strokeWidth="2"
-                              rx="3"
+                              rx="4"
                             >
                               <title>
                                 Region {locIdx + 1}: {loc.start}-{loc.end}
@@ -503,23 +544,26 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                             </rect>
 
                             {/* Region label */}
-                            <text
-                              x={xStart + width / 2}
-                              y="55"
-                              fontSize="9"
-                              fill="white"
-                              fontWeight="bold"
-                              textAnchor="middle"
-                            >
-                              R{locIdx + 1}
-                            </text>
+                            {width > 20 && (
+                              <text
+                                x={xStart + width / 2}
+                                y="63"
+                                fontSize="10"
+                                fill="white"
+                                fontWeight="bold"
+                                textAnchor="middle"
+                              >
+                                R{locIdx + 1}
+                              </text>
+                            )}
 
                             {/* Position labels on domain */}
                             <text
                               x={xStart + width / 2}
                               y="30"
-                              fontSize="8"
+                              fontSize="10"
                               fill={color}
+                              fontWeight="600"
                               textAnchor="middle"
                             >
                               {loc.start}-{loc.end}

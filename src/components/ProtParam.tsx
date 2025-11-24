@@ -77,6 +77,11 @@ export default function ProtParam() {
     try {
       const analysis = analyzeProtein(sequence);
       setResult(analysis);
+
+      // Auto-trigger InterProScan analysis
+      if (sequence.trim()) {
+        handleSearchInterPro();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
     }
@@ -323,31 +328,21 @@ export default function ProtParam() {
               )}
             </button>
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleSearchInterPro}
-              className="btn-primary flex-1"
-              disabled={interProLoading || !sequence.trim()}
-            >
-              {interProLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  <span className="flex flex-col items-start">
-                    <span>Analysis in progress</span>
-                    <span className="text-xs opacity-80">
-                      {formatInterProProgress(interProElapsedTime).timeStr} elapsed
-                      (est. {formatInterProProgress(interProElapsedTime).estimateStr})
-                    </span>
+          {/* Show InterProScan status if running */}
+          {interProLoading && (
+            <div className="flex gap-3">
+              <div className="btn-primary flex-1 cursor-default opacity-90">
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                <span className="flex flex-col items-start">
+                  <span>Full InterProScan Analysis in progress</span>
+                  <span className="text-xs opacity-80">
+                    {formatInterProProgress(interProElapsedTime).timeStr} elapsed
+                    (est. {formatInterProProgress(interProElapsedTime).estimateStr})
                   </span>
-                </>
-              ) : (
-                <>
-                  <Database className="w-5 h-5 mr-2" />
-                  Full InterProScan Analysis
-                </>
-              )}
-            </button>
-          </div>
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3">
             <button onClick={handleLoadExample} className="btn-secondary">
@@ -551,31 +546,6 @@ export default function ProtParam() {
       )}
 
       {/* Pfam Domain Results */}
-      {/* InterProScan Results */}
-      {interProResult && interProResult.success && (
-        <div className="card">
-          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
-            <Database className="w-5 h-5" />
-            InterProScan Analysis Results
-          </h3>
-
-          {interProResult.matches.length === 0 ? (
-            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center">
-              <Info className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-              <p className="text-slate-600 dark:text-slate-400">
-                No domains found for this sequence in InterPro databases.
-              </p>
-            </div>
-          ) : (
-            <InterProAnalysis
-              matches={interProResult.matches}
-              sequenceLength={interProResult.sequenceLength}
-              querySequence={sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase()}
-            />
-          )}
-        </div>
-      )}
-
       {pfamResult && pfamResult.success && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -797,6 +767,31 @@ export default function ProtParam() {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* InterProScan Results */}
+      {interProResult && interProResult.success && (
+        <div className="card">
+          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <Database className="w-5 h-5" />
+            Full InterProScan Analysis Results
+          </h3>
+
+          {interProResult.matches.length === 0 ? (
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-center">
+              <Info className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+              <p className="text-slate-600 dark:text-slate-400">
+                No domains found for this sequence in InterPro databases.
+              </p>
+            </div>
+          ) : (
+            <InterProAnalysis
+              matches={interProResult.matches}
+              sequenceLength={interProResult.sequenceLength}
+              querySequence={sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase()}
+            />
           )}
         </div>
       )}
