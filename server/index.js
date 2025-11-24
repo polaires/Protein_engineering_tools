@@ -1097,7 +1097,8 @@ app.get('/api/hmmer/results/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
 
-    const response = await fetch(`https://www.ebi.ac.uk/Tools/hmmer/api/v1/results/${jobId}/score`);
+    // Correct API v1 endpoint: /result/{id} (singular, no /score)
+    const response = await fetch(`https://www.ebi.ac.uk/Tools/hmmer/api/v1/result/${jobId}`);
 
     if (response.status === 200) {
       const data = await response.json();
