@@ -30,6 +30,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
   const [loadingMetadata, setLoadingMetadata] = useState<Record<string, boolean>>({});
   const [loadingAlignment, setLoadingAlignment] = useState<Record<string, boolean>>({});
   const [metadataError, setMetadataError] = useState<Record<string, string>>({});
+  const [alignmentError, setAlignmentError] = useState<Record<string, string>>({});
 
   const handleToggleMatch = (index: number) => {
     setExpandedMatch(expandedMatch === index ? null : index);
@@ -83,6 +84,13 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       return; // Already loaded
     }
 
+    // Clear any previous error
+    setAlignmentError((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+
     // Set loading state using functional update
     setLoadingAlignment((prev) => ({ ...prev, [key]: true }));
 
@@ -93,12 +101,20 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
 
       const align = await fetchSeedAlignment(baseAccession, dbLower);
 
+      if (!align || align.length === 0) {
+        throw new Error('No seed alignment available for this domain. The alignment may not exist or may be unavailable.');
+      }
+
       // Update alignment and color scheme using functional updates
       setAlignment((prev) => ({ ...prev, [key]: align }));
       setColorScheme((prev) => ({ ...prev, [key]: 'clustal2' })); // Default color scheme
     } catch (error) {
       console.error('Alignment fetch error:', error);
       setAlignment((prev) => ({ ...prev, [key]: null }));
+      setAlignmentError((prev) => ({
+        ...prev,
+        [key]: error instanceof Error ? error.message : 'Failed to fetch seed alignment',
+      }));
     } finally {
       // Clear loading state using functional update
       setLoadingAlignment((prev) => ({ ...prev, [key]: false }));
@@ -299,7 +315,8 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
         const accession = signature.accession;
         const key = `${accession}_${database}`;
         const isExpanded = expandedMatch === index;
-        const hasPfamLikeDB = database === 'PFAM' || database === 'NCBIFAM';
+        // Only show seed alignment button for PFAM (other databases often don't have seed alignments)
+        const hasSeedAlignment = database.toUpperCase() === 'PFAM';
 
         // Calculate coverage
         const totalCoverage = match.locations.reduce(
@@ -558,37 +575,28 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                   <button
                     onClick={() => handleFetchMetadata(accession, database)}
                     disabled={loadingMetadata[key]}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
                   >
                     {loadingMetadata[key]
                       ? 'Loading...'
                       : metadata[key]
-                      ? 'Detailed Info Loaded'
+                      ? '✓ Detailed Info Loaded'
                       : 'Fetch Detailed Info'}
                   </button>
 
-                  {hasPfamLikeDB && (
+                  {hasSeedAlignment && (
                     <button
                       onClick={() => handleFetchAlignment(accession, database)}
                       disabled={loadingAlignment[key]}
-                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
                     >
                       {loadingAlignment[key]
                         ? 'Loading...'
                         : alignment[key]
-                        ? 'Alignment Loaded'
+                        ? '✓ Alignment Loaded'
                         : 'Fetch Seed Alignment'}
                     </button>
                   )}
-
-                  <a
-                    href={`https://www.ebi.ac.uk/interpro/entry/${database.toLowerCase()}/${accession}/`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                  >
-                    View on InterPro
-                  </a>
                 </div>
 
                 {/* Error Display */}
@@ -611,6 +619,31 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                       <div className="ml-3">
                         <p className="text-sm text-red-700">
                           <strong>Error fetching metadata:</strong> {metadataError[key]}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {alignmentError[key] && (
+                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg
+                          className="h-5 w-5 text-red-400"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-red-700">
+                          <strong>Error fetching alignment:</strong> {alignmentError[key]}
                         </p>
                       </div>
                     </div>
