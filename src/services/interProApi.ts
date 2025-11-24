@@ -55,7 +55,7 @@ export interface InterProResult {
 
 export interface InterProMetadata {
   accession: string;
-  name: string;
+  name: string | { name: string; short: string };
   type?: string;
   description?: string[];
   literature?: Record<string, any>;
