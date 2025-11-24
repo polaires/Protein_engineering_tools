@@ -700,7 +700,13 @@ export default function ProtParam() {
                     {pfamResult.domains.map((domain, idx) => {
                       const baseAccession = domain.acc.split('.')[0];
                       const meta = pfamMetadata[baseAccession];
-                      const description = meta?.description?.[0] || domain.description || 'Loading...';
+
+                      // Description can be string or object with {text, llm, checked, updated}
+                      const descItem = meta?.description?.[0];
+                      const description = descItem
+                        ? (typeof descItem === 'string' ? descItem : (descItem as any)?.text || 'Loading...')
+                        : (domain.description || 'Loading...');
+
                       // Handle name being either string or object {name, short}
                       const displayName = meta?.name
                         ? (typeof meta.name === 'string' ? meta.name : meta.name.name)
