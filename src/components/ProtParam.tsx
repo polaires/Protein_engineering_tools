@@ -12,8 +12,9 @@ import { submitAlignment, AlignmentResult, AlignmentTool, AlignmentSequence } fr
 import ProteinConcentration from './ProteinConcentration';
 import InterProAnalysis from './InterProAnalysis';
 import AlignmentViewer from './AlignmentViewer';
+import MultipleSequenceAlignment from './MultipleSequenceAlignment';
 
-type ProtParamTab = 'analysis' | 'concentration';
+type ProtParamTab = 'analysis' | 'concentration' | 'alignment';
 
 export default function ProtParam() {
   const [activeTab, setActiveTab] = useState<ProtParamTab>('analysis');
@@ -267,6 +268,13 @@ export default function ProtParam() {
           >
             <Droplet className="w-4 h-4 inline mr-2" />
             Concentration Calculator
+          </button>
+          <button
+            onClick={() => setActiveTab('alignment')}
+            className={`calc-mode-tab ${activeTab === 'alignment' ? 'active' : ''}`}
+          >
+            <GitCompare className="w-4 h-4 inline mr-2" />
+            Multiple Sequence Alignment
           </button>
         </div>
       </div>
@@ -714,9 +722,14 @@ export default function ProtParam() {
                           Seed Alignment
                         </h4>
                         {pfamAlignmentLoading[baseAccession] ? (
-                          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 py-4">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Aligning with {alignmentTool.toUpperCase()}...</span>
+                          <div className="flex flex-col items-center justify-center py-12 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                            <Loader2 className="w-12 h-12 animate-spin text-blue-600 dark:text-blue-400 mb-4" />
+                            <p className="text-lg font-medium text-blue-800 dark:text-blue-200">
+                              Aligning sequences with {alignmentTool.toUpperCase()}
+                            </p>
+                            <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
+                              Fetching seed alignment and running analysis...
+                            </p>
                           </div>
                         ) : pfamAlignmentResults[baseAccession]?.success ? (
                           <AlignmentViewer result={pfamAlignmentResults[baseAccession]!} />
@@ -799,6 +812,11 @@ export default function ProtParam() {
           prefillExtinctionCoefficient={result?.extinctionCoefficient.reduced}
           prefillSequence={result?.sequence}
         />
+      )}
+
+      {/* Multiple Sequence Alignment Tab */}
+      {activeTab === 'alignment' && (
+        <MultipleSequenceAlignment />
       )}
     </div>
   );

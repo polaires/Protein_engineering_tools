@@ -3,21 +3,20 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom, Box, GitCompare } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom, Box } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
 import DNA from '@/components/DNA';
 import Element from '@/components/Element';
 import ProteinViewer from '@/components/ProteinViewer';
-import MultipleSequenceAlignment from '@/components/MultipleSequenceAlignment';
 import LoginModal from '@/components/LoginModal';
 import { ToastContainer } from '@/components/Toast';
 import VerifyEmail from '@/components/VerifyEmail';
 import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 import ResetPassword from '@/components/ResetPassword';
 
-type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'protein-viewer' | 'alignment' | 'about';
+type Tab = 'solution' | 'protein' | 'dna' | 'element' | 'protein-viewer' | 'about';
 
 function AppContent() {
   const { toasts, removeToast, loadingChemicals, loadingRecipes, isAuthenticated, currentUser, logout, showLoginModal, setShowLoginModal } = useApp();
@@ -183,13 +182,6 @@ function AppContent() {
               3D Viewer
             </button>
             <button
-              onClick={() => setActiveTab('alignment')}
-              className={`calc-mode-tab ${activeTab === 'alignment' ? 'active' : ''}`}
-            >
-              <GitCompare className="w-4 h-4 inline mr-2" />
-              Alignment
-            </button>
-            <button
               onClick={() => setActiveTab('about')}
               className={`calc-mode-tab ${activeTab === 'about' ? 'active' : ''}`}
             >
@@ -229,12 +221,6 @@ function AppContent() {
         {activeTab === 'protein-viewer' && (
           <div className="animate-in">
             <ProteinViewer />
-          </div>
-        )}
-
-        {activeTab === 'alignment' && (
-          <div className="animate-in">
-            <MultipleSequenceAlignment />
           </div>
         )}
 
