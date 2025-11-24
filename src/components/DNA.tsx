@@ -456,14 +456,17 @@ export default function DNA() {
       : r.volumeNeeded);
   }, 0) : 0;
 
-  // NEB Golden Gate Assembly reagent volumes (based on 20 µL standard reaction)
-  // Buffer system determines reagent breakdown
+  // NEB Golden Gate Assembly reagent volumes
+  // Enzyme amount is based on fragment count, not volume (NEB protocol)
+  // ≤10 inserts: 1 µL enzyme mix, >10 inserts: 2 µL enzyme mix
   const reagentVolumes = useMemo(() => {
+    // Enzyme volume based on fragment count (NEB recommendation)
+    const enzymeVol = fragments.length > 10 ? 2 : 1;
+
     if (bufferSystem === 'NEBridge-master-mix') {
       // NEBridge Ligase Master Mix is 3X, so use 1/3 of total volume
-      // It contains T4 DNA Ligase + optimized buffer + ligation enhancer
+      // Standard 15 µL reaction = 5 µL master mix
       const masterMixVolume = totalVolume / 3;
-      const enzymeVol = totalVolume / 20; // 1 µL per 20 µL
       return {
         masterMixVolume,
         bufferVolume: 0,
@@ -473,9 +476,9 @@ export default function DNA() {
       };
     } else {
       // T4 DNA Ligase Buffer system (individual components)
+      // Standard 20 µL reaction: 2 µL buffer, 1 µL ligase, 1 µL enzyme
       const bufferVol = totalVolume / 10; // 10X buffer
-      const ligaseVol = totalVolume / 20; // 1 µL per 20 µL
-      const enzymeVol = totalVolume / 20; // 1 µL per 20 µL
+      const ligaseVol = 1; // T4 DNA Ligase: 1 µL per reaction (NEB)
       return {
         masterMixVolume: 0,
         bufferVolume: bufferVol,
@@ -484,7 +487,7 @@ export default function DNA() {
         totalReagentVolume: bufferVol + ligaseVol + enzymeVol,
       };
     }
-  }, [bufferSystem, totalVolume]);
+  }, [bufferSystem, totalVolume, fragments.length]);
 
   const { masterMixVolume, bufferVolume, ligaseVolume, enzymeVolume, totalReagentVolume } = reagentVolumes;
 
@@ -550,8 +553,8 @@ export default function DNA() {
           </div>
           <div className="space-y-1">
             <p><strong>Cycling Protocol ({cyclingProtocol.method}):</strong></p>
-            <p className="text-xs font-mono bg-white/50 dark:bg-slate-900/50 p-1 rounded">{cyclingProtocol.summary}</p>
-            <p className="text-xs text-slate-500 mt-1">{cyclingProtocol.notes}</p>
+            <p className="text-xs font-mono bg-blue-100 dark:bg-blue-800/50 text-blue-800 dark:text-blue-200 p-2 rounded border border-blue-200 dark:border-blue-700">{cyclingProtocol.summary}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{cyclingProtocol.notes}</p>
           </div>
         </div>
       </div>
