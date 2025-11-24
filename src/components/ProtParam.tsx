@@ -212,7 +212,7 @@ export default function ProtParam() {
       // Convert to AlignmentSequence format and include query sequence
       const sequences: AlignmentSequence[] = [
         {
-          id: 'Query_Sequence',
+          id: 'Your_Protein',
           sequence: sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase(),
         },
         ...seedAlignment.slice(0, 50).map(seq => ({

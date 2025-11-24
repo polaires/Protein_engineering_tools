@@ -259,7 +259,18 @@ export async function searchPfamDomains(sequence: string): Promise<PfamSearchRes
 
       if (pollResponse.status === 200) {
         resultsData = await pollResponse.json();
-        break;
+
+        // Check if job is complete
+        if (resultsData.status === 'SUCCESS') {
+          break;
+        } else if (resultsData.status === 'STARTED' || resultsData.status === 'RUNNING') {
+          // Job still running, wait and retry
+          await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+          retries++;
+        } else {
+          // Unknown status or error
+          throw new Error(`HMMER job failed with status: ${resultsData.status}`);
+        }
       } else if (pollResponse.status === 202) {
         // Still running
         await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
@@ -400,13 +411,16 @@ function parsePfamDomains(results: any): PfamDomain[] {
   const domains: PfamDomain[] = [];
 
   try {
-    console.log('Parsing Pfam domains from results:', JSON.stringify(results).substring(0, 500));
-
     // HMMER API v1 response structure: { result: { hits: [...] } } (singular "result")
     if (!results.result || !results.result.hits) {
-      console.warn('No results.result.hits found in response. Keys:', Object.keys(results));
+      // Only log error if status is SUCCESS but no hits found (not during polling)
+      if (results.status === 'SUCCESS') {
+        console.log('No Pfam domains found in sequence');
+      }
       return domains;
     }
+
+    console.log(`Found ${results.result.hits.length} Pfam domain hit(s)`);
 
     for (const hit of results.result.hits) {
       if (!hit.domains) continue;
