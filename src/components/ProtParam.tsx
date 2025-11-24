@@ -25,10 +25,9 @@ export default function ProtParam() {
   const [interProResult, setInterProResult] = useState<InterProResult | null>(null);
   const [interProLoading, setInterProLoading] = useState(false);
   const [interProElapsedTime, setInterProElapsedTime] = useState(0);
-  const [alignmentResult, setAlignmentResult] = useState<AlignmentResult | null>(null);
-  const [alignmentLoading, setAlignmentLoading] = useState(false);
-  const [alignmentTool, setAlignmentTool] = useState<AlignmentTool>('muscle');
+  const alignmentTool: AlignmentTool = 'muscle'; // Default alignment tool for Pfam domains
   const [pfamAlignmentLoading, setPfamAlignmentLoading] = useState<Record<string, boolean>>({});
+  const [pfamAlignmentResults, setPfamAlignmentResults] = useState<Record<string, AlignmentResult | null>>({});
   const [pfamMetadata, setPfamMetadata] = useState<Record<string, InterProMetadata | null>>({});
   const interProTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -88,7 +87,9 @@ export default function ProtParam() {
     setError(null);
     setPfamResult(null);
     setInterProResult(null);
-    setAlignmentResult(null);
+    setPfamAlignmentResults({});
+    setPfamAlignmentLoading({});
+    setPfamMetadata({});
   };
 
   const handleLoadExample = () => {
@@ -119,11 +120,12 @@ export default function ProtParam() {
     }
   };
 
-  // Fetch InterPro metadata to enrich Pfam results
+  // Fetch InterPro metadata and auto-align Pfam results
   const enrichPfamResults = async (domains: any[]) => {
     for (const domain of domains) {
       const accession = domain.acc.split('.')[0]; // Strip version number
 
+      // Fetch metadata
       try {
         const meta = await fetchInterProMetadata(accession, 'pfam');
         if (meta) {
@@ -132,6 +134,9 @@ export default function ProtParam() {
       } catch (error) {
         console.error(`Failed to fetch metadata for ${accession}:`, error);
       }
+
+      // Auto-trigger alignment for this domain
+      handleAlignPfamDomain(domain.acc);
     }
   };
 
@@ -154,76 +159,22 @@ export default function ProtParam() {
     }
   };
 
-  const handleAlign = async () => {
-    setError(null);
-    setAlignmentLoading(true);
-
-    try {
-      // Parse input - could be single sequence or multiple FASTA
-      const cleanSeq = sequence.trim();
-      const sequences: AlignmentSequence[] = [];
-
-      if (cleanSeq.includes('>')) {
-        // Multiple FASTA sequences
-        const lines = cleanSeq.split('\n');
-        let currentSeq: AlignmentSequence | null = null;
-
-        for (const line of lines) {
-          if (line.startsWith('>')) {
-            if (currentSeq && currentSeq.sequence) {
-              sequences.push(currentSeq);
-            }
-            currentSeq = { id: line.substring(1).trim() || `Seq${sequences.length + 1}`, sequence: '' };
-          } else if (currentSeq) {
-            currentSeq.sequence += line.replace(/\s/g, '').toUpperCase();
-          }
-        }
-
-        if (currentSeq && currentSeq.sequence) {
-          sequences.push(currentSeq);
-        }
-      } else {
-        // Single sequence - need at least 2 for alignment
-        setError('Please provide at least 2 sequences in FASTA format for alignment');
-        setAlignmentLoading(false);
-        return;
-      }
-
-      if (sequences.length < 2) {
-        setError('At least 2 sequences required for alignment. Use FASTA format with > headers.');
-        setAlignmentLoading(false);
-        return;
-      }
-
-      const alignData = await submitAlignment(sequences, alignmentTool);
-      setAlignmentResult(alignData);
-
-      if (!alignData.success && alignData.error) {
-        setError(alignData.error);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Alignment failed');
-      setAlignmentResult(null);
-    } finally {
-      setAlignmentLoading(false);
-    }
-  };
-
   const handleAlignPfamDomain = async (pfamAccession: string) => {
-    setError(null);
-    setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: true });
+    const baseAccession = pfamAccession.split('.')[0];
+
+    // Set loading state for this domain
+    setPfamAlignmentLoading((prev) => ({ ...prev, [baseAccession]: true }));
 
     try {
-      // Strip version number from Pfam accession (e.g., PF04423.19 -> PF04423)
-      const baseAccession = pfamAccession.split('.')[0];
       console.log(`Fetching seed alignment for ${pfamAccession} (using base accession: ${baseAccession})`);
 
       // Fetch seed alignment for this Pfam domain
       const seedAlignment = await fetchSeedAlignment(baseAccession, 'pfam');
 
       if (!seedAlignment || seedAlignment.length === 0) {
-        setError(`No seed alignment available for ${baseAccession}. The domain may not have a seed alignment, or there may be an issue fetching it.`);
-        setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
+        console.error(`No seed alignment available for ${baseAccession}`);
+        setPfamAlignmentLoading((prev) => ({ ...prev, [baseAccession]: false }));
+        setPfamAlignmentResults((prev) => ({ ...prev, [baseAccession]: null }));
         return;
       }
 
@@ -243,16 +194,49 @@ export default function ProtParam() {
 
       // Run alignment
       const alignData = await submitAlignment(sequences, alignmentTool);
-      setAlignmentResult(alignData);
+
+      // Store result for this domain
+      setPfamAlignmentResults((prev) => ({ ...prev, [baseAccession]: alignData }));
 
       if (!alignData.success && alignData.error) {
-        setError(alignData.error);
+        console.error(`Alignment failed for ${baseAccession}: ${alignData.error}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Pfam alignment failed');
-      setAlignmentResult(null);
+      console.error(`Pfam alignment failed for ${baseAccession}:`, err);
+      setPfamAlignmentResults((prev) => ({ ...prev, [baseAccession]: null }));
     } finally {
-      setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
+      setPfamAlignmentLoading((prev) => ({ ...prev, [baseAccession]: false }));
+    }
+  };
+
+  // Helper functions for interpreting E-values and bit scores
+  const interpretEvalue = (evalue: number): { text: string; color: string } => {
+    if (evalue < 1e-100) {
+      return { text: 'Extremely significant', color: 'text-green-700 dark:text-green-400' };
+    } else if (evalue < 1e-50) {
+      return { text: 'Highly significant', color: 'text-green-600 dark:text-green-400' };
+    } else if (evalue < 1e-10) {
+      return { text: 'Very significant', color: 'text-blue-600 dark:text-blue-400' };
+    } else if (evalue < 1e-5) {
+      return { text: 'Significant', color: 'text-blue-500 dark:text-blue-400' };
+    } else if (evalue < 0.01) {
+      return { text: 'Marginally significant', color: 'text-yellow-600 dark:text-yellow-400' };
+    } else {
+      return { text: 'Not significant', color: 'text-gray-500 dark:text-gray-400' };
+    }
+  };
+
+  const interpretBitScore = (bitScore: number): { text: string; color: string } => {
+    if (bitScore > 200) {
+      return { text: 'Excellent match', color: 'text-green-700 dark:text-green-400' };
+    } else if (bitScore > 100) {
+      return { text: 'Very good match', color: 'text-green-600 dark:text-green-400' };
+    } else if (bitScore > 50) {
+      return { text: 'Good match', color: 'text-blue-600 dark:text-blue-400' };
+    } else if (bitScore > 30) {
+      return { text: 'Moderate match', color: 'text-yellow-600 dark:text-yellow-400' };
+    } else {
+      return { text: 'Weak match', color: 'text-gray-500 dark:text-gray-400' };
     }
   };
 
@@ -355,44 +339,6 @@ export default function ProtParam() {
                 </>
               )}
             </button>
-          </div>
-
-          {/* Alignment Section */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
-            <div className="flex items-center gap-3 mb-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Alignment Tool:
-              </label>
-              <select
-                value={alignmentTool}
-                onChange={(e) => setAlignmentTool(e.target.value as AlignmentTool)}
-                className="border border-gray-300 dark:border-gray-600 rounded px-3 py-1 text-sm bg-white dark:bg-gray-800"
-                disabled={alignmentLoading}
-              >
-                <option value="muscle">MUSCLE (default)</option>
-                <option value="clustalo">Clustal Omega</option>
-              </select>
-            </div>
-            <button
-              onClick={handleAlign}
-              className="btn-primary w-full"
-              disabled={alignmentLoading || !sequence.trim()}
-            >
-              {alignmentLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Aligning sequences with {alignmentTool.toUpperCase()}...
-                </>
-              ) : (
-                <>
-                  <GitCompare className="w-5 h-5 mr-2" />
-                  Align Sequences ({alignmentTool.toUpperCase()})
-                </>
-              )}
-            </button>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Enter multiple sequences in FASTA format ({'>'}header followed by sequence)
-            </p>
           </div>
 
           <div className="flex gap-3">
@@ -627,11 +573,10 @@ export default function ProtParam() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <Search className="w-5 h-5" />
-              Pfam Domain Search Results (Fast)
+              Pfam Domain Search Results
             </h3>
-            <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
-              <GitCompare className="w-4 h-4" />
-              Click "Align" to align seed sequences with {alignmentTool.toUpperCase()}
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Alignments are performed automatically with {alignmentTool.toUpperCase()}
             </div>
           </div>
 
@@ -669,135 +614,121 @@ export default function ProtParam() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b-2 border-slate-300 dark:border-slate-600">
-                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Action
-                      </th>
-                      <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Pfam ID
-                      </th>
-                      <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Accession
-                      </th>
-                      <th className="text-left p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Description
-                      </th>
-                      <th className="text-center p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Position
-                      </th>
-                      <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        E-value
-                      </th>
-                      <th className="text-right p-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Bit Score
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pfamResult.domains.map((domain, idx) => {
-                      const baseAccession = domain.acc.split('.')[0];
-                      const meta = pfamMetadata[baseAccession];
+              <div className="space-y-4">
+                {pfamResult.domains.map((domain, idx) => {
+                  const baseAccession = domain.acc.split('.')[0];
+                  const meta = pfamMetadata[baseAccession];
 
-                      // Helper to strip HTML tags from description
-                      const stripHtml = (html: string): string => {
-                        const tmp = document.createElement('div');
-                        tmp.innerHTML = html;
-                        return tmp.textContent || tmp.innerText || '';
-                      };
+                  // Helper to strip HTML tags from description
+                  const stripHtml = (html: string): string => {
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = html;
+                    return tmp.textContent || tmp.innerText || '';
+                  };
 
-                      // Description can be string or object with {text, llm, checked, updated}
-                      const descItem = meta?.description?.[0];
-                      let description = descItem
-                        ? (typeof descItem === 'string' ? descItem : (descItem as any)?.text || 'Loading...')
-                        : (domain.description || 'Loading...');
+                  // Description can be string or object with {text, llm, checked, updated}
+                  const descItem = meta?.description?.[0];
+                  let description = descItem
+                    ? (typeof descItem === 'string' ? descItem : (descItem as any)?.text || 'Loading...')
+                    : (domain.description || 'Loading...');
 
-                      // Strip HTML tags if present
-                      if (description && description.includes('<')) {
-                        description = stripHtml(description);
-                      }
+                  // Strip HTML tags if present
+                  if (description && description.includes('<')) {
+                    description = stripHtml(description);
+                  }
 
-                      // Truncate description for table display
-                      const truncatedDescription = description.length > 100
-                        ? description.substring(0, 100) + '...'
-                        : description;
+                  // Handle name being either string or object {name, short}
+                  const displayName = meta?.name
+                    ? (typeof meta.name === 'string' ? meta.name : meta.name.name)
+                    : domain.name;
 
-                      // Handle name being either string or object {name, short}
-                      const displayName = meta?.name
-                        ? (typeof meta.name === 'string' ? meta.name : meta.name.name)
-                        : domain.name;
+                  // Get interpretations
+                  const evalueInterpretation = interpretEvalue(domain.evalue);
+                  const bitScoreInterpretation = interpretBitScore(domain.bitscore);
 
-                      return (
-                        <tr
-                          key={idx}
-                          className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  return (
+                    <div
+                      key={idx}
+                      className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700"
+                    >
+                      {/* Header line with domain name */}
+                      <div className="mb-2">
+                        <a
+                          href={`https://www.ebi.ac.uk/interpro/entry/pfam/${domain.acc}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-lg font-bold text-primary-600 dark:text-primary-400 hover:underline"
                         >
-                          <td className="p-3 text-center">
-                            <button
-                              onClick={() => handleAlignPfamDomain(domain.acc)}
-                              disabled={pfamAlignmentLoading[domain.acc]}
-                              className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 mx-auto transition-all shadow-sm hover:shadow-md"
-                              title={`Align seed sequences with ${alignmentTool.toUpperCase()}`}
-                            >
-                              {pfamAlignmentLoading[domain.acc] ? (
-                                <>
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Aligning...
-                                </>
-                              ) : (
-                                <>
-                                  <GitCompare className="w-3 h-3" />
-                                  Align
-                                </>
-                              )}
-                            </button>
-                          </td>
-                          <td className="p-3">
-                            <a
-                              href={`https://www.ebi.ac.uk/interpro/entry/pfam/${domain.acc}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono font-bold text-primary-600 dark:text-primary-400 hover:underline"
-                              title={displayName}
-                            >
-                              {displayName}
-                            </a>
-                          </td>
-                          <td className="p-3">
-                            <span className="font-mono text-sm text-slate-600 dark:text-slate-400">
-                              {domain.acc}
-                            </span>
-                          </td>
-                          <td className="p-3 text-sm text-slate-700 dark:text-slate-300">
-                            <div className="max-w-sm">
-                              <div title={description}>
-                                {truncatedDescription}
-                              </div>
-                              {meta?.literature && Object.keys(meta.literature).length > 0 && (
-                                <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                                  📚 {Object.keys(meta.literature).length} reference(s)
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        <td className="p-3 text-center">
-                          <span className="font-mono text-sm bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
+                          {displayName}
+                        </a>
+                      </div>
+
+                      {/* Description line */}
+                      <div className="text-sm text-slate-700 dark:text-slate-300 mb-3">
+                        {description}
+                        {meta?.literature && Object.keys(meta.literature).length > 0 && (
+                          <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                            📚 {Object.keys(meta.literature).length} reference(s)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Accession, Position, E-value, Bit Score on same line */}
+                      <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 dark:text-slate-400">Accession:</span>
+                          <span className="font-mono text-slate-800 dark:text-slate-200 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
+                            {domain.acc}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 dark:text-slate-400">Position:</span>
+                          <span className="font-mono text-slate-800 dark:text-slate-200 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
                             {domain.start}-{domain.end}
                           </span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-sm">
-                          {domain.evalue.toExponential(2)}
-                        </td>
-                        <td className="p-3 text-right font-mono text-sm font-semibold">
-                          {domain.bitscore.toFixed(1)}
-                        </td>
-                      </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 dark:text-slate-400">E-value:</span>
+                          <span className="font-mono text-slate-800 dark:text-slate-200">
+                            {domain.evalue.toExponential(2)}
+                          </span>
+                          <span className={`text-xs font-medium ${evalueInterpretation.color}`}>
+                            ({evalueInterpretation.text})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-600 dark:text-slate-400">Bit Score:</span>
+                          <span className="font-mono text-slate-800 dark:text-slate-200">
+                            {domain.bitscore.toFixed(1)}
+                          </span>
+                          <span className={`text-xs font-medium ${bitScoreInterpretation.color}`}>
+                            ({bitScoreInterpretation.text})
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Alignment section */}
+                      <div className="border-t border-slate-300 dark:border-slate-600 pt-3 mt-3">
+                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                          <GitCompare className="w-4 h-4" />
+                          Seed Alignment
+                        </h4>
+                        {pfamAlignmentLoading[baseAccession] ? (
+                          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 py-4">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Aligning with {alignmentTool.toUpperCase()}...</span>
+                          </div>
+                        ) : pfamAlignmentResults[baseAccession]?.success ? (
+                          <AlignmentViewer result={pfamAlignmentResults[baseAccession]!} />
+                        ) : (
+                          <div className="text-sm text-slate-500 dark:text-slate-400 py-2">
+                            No alignment available
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
@@ -857,17 +788,6 @@ export default function ProtParam() {
         </div>
       )}
 
-      {/* Alignment Results */}
-      {alignmentResult && alignmentResult.success && (
-        <div className="card">
-          <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-200 flex items-center gap-2">
-            <GitCompare className="w-5 h-5" />
-            Multiple Sequence Alignment Results
-          </h3>
-
-          <AlignmentViewer result={alignmentResult} />
-        </div>
-      )}
         </>
       )}
 
