@@ -400,7 +400,10 @@ function parsePfamDomains(results: any): PfamDomain[] {
   const domains: PfamDomain[] = [];
 
   try {
+    console.log('Parsing Pfam domains from results:', JSON.stringify(results).substring(0, 500));
+
     if (!results.results || !results.results.hits) {
+      console.warn('No results.results.hits found in response. Keys:', Object.keys(results));
       return domains;
     }
 
