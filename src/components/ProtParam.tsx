@@ -592,6 +592,65 @@ export default function ProtParam() {
                 </div>
               </div>
 
+              {/* Domain Coverage Map - Above domain cards */}
+              <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-3">
+                  Domain Coverage Map
+                </h4>
+                <div className="relative h-20 bg-white dark:bg-slate-700 rounded-lg border-2 border-slate-300 dark:border-slate-600">
+                  {/* Position scale markers */}
+                  <div className="absolute top-1 left-0 right-0 h-4 flex items-center text-xs text-slate-600 dark:text-slate-400 px-2">
+                    <span className="absolute left-2">1</span>
+                    <span className="absolute left-1/4">|</span>
+                    <span className="absolute left-1/2 transform -translate-x-1/2">
+                      {Math.floor(pfamResult.sequenceLength / 2)}
+                    </span>
+                    <span className="absolute left-3/4">|</span>
+                    <span className="absolute right-2">{pfamResult.sequenceLength}</span>
+                  </div>
+
+                  {/* Domain bars */}
+                  <div className="absolute top-6 bottom-2 left-0 right-0 px-2">
+                    {pfamResult.domains.map((domain, idx) => {
+                      const startPercent = ((domain.start - 1) / pfamResult.sequenceLength) * 100;
+                      const widthPercent = ((domain.end - domain.start + 1) / pfamResult.sequenceLength) * 100;
+                      const colors = [
+                        'bg-blue-500',
+                        'bg-green-500',
+                        'bg-purple-500',
+                        'bg-orange-500',
+                        'bg-pink-500',
+                        'bg-cyan-500',
+                        'bg-red-500',
+                        'bg-indigo-500',
+                        'bg-yellow-500',
+                      ];
+                      const color = colors[idx % colors.length];
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`absolute h-full ${color} opacity-80 hover:opacity-100 transition-opacity cursor-pointer group rounded`}
+                          style={{ left: `${startPercent}%`, width: `${widthPercent}%` }}
+                          title={`${domain.name}: ${domain.start}-${domain.end} (${domain.end - domain.start + 1} aa)`}
+                        >
+                          {/* Tooltip on hover */}
+                          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10 shadow-lg">
+                            <div className="font-semibold">{domain.name}</div>
+                            <div>{domain.start}-{domain.end}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  <span>Residue 1</span>
+                  <span className="text-center">Sequence Length: {pfamResult.sequenceLength} aa</span>
+                  <span>Residue {pfamResult.sequenceLength}</span>
+                </div>
+              </div>
+
               <div className="space-y-4">
                 {pfamResult.domains.map((domain, idx) => {
                   const baseAccession = domain.acc.split('.')[0];
@@ -713,61 +772,36 @@ export default function ProtParam() {
                   );
                 })}
               </div>
-
-              <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-300 mb-3">
-                  Domain Coverage Map
-                </h4>
-                <div className="relative h-16 bg-slate-200 dark:bg-slate-700 rounded-lg overflow-hidden">
-                  {/* Position scale markers */}
-                  <div className="absolute top-0 left-0 right-0 h-4 flex items-center text-xs text-slate-600 dark:text-slate-400">
-                    <span className="absolute left-2">1</span>
-                    <span className="absolute left-1/4">|</span>
-                    <span className="absolute left-1/2">|</span>
-                    <span className="absolute left-3/4">|</span>
-                    <span className="absolute right-2">{pfamResult.sequenceLength}</span>
-                  </div>
-
-                  {/* Domain bars */}
-                  <div className="absolute top-4 bottom-0 left-0 right-0">
-                    {pfamResult.domains.map((domain, idx) => {
-                      const start = (domain.start / pfamResult.sequenceLength) * 100;
-                      const width = ((domain.end - domain.start + 1) / pfamResult.sequenceLength) * 100;
-                      const colors = [
-                        'bg-blue-500',
-                        'bg-green-500',
-                        'bg-purple-500',
-                        'bg-orange-500',
-                        'bg-pink-500',
-                        'bg-cyan-500',
-                      ];
-                      const color = colors[idx % colors.length];
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`absolute h-full ${color} opacity-80 hover:opacity-100 transition-opacity cursor-pointer group`}
-                          style={{ left: `${start}%`, width: `${width}%` }}
-                          title={`${domain.name}: ${domain.start}-${domain.end} (${domain.end - domain.start + 1} aa)`}
-                        >
-                          {/* Tooltip on hover */}
-                          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
-                            {domain.name}<br/>
-                            {domain.start}-{domain.end}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 mt-2">
-                  <span>Residue 1</span>
-                  <span className="text-center">Sequence Length: {pfamResult.sequenceLength} aa</span>
-                  <span>Residue {pfamResult.sequenceLength}</span>
-                </div>
-              </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* InterProScan Loading Status */}
+      {interProLoading && (
+        <div className="card bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-2 border-purple-300 dark:border-purple-700">
+          <div className="flex items-center gap-4">
+            <Loader2 className="w-16 h-16 animate-spin text-purple-600 dark:text-purple-400 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-purple-900 dark:text-purple-200 mb-2 flex items-center gap-2">
+                <Database className="w-6 h-6" />
+                Full InterProScan Analysis in Progress
+              </h3>
+              <div className="space-y-1">
+                <p className="text-purple-800 dark:text-purple-300">
+                  Searching across multiple protein family databases (Pfam, SMART, PANTHER, Gene3D, etc.)
+                </p>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="font-semibold text-purple-700 dark:text-purple-300">
+                    Time elapsed: {formatInterProProgress(interProElapsedTime).timeStr}
+                  </span>
+                  <span className="text-purple-600 dark:text-purple-400">
+                    Estimated: {formatInterProProgress(interProElapsedTime).estimateStr}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
