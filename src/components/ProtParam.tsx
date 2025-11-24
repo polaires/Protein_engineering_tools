@@ -154,14 +154,20 @@ export default function ProtParam() {
     setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: true });
 
     try {
+      // Strip version number from Pfam accession (e.g., PF04423.19 -> PF04423)
+      const baseAccession = pfamAccession.split('.')[0];
+      console.log(`Fetching seed alignment for ${pfamAccession} (using base accession: ${baseAccession})`);
+
       // Fetch seed alignment for this Pfam domain
-      const seedAlignment = await fetchSeedAlignment(pfamAccession, 'pfam');
+      const seedAlignment = await fetchSeedAlignment(baseAccession, 'pfam');
 
       if (!seedAlignment || seedAlignment.length === 0) {
-        setError(`No seed alignment available for ${pfamAccession}`);
+        setError(`No seed alignment available for ${baseAccession}. The domain may not have a seed alignment, or there may be an issue fetching it.`);
         setPfamAlignmentLoading({ ...pfamAlignmentLoading, [pfamAccession]: false });
         return;
       }
+
+      console.log(`Found ${seedAlignment.length} sequences in seed alignment for ${baseAccession}`);
 
       // Convert to AlignmentSequence format and include query sequence
       const sequences: AlignmentSequence[] = [
