@@ -402,12 +402,13 @@ function parsePfamDomains(results: any): PfamDomain[] {
   try {
     console.log('Parsing Pfam domains from results:', JSON.stringify(results).substring(0, 500));
 
-    if (!results.results || !results.results.hits) {
-      console.warn('No results.results.hits found in response. Keys:', Object.keys(results));
+    // HMMER API v1 response structure: { result: { hits: [...] } } (singular "result")
+    if (!results.result || !results.result.hits) {
+      console.warn('No results.result.hits found in response. Keys:', Object.keys(results));
       return domains;
     }
 
-    for (const hit of results.results.hits) {
+    for (const hit of results.result.hits) {
       if (!hit.domains) continue;
 
       for (const domain of hit.domains) {
