@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Dna, Info, AlertCircle, Droplet, Search, Loader2, Database, GitCompare } from 'lucide-react';
 import { analyzeProtein, ProteinAnalysisResult } from '@/utils/proteinAnalysis';
 import { searchPfamDomains, PfamSearchResult } from '@/services/pfamApi';
-import { submitInterProScan, InterProResult, fetchSeedAlignment } from '@/services/interProApi';
+import { submitInterProScan, InterProResult, fetchSeedAlignment, fetchInterProMetadata, InterProMetadata } from '@/services/interProApi';
 import { submitAlignment, AlignmentResult, AlignmentTool, AlignmentSequence } from '@/services/alignmentApi';
 import ProteinConcentration from './ProteinConcentration';
 import InterProAnalysis from './InterProAnalysis';
@@ -29,6 +29,7 @@ export default function ProtParam() {
   const [alignmentLoading, setAlignmentLoading] = useState(false);
   const [alignmentTool, setAlignmentTool] = useState<AlignmentTool>('muscle');
   const [pfamAlignmentLoading, setPfamAlignmentLoading] = useState<Record<string, boolean>>({});
+  const [pfamMetadata, setPfamMetadata] = useState<Record<string, InterProMetadata | null>>({});
   const interProTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Timer effect for InterProScan
@@ -106,12 +107,31 @@ export default function ProtParam() {
 
       if (!pfamData.success && pfamData.error) {
         setError(pfamData.error);
+      } else if (pfamData.success && pfamData.domains.length > 0) {
+        // Automatically fetch metadata for each Pfam domain to enrich results
+        enrichPfamResults(pfamData.domains);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Pfam search failed');
       setPfamResult(null);
     } finally {
       setPfamLoading(false);
+    }
+  };
+
+  // Fetch InterPro metadata to enrich Pfam results
+  const enrichPfamResults = async (domains: any[]) => {
+    for (const domain of domains) {
+      const accession = domain.acc.split('.')[0]; // Strip version number
+
+      try {
+        const meta = await fetchInterProMetadata(accession, 'pfam');
+        if (meta) {
+          setPfamMetadata((prev) => ({ ...prev, [accession]: meta }));
+        }
+      } catch (error) {
+        console.error(`Failed to fetch metadata for ${accession}:`, error);
+      }
     }
   };
 
@@ -212,7 +232,7 @@ export default function ProtParam() {
       // Convert to AlignmentSequence format and include query sequence
       const sequences: AlignmentSequence[] = [
         {
-          id: 'Query_Sequence',
+          id: 'Your_Protein',
           sequence: sequence.replace(/^>.*$/gm, '').replace(/\s/g, '').toUpperCase(),
         },
         ...seedAlignment.slice(0, 50).map(seq => ({
@@ -677,29 +697,42 @@ export default function ProtParam() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pfamResult.domains.map((domain, idx) => (
-                      <tr
-                        key={idx}
-                        className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      >
-                        <td className="p-3">
-                          <a
-                            href={`https://www.ebi.ac.uk/interpro/entry/pfam/${domain.acc}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-mono font-bold text-primary-600 dark:text-primary-400 hover:underline"
-                          >
-                            {domain.name}
-                          </a>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-mono text-sm text-slate-600 dark:text-slate-400">
-                            {domain.acc}
-                          </span>
-                        </td>
-                        <td className="p-3 text-sm text-slate-700 dark:text-slate-300">
-                          {domain.description || 'N/A'}
-                        </td>
+                    {pfamResult.domains.map((domain, idx) => {
+                      const baseAccession = domain.acc.split('.')[0];
+                      const meta = pfamMetadata[baseAccession];
+                      const description = meta?.description?.[0] || domain.description || 'Loading...';
+
+                      return (
+                        <tr
+                          key={idx}
+                          className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                        >
+                          <td className="p-3">
+                            <a
+                              href={`https://www.ebi.ac.uk/interpro/entry/pfam/${domain.acc}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                              title={meta?.name || domain.name}
+                            >
+                              {meta?.name || domain.name}
+                            </a>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                              {domain.acc}
+                            </span>
+                          </td>
+                          <td className="p-3 text-sm text-slate-700 dark:text-slate-300">
+                            <div className="max-w-md">
+                              {description}
+                              {meta?.literature && Object.keys(meta.literature).length > 0 && (
+                                <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                                  📚 {Object.keys(meta.literature).length} reference(s) available
+                                </div>
+                              )}
+                            </div>
+                          </td>
                         <td className="p-3 text-center">
                           <span className="font-mono text-sm bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
                             {domain.start}-{domain.end}
