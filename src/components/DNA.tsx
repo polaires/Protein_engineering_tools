@@ -106,8 +106,10 @@ export default function DNA() {
       return;
     }
 
-    // Target pmol for each fragment (0.05 pmol for equimolar ratio)
-    const targetPmol = 0.05 * molarRatio;
+    // Target pmol for each fragment (0.05 pmol for equimolar ratio at 15 µL standard reaction)
+    // Scale proportionally with total volume to maintain proper DNA concentration
+    const standardVolume = 15; // µL - NEB standard reaction volume
+    const targetPmol = 0.05 * molarRatio * (totalVolume / standardVolume);
 
     // Calculate for each fragment
     const calculationResults: CalculationResult[] = fragments.map(fragment => {
@@ -205,7 +207,7 @@ export default function DNA() {
         </h3>
         <div className="text-sm text-slate-700 dark:text-slate-300 space-y-2">
           <p><strong>Based on:</strong> NEB NEBuilder Ligase Master Mix Protocol</p>
-          <p><strong>Target:</strong> 0.05 pmol of each fragment (equimolar ratio)</p>
+          <p><strong>Target:</strong> 0.05 pmol of each fragment at 15 µL (scales with volume)</p>
           <p><strong>Master Mix:</strong> 1/3 of total reaction volume</p>
           <p><strong>Note:</strong> Volumes &lt;1 µl are difficult to pipette accurately. Dilutions will be suggested.</p>
         </div>
