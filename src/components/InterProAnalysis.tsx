@@ -212,14 +212,17 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       }
     }
 
+    // Calculate conservation for ConSurf coloring
+    const conservation = calculateConservationLocal(sequences.map(s => s.sequence));
+
     return (
       <div className="space-y-0">
         {/* Position ruler */}
-        <div className="flex font-mono text-xs sticky top-0 bg-gray-900 z-10 pb-1">
-          <span className="text-gray-400 select-none flex-shrink-0 bg-gray-900" style={{ width: `${NAME_WIDTH}ch` }}>
+        <div className="flex font-mono text-xs sticky top-0 bg-white border-b border-gray-200 z-10 pb-1">
+          <span className="text-gray-600 select-none flex-shrink-0 bg-white" style={{ width: `${NAME_WIDTH}ch` }}>
             {' '}
           </span>
-          <span className="text-gray-400 whitespace-nowrap pl-1">
+          <span className="text-gray-600 whitespace-nowrap pl-1">
             {rulerMarks}
           </span>
         </div>
@@ -229,10 +232,10 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
           const formattedName = formatSequenceName(seq.name);
 
           return (
-            <div key={seqIdx} className="flex font-mono text-xs hover:bg-gray-800">
+            <div key={seqIdx} className="flex font-mono text-xs hover:bg-gray-50">
               {/* Sticky name column */}
               <span
-                className="text-gray-500 select-none flex-shrink-0 sticky left-0 bg-gray-900 pr-1"
+                className="text-gray-700 select-none flex-shrink-0 sticky left-0 bg-white pr-1"
                 style={{ width: `${NAME_WIDTH}ch` }}
                 title={seq.name}
               >
@@ -241,16 +244,27 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
               {/* Entire sequence as one continuous line */}
               <span className="whitespace-nowrap">
                 {seq.sequence.split('').map((aa, aaIdx) => {
-                  const color = getAAColor(aa, scheme);
+                  const cons = conservation[aaIdx] || 0;
+                  const color = getAAColor(aa, scheme, cons);
+
+                  // Determine text color based on scheme
+                  let textColor = '#000';
+                  if (scheme === 'consurf') {
+                    textColor = cons > 0.5 ? '#fff' : '#000';
+                  } else if (scheme !== 'none') {
+                    textColor = '#fff';
+                  }
+
                   return (
                     <span
                       key={aaIdx}
-                      className="cursor-help"
+                      className="cursor-help border-r border-gray-100"
                       style={{
                         backgroundColor: color,
-                        color: scheme === 'none' ? 'inherit' : '#fff',
+                        color: textColor,
+                        fontWeight: cons > 0.8 ? 'bold' : 'normal',
                       }}
-                      title={`Position ${aaIdx + 1}\nResidue: ${aa}`}
+                      title={`Position ${aaIdx + 1}\nResidue: ${aa}\nConservation: ${(cons * 100).toFixed(0)}%`}
                     >
                       {aa}
                     </span>
@@ -262,6 +276,38 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
         })}
       </div>
     );
+  };
+
+  // Local conservation calculation helper
+  function calculateConservationLocal(sequences: string[]): number[] {
+    if (sequences.length === 0) return [];
+
+    const length = sequences[0].length;
+    const conservation: number[] = [];
+
+    for (let pos = 0; pos < length; pos++) {
+      const residues: Map<string, number> = new Map();
+      let validCount = 0;
+
+      for (const seq of sequences) {
+        const aa = seq[pos];
+        if (aa && aa !== '-' && aa !== '.') {
+          residues.set(aa, (residues.get(aa) || 0) + 1);
+          validCount++;
+        }
+      }
+
+      if (validCount === 0) {
+        conservation.push(0);
+        continue;
+      }
+
+      // Calculate conservation as frequency of most common residue
+      const maxCount = Math.max(...Array.from(residues.values()));
+      conservation.push(maxCount / validCount);
+    }
+
+    return conservation;
   };
 
   const renderMetadata = (meta: InterProMetadata) => {
@@ -857,9 +903,9 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                     </div>
 
                     {/* Alignment Visualization (ConSurf-style with horizontal scrolling) */}
-                    <div className="bg-gray-900 p-4 rounded-lg overflow-x-auto max-h-[500px] overflow-y-auto">
+                    <div className="bg-white border border-gray-300 p-4 rounded-lg overflow-x-auto max-h-[500px] overflow-y-auto">
                       <div className="inline-block min-w-full">
-                        {renderAlignment(alignment[key]!, colorScheme[key] || 'clustal2')}
+                        {renderAlignment(alignment[key]!, colorScheme[key] || 'consurf')}
                       </div>
                     </div>
                   </div>
