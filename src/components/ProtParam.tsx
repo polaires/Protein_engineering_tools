@@ -43,6 +43,7 @@ export default function ProtParam() {
   const [result, setResult] = useState<ProteinAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pfamResult, setPfamResult] = useState<PfamSearchResult | null>(null);
+  const [selectedPfamDomain, setSelectedPfamDomain] = useState<number>(0); // Index of selected domain to display
   const [pfamLoading, setPfamLoading] = useState(false);
   const [interProResult, setInterProResult] = useState<InterProResult | null>(null);
   const [interProLoading, setInterProLoading] = useState(false);
@@ -125,6 +126,7 @@ MAKWRCKICGYIYDEDEGDPDNGISPGTKFEDLPDDWVCPLCGAPKSEFERIE`;
 
   const handleSearchDomains = async () => {
     setError(null);
+    setSelectedPfamDomain(0); // Reset to most significant domain
 
     // Parse FASTA format (supports both FASTA and plain sequence)
     const { sequence: cleanSeq } = parseFasta(sequence);
@@ -682,8 +684,36 @@ MAKWRCKICGYIYDEDEGDPDNGISPGTKFEDLPDDWVCPLCGAPKSEFERIE`;
                 </div>
               </div>
 
+              {/* Domain Selector - Show most significant by default */}
+              {pfamResult.domains.length > 1 && (
+                <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                    Select Domain to Analyze ({pfamResult.domains.length} domains found):
+                  </label>
+                  <select
+                    value={selectedPfamDomain}
+                    onChange={(e) => setSelectedPfamDomain(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100"
+                  >
+                    {pfamResult.domains.map((domain, idx) => (
+                      <option key={idx} value={idx}>
+                        {idx === 0 ? '⭐ ' : ''}{domain.name} ({domain.acc}) - E-value: {domain.evalue.toExponential(2)} - Position: {domain.start}-{domain.end}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                    Showing most significant domain by default (lowest E-value)
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-4">
-                {pfamResult.domains.map((domain, idx) => {
+                {/* Only show the selected domain */}
+                {(() => {
+                  const domain = pfamResult.domains[selectedPfamDomain];
+                  if (!domain) return null;
+
+                  const idx = selectedPfamDomain;
                   const baseAccession = domain.acc.split('.')[0];
                   const meta = pfamMetadata[baseAccession];
 
@@ -803,7 +833,7 @@ MAKWRCKICGYIYDEDEGDPDNGISPGTKFEDLPDDWVCPLCGAPKSEFERIE`;
                       </div>
                     </div>
                   );
-                })}
+                })()}
               </div>
             </>
           )}
