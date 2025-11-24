@@ -57,7 +57,7 @@ export interface InterProMetadata {
   accession: string;
   name: string | { name: string; short: string };
   type?: string;
-  description?: string[];
+  description?: (string | { text: string; llm?: boolean; checked?: boolean; updated?: string })[];
   literature?: Record<string, any>;
   wikipedia?: {
     title: string;

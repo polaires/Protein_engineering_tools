@@ -199,11 +199,15 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
         {meta.description && meta.description.length > 0 && (
           <div className="bg-blue-50 p-4 rounded-lg">
             <h4 className="font-semibold text-blue-900 mb-2">Description</h4>
-            {meta.description.map((desc, idx) => (
-              <p key={idx} className="text-sm text-blue-800 leading-relaxed">
-                {desc}
-              </p>
-            ))}
+            {meta.description.map((desc, idx) => {
+              // Description can be string or object with {text, llm, checked, updated}
+              const text = typeof desc === 'string' ? desc : (desc as any)?.text || '';
+              return (
+                <p key={idx} className="text-sm text-blue-800 leading-relaxed">
+                  {text}
+                </p>
+              );
+            })}
           </div>
         )}
 
