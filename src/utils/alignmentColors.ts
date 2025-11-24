@@ -42,6 +42,11 @@ export const COLOR_SCHEMES: Record<ColorScheme, ColorSchemeInfo> = {
  * Color mappings for each scheme
  */
 const colorMaps: Record<ColorScheme, Record<string, string>> = {
+  consurf: {
+    // ConSurf uses conservation-based coloring, not residue-based
+    // Colors are determined dynamically by getConsurfColor()
+  },
+
   clustal2: {
     // Hydrophobic (blue)
     'A': '#80a0f0', 'I': '#80a0f0', 'L': '#80a0f0', 'M': '#80a0f0',
