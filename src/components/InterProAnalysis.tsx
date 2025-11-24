@@ -10,7 +10,6 @@ import {
   ColorScheme,
   COLOR_SCHEMES,
   getAAColor,
-  analyzeSequenceComposition,
 } from '../utils/alignmentColors';
 
 interface InterProAnalysisProps {
@@ -30,6 +29,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
   const [colorScheme, setColorScheme] = useState<Record<string, ColorScheme>>({});
   const [loadingMetadata, setLoadingMetadata] = useState<Record<string, boolean>>({});
   const [loadingAlignment, setLoadingAlignment] = useState<Record<string, boolean>>({});
+  const [metadataError, setMetadataError] = useState<Record<string, string>>({});
 
   const handleToggleMatch = (index: number) => {
     setExpandedMatch(expandedMatch === index ? null : index);
@@ -42,11 +42,38 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       return; // Already loaded
     }
 
-    setLoadingMetadata({ ...loadingMetadata, [key]: true });
+    // Clear any previous error
+    setMetadataError((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
 
-    const meta = await fetchInterProMetadata(accession, database);
-    setMetadata({ ...metadata, [key]: meta });
-    setLoadingMetadata({ ...loadingMetadata, [key]: false });
+    // Set loading state using functional update
+    setLoadingMetadata((prev) => ({ ...prev, [key]: true }));
+
+    try {
+      // Ensure database name is lowercase for API
+      const dbLower = database.toLowerCase();
+      const meta = await fetchInterProMetadata(accession, dbLower);
+
+      if (!meta) {
+        throw new Error('No metadata available for this entry. It may be deprecated or unavailable.');
+      }
+
+      // Update metadata using functional update
+      setMetadata((prev) => ({ ...prev, [key]: meta }));
+    } catch (error) {
+      console.error('Metadata fetch error:', error);
+      // Store error message
+      setMetadataError((prev) => ({
+        ...prev,
+        [key]: error instanceof Error ? error.message : 'Failed to fetch metadata',
+      }));
+    } finally {
+      // Clear loading state using functional update
+      setLoadingMetadata((prev) => ({ ...prev, [key]: false }));
+    }
   };
 
   const handleFetchAlignment = async (accession: string, database: string) => {
@@ -56,16 +83,30 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
       return; // Already loaded
     }
 
-    setLoadingAlignment({ ...loadingAlignment, [key]: true });
+    // Set loading state using functional update
+    setLoadingAlignment((prev) => ({ ...prev, [key]: true }));
 
-    const align = await fetchSeedAlignment(accession, database);
-    setAlignment({ ...alignment, [key]: align });
-    setColorScheme({ ...colorScheme, [key]: 'clustal2' }); // Default color scheme
-    setLoadingAlignment({ ...loadingAlignment, [key]: false });
+    try {
+      // Strip version number if present (e.g., PF00001.21 -> PF00001)
+      const baseAccession = accession.split('.')[0];
+      const dbLower = database.toLowerCase();
+
+      const align = await fetchSeedAlignment(baseAccession, dbLower);
+
+      // Update alignment and color scheme using functional updates
+      setAlignment((prev) => ({ ...prev, [key]: align }));
+      setColorScheme((prev) => ({ ...prev, [key]: 'clustal2' })); // Default color scheme
+    } catch (error) {
+      console.error('Alignment fetch error:', error);
+      setAlignment((prev) => ({ ...prev, [key]: null }));
+    } finally {
+      // Clear loading state using functional update
+      setLoadingAlignment((prev) => ({ ...prev, [key]: false }));
+    }
   };
 
   const handleColorSchemeChange = (key: string, scheme: ColorScheme) => {
-    setColorScheme({ ...colorScheme, [key]: scheme });
+    setColorScheme((prev) => ({ ...prev, [key]: scheme }));
   };
 
   const renderAlignment = (sequences: AlignmentSequence[], scheme: ColorScheme) => {
@@ -272,21 +313,45 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
             {/* Match Header */}
             <button
               onClick={() => handleToggleMatch(index)}
-              className="w-full bg-yellow-50 hover:bg-yellow-100 p-4 text-left transition-colors"
+              className="w-full bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 p-4 text-left transition-colors border-b-2 border-purple-200"
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-yellow-900">
-                    Match {index + 1}: {signature.name || accession}
+                  <h3 className="text-xl font-bold text-purple-900 mb-2">
+                    {signature.name || accession}
                   </h3>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    <strong>Accession:</strong> {accession} | <strong>Database:</strong> {database}
-                    {signature.signatureLibraryRelease?.version &&
-                      ` (v${signature.signatureLibraryRelease.version})`}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-3 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                      {database}
+                    </span>
+                    <span className="px-3 py-1 bg-gray-600 text-white text-xs font-mono rounded-full">
+                      {accession}
+                    </span>
+                    {signature.signatureLibraryRelease?.version && (
+                      <span className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full">
+                        v{signature.signatureLibraryRelease.version}
+                      </span>
+                    )}
+                    {match.evalue && (
+                      <span className="px-3 py-1 bg-green-600 text-white text-xs rounded-full">
+                        E: {match.evalue.toExponential(2)}
+                      </span>
+                    )}
+                    {match.score && (
+                      <span className="px-3 py-1 bg-orange-600 text-white text-xs rounded-full">
+                        Score: {match.score.toFixed(1)}
+                      </span>
+                    )}
+                    <span className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-full">
+                      {match.locations.length} region{match.locations.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="px-3 py-1 bg-teal-600 text-white text-xs rounded-full">
+                      {coveragePercent}% coverage
+                    </span>
+                  </div>
                 </div>
                 <svg
-                  className={`w-6 h-6 text-yellow-600 transform transition-transform ${
+                  className={`w-6 h-6 text-purple-600 transform transition-transform flex-shrink-0 ml-4 ${
                     isExpanded ? 'rotate-180' : ''
                   }`}
                   fill="none"
@@ -306,40 +371,14 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
             {/* Match Details */}
             {isExpanded && (
               <div className="p-4 space-y-4">
-                {/* Basic Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {signature.description && (
-                    <div className="col-span-2">
-                      <p className="text-sm text-gray-600">
-                        <strong>Description:</strong> {signature.description}
-                      </p>
-                    </div>
-                  )}
-                  {match.evalue && (
-                    <div>
-                      <p className="text-sm text-gray-600">
-                        <strong>E-value:</strong> {match.evalue.toExponential(2)}
-                      </p>
-                    </div>
-                  )}
-                  {match.score && (
-                    <div>
-                      <p className="text-sm text-gray-600">
-                        <strong>Score:</strong> {match.score.toFixed(1)}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      <strong>Regions:</strong> {match.locations.length}
+                {/* Description */}
+                {signature.description && (
+                  <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
+                    <p className="text-sm text-blue-900">
+                      {signature.description}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      <strong>Coverage:</strong> {coveragePercent}%
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 {/* InterPro Entry */}
                 {signature.entry && (
@@ -362,37 +401,156 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                   </div>
                 )}
 
-                {/* Locations */}
+                {/* Domain Visualization */}
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Domain Locations</h4>
-                  {match.locations.map((loc, locIdx) => {
-                    const alignedSeq = querySequence.substring(loc.start - 1, loc.end);
-                    const composition = analyzeSequenceComposition(alignedSeq);
+                  <h4 className="font-semibold text-gray-900 mb-3">Domain Locations</h4>
 
-                    return (
-                      <div
-                        key={locIdx}
-                        className="bg-gray-50 p-3 rounded mb-2 font-mono text-sm"
+                  {/* Linear Domain Map (SVG) */}
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
+                    <svg
+                      width="100%"
+                      height="120"
+                      viewBox={`0 0 ${Math.max(600, sequenceLength + 100)} 120`}
+                      className="overflow-visible"
+                    >
+                      {/* Protein sequence line */}
+                      <line
+                        x1="50"
+                        y1="60"
+                        x2={50 + sequenceLength}
+                        y2="60"
+                        stroke="#94a3b8"
+                        strokeWidth="2"
+                      />
+
+                      {/* Start position marker */}
+                      <text x="50" y="80" fontSize="10" fill="#64748b" textAnchor="middle">
+                        1
+                      </text>
+
+                      {/* End position marker */}
+                      <text
+                        x={50 + sequenceLength}
+                        y="80"
+                        fontSize="10"
+                        fill="#64748b"
+                        textAnchor="middle"
                       >
-                        <p>
-                          <strong>Region {locIdx + 1}:</strong> Position {loc.start}-{loc.end} (
-                          {loc.end - loc.start + 1} AA)
-                        </p>
-                        {loc.score && <p>Score: {loc.score.toFixed(1)}</p>}
-                        {loc.evalue && <p>E-value: {loc.evalue.toExponential(2)}</p>}
-                        {loc.hmmStart && loc.hmmEnd && (
-                          <p>
-                            HMM: {loc.hmmStart}-{loc.hmmEnd}
-                          </p>
-                        )}
-                        <p className="mt-2 break-all bg-white p-2 rounded">{alignedSeq}</p>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Composition: {composition.hydrophobic}% hydrophobic, {composition.charged}%
-                          charged, {composition.polar}% polar
-                        </p>
-                      </div>
-                    );
-                  })}
+                        {sequenceLength}
+                      </text>
+
+                      {/* Domain blocks */}
+                      {match.locations.map((loc, locIdx) => {
+                        const colors = [
+                          '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+                          '#ef4444', '#14b8a6', '#f97316', '#8b5cf6'
+                        ];
+                        const color = colors[locIdx % colors.length];
+                        const xStart = 50 + (loc.start - 1);
+                        const width = loc.end - loc.start + 1;
+
+                        return (
+                          <g key={locIdx}>
+                            {/* Domain rectangle */}
+                            <rect
+                              x={xStart}
+                              y="40"
+                              width={width}
+                              height="40"
+                              fill={color}
+                              fillOpacity="0.7"
+                              stroke={color}
+                              strokeWidth="2"
+                              rx="3"
+                            >
+                              <title>
+                                Region {locIdx + 1}: {loc.start}-{loc.end}
+                                {loc.evalue && `\nE-value: ${loc.evalue.toExponential(2)}`}
+                                {loc.score && `\nScore: ${loc.score.toFixed(1)}`}
+                              </title>
+                            </rect>
+
+                            {/* Region label */}
+                            <text
+                              x={xStart + width / 2}
+                              y="55"
+                              fontSize="9"
+                              fill="white"
+                              fontWeight="bold"
+                              textAnchor="middle"
+                            >
+                              R{locIdx + 1}
+                            </text>
+
+                            {/* Position labels on domain */}
+                            <text
+                              x={xStart + width / 2}
+                              y="30"
+                              fontSize="8"
+                              fill={color}
+                              textAnchor="middle"
+                            >
+                              {loc.start}-{loc.end}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+
+                  {/* Domain Details Table */}
+                  <div className="space-y-2">
+                    {match.locations.map((loc, locIdx) => {
+                      const alignedSeq = querySequence.substring(loc.start - 1, loc.end);
+                      const colors = [
+                        '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+                        '#ef4444', '#14b8a6', '#f97316', '#8b5cf6'
+                      ];
+                      const color = colors[locIdx % colors.length];
+
+                      return (
+                        <div
+                          key={locIdx}
+                          className="bg-gray-50 p-3 rounded border-l-4"
+                          style={{ borderLeftColor: color }}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="font-semibold text-gray-900">
+                              Region {locIdx + 1}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Position {loc.start}-{loc.end} ({loc.end - loc.start + 1} AA)
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-2">
+                            {loc.score && (
+                              <p>
+                                <strong>Score:</strong> {loc.score.toFixed(1)}
+                              </p>
+                            )}
+                            {loc.evalue && (
+                              <p>
+                                <strong>E-value:</strong> {loc.evalue.toExponential(2)}
+                              </p>
+                            )}
+                            {loc.hmmStart && loc.hmmEnd && (
+                              <p>
+                                <strong>HMM:</strong> {loc.hmmStart}-{loc.hmmEnd}
+                              </p>
+                            )}
+                          </div>
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-800">
+                              Show sequence
+                            </summary>
+                            <p className="mt-2 break-all bg-white p-2 rounded font-mono text-xs">
+                              {alignedSeq}
+                            </p>
+                          </details>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Action Buttons */}
@@ -432,6 +590,32 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                     View on InterPro
                   </a>
                 </div>
+
+                {/* Error Display */}
+                {metadataError[key] && (
+                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg
+                          className="h-5 w-5 text-red-400"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-red-700">
+                          <strong>Error fetching metadata:</strong> {metadataError[key]}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Metadata Display */}
                 {metadata[key] && (

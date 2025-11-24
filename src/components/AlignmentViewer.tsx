@@ -19,6 +19,7 @@ interface AlignmentViewerProps {
 const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
   const [colorScheme, setColorScheme] = useState<ColorScheme>('clustal2');
   const [showConservation, setShowConservation] = useState(true);
+  const [fontSize, setFontSize] = useState(12);
 
   if (!result.alignment) {
     return <div className="text-gray-500">No alignment data available</div>;
@@ -58,7 +59,7 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
       // Add ruler
       blockElements.push(
-        <div key={`ruler-${pos}`} className="text-gray-400 font-mono text-xs mb-1">
+        <div key={`ruler-${pos}`} className="text-gray-400 font-mono mb-1" style={{ fontSize: `${fontSize}px` }}>
           {' '.repeat((maxNameLen + 2) * 0.6)}{ruler.join('')}
         </div>
       );
@@ -69,8 +70,8 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
         const paddedName = seq.id.padEnd(maxNameLen, ' ');
 
         blockElements.push(
-          <div key={`${pos}-${seqIdx}`} className="font-mono text-xs flex items-center gap-1 mb-0.5">
-            <span className="text-gray-500 text-xs">{paddedName}</span>
+          <div key={`${pos}-${seqIdx}`} className="font-mono flex items-center gap-1 mb-0.5" style={{ fontSize: `${fontSize}px` }}>
+            <span className="text-gray-400 sticky left-0 bg-gray-900 pr-2 z-10">{paddedName}</span>
             <span className="flex">
               {seqBlock.split('').map((aa, aaIdx) => {
                 const color = getAAColor(aa, colorScheme);
@@ -80,7 +81,7 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
                 return (
                   <span
                     key={aaIdx}
-                    className="px-0.5 relative group cursor-help"
+                    className="px-0.5 relative group cursor-help transition-transform hover:scale-110"
                     style={{
                       backgroundColor: color,
                       color: colorScheme === 'none' ? 'inherit' : '#fff',
@@ -184,7 +185,7 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
           <select
             value={colorScheme}
             onChange={e => setColorScheme(e.target.value as ColorScheme)}
-            className="border border-gray-300 rounded px-3 py-1 text-sm"
+            className="border border-gray-300 rounded px-3 py-1 text-sm bg-white"
           >
             {Object.entries(COLOR_SCHEMES).map(([value, info]) => (
               <option key={value} value={value}>
@@ -192,6 +193,27 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700">Font Size:</label>
+          <div className="flex items-center gap-1 border border-gray-300 rounded">
+            <button
+              onClick={() => setFontSize(Math.max(8, fontSize - 1))}
+              className="px-2 py-1 hover:bg-gray-100 text-sm"
+              title="Decrease font size"
+            >
+              −
+            </button>
+            <span className="px-2 text-sm font-mono">{fontSize}px</span>
+            <button
+              onClick={() => setFontSize(Math.min(20, fontSize + 1))}
+              className="px-2 py-1 hover:bg-gray-100 text-sm"
+              title="Increase font size"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <label className="flex items-center gap-2 text-sm">
@@ -206,7 +228,7 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
 
         <button
           onClick={handleDownload}
-          className="ml-auto px-4 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm flex items-center gap-2"
+          className="ml-auto px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm flex items-center gap-2 shadow-md transition-all hover:shadow-lg"
         >
           <Download className="w-4 h-4" />
           Download Alignment
@@ -220,9 +242,67 @@ const AlignmentViewer: React.FC<AlignmentViewerProps> = ({ result }) => {
         </div>
       )}
 
-      {/* Alignment Display */}
-      <div className="bg-gray-900 p-4 rounded-lg overflow-x-auto max-h-96 overflow-y-auto">
-        <div className="text-white">{renderAlignment()}</div>
+      {/* Alignment Display with Conservation Bar Graph */}
+      <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+        {/* Conservation Bar Graph */}
+        <div className="bg-gray-50 p-4 border-b border-gray-200">
+          <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Conservation Profile
+          </h5>
+          <div className="flex items-end gap-px h-24 bg-white p-2 rounded border border-gray-200">
+            {conservation.map((cons, idx) => (
+              <div
+                key={idx}
+                className="flex-1 min-w-[2px] relative group cursor-pointer transition-all hover:opacity-80"
+                style={{
+                  height: `${cons * 100}%`,
+                  backgroundColor:
+                    cons > 0.9
+                      ? '#10b981'
+                      : cons > 0.7
+                      ? '#3b82f6'
+                      : cons > 0.5
+                      ? '#f59e0b'
+                      : '#94a3b8',
+                }}
+              >
+                <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-10">
+                  Pos {idx + 1}: {(cons * 100).toFixed(0)}%
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 mt-3 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-500 rounded"></div>
+              <span className="text-gray-600">{'>'}90% conserved</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-500 rounded"></div>
+              <span className="text-gray-600">70-90%</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-orange-500 rounded"></div>
+              <span className="text-gray-600">50-70%</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-gray-400 rounded"></div>
+              <span className="text-gray-600">{'<'}50%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Alignment Display with Sticky Headers */}
+        <div className="relative">
+          <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
+            <div className="bg-gray-900 p-4 min-w-full">
+              <div className="text-white font-mono">{renderAlignment()}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Sequence Details */}
