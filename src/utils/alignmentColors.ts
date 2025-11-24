@@ -121,11 +121,12 @@ export interface SequenceComposition {
   hydrophobic: number;
   charged: number;
   polar: number;
+  other: number;
 }
 
 export function analyzeSequenceComposition(sequence: string): SequenceComposition {
   if (!sequence || sequence.length === 0) {
-    return { hydrophobic: 0, charged: 0, polar: 0 };
+    return { hydrophobic: 0, charged: 0, polar: 0, other: 0 };
   }
 
   const hydrophobic = 'AVILMFWP';
@@ -135,16 +136,19 @@ export function analyzeSequenceComposition(sequence: string): SequenceCompositio
   let hydrophobicCount = 0;
   let chargedCount = 0;
   let polarCount = 0;
+  let otherCount = 0;
 
   for (const aa of sequence.toUpperCase()) {
     if (hydrophobic.includes(aa)) hydrophobicCount++;
     else if (charged.includes(aa)) chargedCount++;
     else if (polar.includes(aa)) polarCount++;
+    else otherCount++;
   }
 
   return {
     hydrophobic: parseFloat(((hydrophobicCount / sequence.length) * 100).toFixed(1)),
     charged: parseFloat(((chargedCount / sequence.length) * 100).toFixed(1)),
     polar: parseFloat(((polarCount / sequence.length) * 100).toFixed(1)),
+    other: parseFloat(((otherCount / sequence.length) * 100).toFixed(1)),
   };
 }
