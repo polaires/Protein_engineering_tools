@@ -318,6 +318,17 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
         // Only show seed alignment button for PFAM (other databases often don't have seed alignments)
         const hasSeedAlignment = database.toUpperCase() === 'PFAM';
 
+        // Helper to extract string from name field (can be string or {name, short} object)
+        const getNameString = (name: any): string => {
+          if (!name) return '';
+          if (typeof name === 'string') return name;
+          if (typeof name === 'object' && name.name) return name.name;
+          return '';
+        };
+
+        const displayName = getNameString(signature.name) || accession;
+        const entryName = signature.entry ? getNameString(signature.entry.name) : '';
+
         // Calculate coverage
         const totalCoverage = match.locations.reduce(
           (sum, loc) => sum + (loc.end - loc.start + 1),
@@ -335,7 +346,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <h3 className="text-xl font-bold text-purple-900 mb-2">
-                    {signature.name || accession}
+                    {displayName}
                   </h3>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-3 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
@@ -410,7 +421,7 @@ const InterProAnalysis: React.FC<InterProAnalysisProps> = ({
                       >
                         {signature.entry.accession}
                       </a>
-                      {signature.entry.name && ` - ${signature.entry.name}`}
+                      {entryName && ` - ${entryName}`}
                     </p>
                     {signature.entry.type && (
                       <p className="text-sm text-gray-600 mt-1">Type: {signature.entry.type}</p>
