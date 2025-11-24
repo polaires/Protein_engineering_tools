@@ -701,6 +701,10 @@ export default function ProtParam() {
                       const baseAccession = domain.acc.split('.')[0];
                       const meta = pfamMetadata[baseAccession];
                       const description = meta?.description?.[0] || domain.description || 'Loading...';
+                      // Handle name being either string or object {name, short}
+                      const displayName = meta?.name
+                        ? (typeof meta.name === 'string' ? meta.name : meta.name.name)
+                        : domain.name;
 
                       return (
                         <tr
@@ -713,9 +717,9 @@ export default function ProtParam() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="font-mono font-bold text-primary-600 dark:text-primary-400 hover:underline"
-                              title={meta?.name || domain.name}
+                              title={displayName}
                             >
-                              {meta?.name || domain.name}
+                              {displayName}
                             </a>
                           </td>
                           <td className="p-3">
