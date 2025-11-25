@@ -379,8 +379,8 @@ export default function PhCalculator() {
                     <div
                       className="absolute top-1/2 -translate-y-1/2 h-5 bg-emerald-500/30 border-2 border-emerald-500 rounded pointer-events-none"
                       style={{
-                        left: `${((selectedBuffer.effectiveRange[0] - 2) / 10) * 100}%`,
-                        width: `${((selectedBuffer.effectiveRange[1] - selectedBuffer.effectiveRange[0]) / 10) * 100}%`,
+                        left: `${Math.max(0, ((selectedBuffer.effectiveRange[0] - 2) / 10) * 100)}%`,
+                        width: `${Math.min(100 - Math.max(0, ((selectedBuffer.effectiveRange[0] - 2) / 10) * 100), ((selectedBuffer.effectiveRange[1] - selectedBuffer.effectiveRange[0]) / 10) * 100)}%`,
                       }}
                       title={`Effective range: ${selectedBuffer.effectiveRange[0]} - ${selectedBuffer.effectiveRange[1]}`}
                     />
@@ -426,12 +426,6 @@ export default function PhCalculator() {
                 <span>10</span>
                 <span>12</span>
               </div>
-              {/* Selected buffer info */}
-              {selectedBuffer && (
-                <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 text-center">
-                  {selectedBuffer.name} effective range: pH {selectedBuffer.effectiveRange[0].toFixed(1)} - {selectedBuffer.effectiveRange[1].toFixed(1)} | pKa: {selectedBuffer.pKa.map(p => p.toFixed(2)).join(', ')}
-                </div>
-              )}
             </div>
 
             {/* Total Concentration */}
@@ -547,15 +541,6 @@ export default function PhCalculator() {
               )}
             </div>
           </div>
-
-          {/* Buffer Zone Visualization */}
-          {selectedBuffer && targetPH !== undefined && (
-            <BufferZoneVisualization
-              buffer={selectedBuffer}
-              targetPH={targetPH}
-              temperature={temperature}
-            />
-          )}
 
           {/* Warnings */}
           {selectedBuffer && (
@@ -1042,76 +1027,6 @@ export default function PhCalculator() {
 // ============================================================================
 // Sub-components
 // ============================================================================
-
-interface BufferZoneVisualizationProps {
-  buffer: BufferSystem;
-  targetPH: number;
-  temperature: number;
-}
-
-function BufferZoneVisualization({ buffer, targetPH, temperature }: BufferZoneVisualizationProps) {
-  const correctedPKa = buffer.pKa.map((_, idx) =>
-    getPKaAtTemperature(buffer, temperature, idx)
-  );
-
-  return (
-    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-      <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-8 flex items-center gap-2">
-        <Info className="w-4 h-4" />
-        Buffer Effective Range
-      </h4>
-
-      {/* pH scale visualization */}
-      <div className="relative h-8 bg-gradient-to-r from-red-400 via-yellow-400 via-green-400 via-blue-400 to-purple-400 rounded">
-        {/* Effective range highlight */}
-        <div
-          className="absolute top-0 bottom-0 bg-green-500/30 border-2 border-green-500 rounded"
-          style={{
-            left: `${(buffer.effectiveRange[0] / 14) * 100}%`,
-            width: `${((buffer.effectiveRange[1] - buffer.effectiveRange[0]) / 14) * 100}%`,
-          }}
-        />
-
-        {/* pKa markers */}
-        {correctedPKa.map((pKa, idx) => (
-          <div
-            key={idx}
-            className="absolute top-0 bottom-0 w-0.5 bg-slate-800 dark:bg-white"
-            style={{ left: `${(pKa / 14) * 100}%` }}
-            title={`pKa${idx + 1} = ${pKa.toFixed(2)}`}
-          >
-            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-medium whitespace-nowrap">
-              pKa{buffer.pKa.length > 1 ? idx + 1 : ''} = {pKa.toFixed(1)}
-            </div>
-          </div>
-        ))}
-
-        {/* Target pH marker */}
-        <div
-          className="absolute top-0 bottom-0 w-1 bg-primary-600 rounded"
-          style={{ left: `${(targetPH / 14) * 100}%` }}
-        >
-          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs font-bold text-primary-600 whitespace-nowrap">
-            Target: {targetPH.toFixed(1)}
-          </div>
-        </div>
-      </div>
-
-      {/* pH scale labels */}
-      <div className="flex justify-between mt-6 text-xs text-slate-500">
-        <span>0</span>
-        <span>2</span>
-        <span>4</span>
-        <span>6</span>
-        <span>7</span>
-        <span>8</span>
-        <span>10</span>
-        <span>12</span>
-        <span>14</span>
-      </div>
-    </div>
-  );
-}
 
 interface BufferWarningsProps {
   buffer: BufferSystem;
