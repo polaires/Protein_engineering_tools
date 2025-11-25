@@ -21,6 +21,8 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  LayoutList,
+  BarChart3,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { PHCalculatorMode } from '@/types';
@@ -111,6 +113,9 @@ export default function PhCalculator() {
   // Species distribution state
   const [speciesPH, setSpeciesPH] = useState<number | undefined>(7.0);
   const [speciesConc, setSpeciesConc] = useState<number | undefined>(100); // mM
+
+  // Buffer selection view state
+  const [bufferViewMode, setBufferViewMode] = useState<'dropdown' | 'chart'>('dropdown');
 
   // Result state
   const [result, setResult] = useState<PhCalculationResult | null>(null);
@@ -299,30 +304,69 @@ export default function PhCalculator() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Buffer System Selection */}
             <div className="md:col-span-2">
-              <label className="input-label">Buffer System *</label>
-              <select
-                className="select-field w-full"
-                value={bufferSystemId}
-                onChange={(e) => {
-                  setBufferSystemId(e.target.value);
-                  handleReset();
-                }}
-              >
-                <optgroup label="Good's Biological Buffers">
-                  {BIOLOGICAL_BUFFERS.map((buffer) => (
-                    <option key={buffer.id} value={buffer.id}>
-                      {buffer.name} (pKa {buffer.pKa.map(p => p.toFixed(1)).join(', ')}, pH {buffer.effectiveRange[0]}-{buffer.effectiveRange[1]})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Common Laboratory Buffers">
-                  {COMMON_BUFFERS.map((buffer) => (
-                    <option key={buffer.id} value={buffer.id}>
-                      {buffer.name} (pKa {buffer.pKa.map(p => p.toFixed(1)).join(', ')}, pH {buffer.effectiveRange[0]}-{buffer.effectiveRange[1]})
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+              <div className="flex items-center justify-between mb-2">
+                <label className="input-label mb-0">Buffer System *</label>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                  <button
+                    className={`p-1.5 rounded transition-colors ${
+                      bufferViewMode === 'dropdown'
+                        ? 'bg-white dark:bg-slate-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                    onClick={() => setBufferViewMode('dropdown')}
+                    title="List view"
+                  >
+                    <LayoutList className="w-4 h-4" />
+                  </button>
+                  <button
+                    className={`p-1.5 rounded transition-colors ${
+                      bufferViewMode === 'chart'
+                        ? 'bg-white dark:bg-slate-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                    onClick={() => setBufferViewMode('chart')}
+                    title="Chart view"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {bufferViewMode === 'dropdown' ? (
+                <select
+                  className="select-field w-full"
+                  value={bufferSystemId}
+                  onChange={(e) => {
+                    setBufferSystemId(e.target.value);
+                    handleReset();
+                  }}
+                >
+                  <optgroup label="Good's Biological Buffers">
+                    {BIOLOGICAL_BUFFERS.map((buffer) => (
+                      <option key={buffer.id} value={buffer.id}>
+                        {buffer.name} (pKa {buffer.pKa.map(p => p.toFixed(1)).join(', ')}, pH {buffer.effectiveRange[0]}-{buffer.effectiveRange[1]})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Common Laboratory Buffers">
+                    {COMMON_BUFFERS.map((buffer) => (
+                      <option key={buffer.id} value={buffer.id}>
+                        {buffer.name} (pKa {buffer.pKa.map(p => p.toFixed(1)).join(', ')}, pH {buffer.effectiveRange[0]}-{buffer.effectiveRange[1]})
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              ) : (
+                <BufferChartSelector
+                  buffers={getAllBuffers()}
+                  selectedId={bufferSystemId}
+                  targetPH={targetPH}
+                  onSelect={(id) => {
+                    setBufferSystemId(id);
+                    handleReset();
+                  }}
+                />
+              )}
             </div>
 
             {/* Target pH */}
@@ -1233,6 +1277,198 @@ function BufferWarnings({ buffer, temperature, targetPH, inDeadZone, suggestedBu
           High temperature sensitivity - prepare at intended use temperature
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// ============================================================================
+// Buffer Chart Selector
+// ============================================================================
+
+interface BufferChartSelectorProps {
+  buffers: BufferSystem[];
+  selectedId: string;
+  targetPH?: number;
+  onSelect: (id: string) => void;
+}
+
+function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: BufferChartSelectorProps) {
+  // Sort buffers by pKa (first pKa value)
+  const sortedBuffers = useMemo(() => {
+    return [...buffers]
+      .filter(b => b.category === 'biological') // Only show biological buffers in chart
+      .sort((a, b) => a.pKa[0] - b.pKa[0]);
+  }, [buffers]);
+
+  // pH range for the chart (4 to 12)
+  const minPH = 4;
+  const maxPH = 12;
+  const phRange = maxPH - minPH;
+
+  return (
+    <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
+      {/* Legend */}
+      <div className="flex items-center justify-between mb-3 text-xs">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-cyan-500" />
+            <span className="text-slate-600 dark:text-slate-400">Suitable for General Use</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-rose-500" />
+            <span className="text-slate-600 dark:text-slate-400">Use with Caution</span>
+          </div>
+        </div>
+        {targetPH !== undefined && (
+          <div className="flex items-center gap-1">
+            <div className="w-0.5 h-4 bg-emerald-600" />
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">Target pH: {targetPH.toFixed(1)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Chart */}
+      <div className="relative">
+        {/* Target pH line */}
+        {targetPH !== undefined && targetPH >= minPH && targetPH <= maxPH && (
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-emerald-500 z-10 pointer-events-none"
+            style={{ left: `${((targetPH - minPH) / phRange) * 100}%` }}
+          />
+        )}
+
+        {/* Buffer bars */}
+        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
+          {sortedBuffers.map((buffer) => {
+            const isSelected = buffer.id === selectedId;
+            const isGeneral = buffer.suitability === 'general';
+            const startPct = Math.max(0, ((buffer.effectiveRange[0] - minPH) / phRange) * 100);
+            const endPct = Math.min(100, ((buffer.effectiveRange[1] - minPH) / phRange) * 100);
+            const widthPct = endPct - startPct;
+
+            // Check if target pH is within this buffer's range
+            const inRange = targetPH !== undefined &&
+              targetPH >= buffer.effectiveRange[0] &&
+              targetPH <= buffer.effectiveRange[1];
+
+            return (
+              <div
+                key={buffer.id}
+                className={`relative flex items-center h-7 cursor-pointer rounded transition-all ${
+                  isSelected
+                    ? 'bg-primary-100 dark:bg-primary-900/30 ring-2 ring-primary-500'
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                }`}
+                onClick={() => onSelect(buffer.id)}
+                title={`${buffer.fullName}\npKa: ${buffer.pKa.join(', ')}\nRange: ${buffer.effectiveRange[0]}-${buffer.effectiveRange[1]}`}
+              >
+                {/* Buffer name */}
+                <div className="w-20 flex-shrink-0 pr-2 text-right">
+                  <span className={`text-xs font-medium truncate ${
+                    isSelected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {buffer.name}
+                  </span>
+                </div>
+
+                {/* Bar container */}
+                <div className="flex-1 relative h-5">
+                  {/* pH scale background */}
+                  <div className="absolute inset-0 bg-slate-200 dark:bg-slate-600 rounded-sm opacity-30" />
+
+                  {/* Buffer range bar */}
+                  <div
+                    className={`absolute top-0 bottom-0 rounded-sm transition-all ${
+                      isGeneral
+                        ? 'bg-cyan-500 dark:bg-cyan-400'
+                        : 'bg-rose-500 dark:bg-rose-400'
+                    } ${isSelected ? 'ring-1 ring-offset-1 ring-primary-500' : ''} ${
+                      inRange ? 'opacity-100' : 'opacity-70'
+                    }`}
+                    style={{
+                      left: `${startPct}%`,
+                      width: `${widthPct}%`,
+                    }}
+                  />
+
+                  {/* pKa markers */}
+                  {buffer.pKa.map((pKa, idx) => {
+                    const pKaPct = ((pKa - minPH) / phRange) * 100;
+                    if (pKaPct < 0 || pKaPct > 100) return null;
+                    return (
+                      <div
+                        key={idx}
+                        className="absolute top-0 bottom-0 w-0.5 bg-slate-800 dark:bg-white opacity-60"
+                        style={{ left: `${pKaPct}%` }}
+                        title={`pKa = ${pKa.toFixed(2)}`}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Range label */}
+                <div className="w-20 flex-shrink-0 pl-2 text-left">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {buffer.effectiveRange[0].toFixed(1)} - {buffer.effectiveRange[1].toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* pH scale at bottom */}
+        <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-600">
+          <div className="relative h-2 ml-20 mr-20">
+            {/* Scale line */}
+            <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-400" />
+            {/* Scale ticks */}
+            {[4, 5, 6, 7, 8, 9, 10, 11, 12].map((ph) => (
+              <div
+                key={ph}
+                className="absolute top-0 bottom-0 w-px bg-slate-400"
+                style={{ left: `${((ph - minPH) / phRange) * 100}%` }}
+              >
+                <span className="absolute top-3 left-1/2 -translate-x-1/2 text-xs text-slate-500">
+                  {ph}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-4 text-xs text-slate-500">pH</div>
+        </div>
+      </div>
+
+      {/* Selected buffer info */}
+      {selectedId && (
+        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600">
+          {(() => {
+            const selected = buffers.find(b => b.id === selectedId);
+            if (!selected) return null;
+            return (
+              <div className="text-xs">
+                <div className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                  {selected.name}
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-normal ${
+                    selected.suitability === 'general'
+                      ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
+                      : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                  }`}>
+                    {selected.suitability === 'general' ? 'General Use' : 'Limited Use'}
+                  </span>
+                </div>
+                <div className="text-slate-500 dark:text-slate-400 mt-1">{selected.fullName}</div>
+                <div className="text-slate-500 dark:text-slate-400">
+                  pKa: {selected.pKa.map(p => p.toFixed(2)).join(', ')} | dpKa/dT: {selected.dpKadT}
+                </div>
+                {selected.notes && (
+                  <div className="text-slate-500 dark:text-slate-400 mt-1 italic">{selected.notes}</div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
