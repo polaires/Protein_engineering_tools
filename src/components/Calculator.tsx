@@ -23,8 +23,9 @@ import RecipeList from './RecipeList';
 import RecipeBuilder from './RecipeBuilder';
 import SerialDilution from './SerialDilution';
 import MyRecipes from './MyRecipes';
+import PhCalculator from './PhCalculator';
 
-type CalculatorTab = 'calculator' | 'recipes' | 'dilution';
+type CalculatorTab = 'calculator' | 'recipes' | 'dilution' | 'ph';
 type RecipeSubTab = 'browse' | 'builder' | 'myrecipes';
 
 const CALCULATION_MODES = [
@@ -638,6 +639,13 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
             <GitBranch className="w-4 h-4 inline mr-2" />
             Serial Dilution
           </button>
+          <button
+            onClick={() => setActiveTab('ph')}
+            className={`calc-mode-tab ${activeTab === 'ph' ? 'active' : ''}`}
+          >
+            <Droplet className="w-4 h-4 inline mr-2" />
+            pH Calculator
+          </button>
         </div>
       </div>
 
@@ -913,6 +921,11 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
       {/* Serial Dilution Tab */}
       {activeTab === 'dilution' && (
         <SerialDilution />
+      )}
+
+      {/* pH Calculator Tab */}
+      {activeTab === 'ph' && (
+        <PhCalculator />
       )}
     </div>
   );

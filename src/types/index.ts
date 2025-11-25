@@ -284,3 +284,43 @@ export interface ValidationResult {
   isValid: boolean;
   errors: string[];
 }
+
+// ============================================================================
+// pH Calculator Types
+// ============================================================================
+
+export type PHCalculatorMode = 'buffer' | 'strong' | 'adjust' | 'titration';
+
+export interface PHCalculatorState {
+  mode: PHCalculatorMode;
+  bufferSystemId?: string;
+  targetPH?: number;
+  totalConcentration?: number;
+  finalVolume?: number;
+  temperature: number;
+  ionicStrength?: number;
+  // For strong acid/base
+  acidBaseType?: 'acid' | 'base';
+  concentration?: number;
+  // For pH adjustment
+  currentPH?: number;
+  adjustingConcentration?: number;
+}
+
+export enum TemperaturePreset {
+  COLD_ROOM = 4,
+  ROOM_TEMP = 25,
+  INCUBATOR = 37,
+}
+
+export interface PHCalculationResult {
+  success: boolean;
+  pH?: number;
+  pOH?: number;
+  acidAmount?: { value: number; unit: string; form: string };
+  baseAmount?: { value: number; unit: string; form: string };
+  warnings: string[];
+  steps: string[];
+  speciesDistribution?: { species: string; formula: string; fraction: number }[];
+  bufferCapacity?: number;
+}
