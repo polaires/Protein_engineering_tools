@@ -22,10 +22,15 @@ export interface BufferSystem {
     [key: string]: number;
   };
   category: 'biological' | 'common' | 'strong';
+  suitability: 'general' | 'limited';  // general = cyan (recommended), limited = red (use with caution)
   incompatibilities?: string[];
   warnings?: string[];
   notes?: string;
 }
+
+// Suitability explanations:
+// 'general' - Suitable for general biochemical use (zwitterionic, minimal interference)
+// 'limited' - Use with caution (metal binding, temperature sensitive, reactive with aldehydes/DEPC)
 
 export interface StrongAcidBase {
   id: string;
@@ -110,6 +115,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [5.5, 6.7],
     mw: { acid: 195.24, base: 217.22 },
     category: 'biological',
+    suitability: 'general',
     warnings: ['Do not autoclave with glucose - Maillard reaction causes degradation'],
     notes: 'Zwitterionic buffer, minimal metal binding. One of the original Good buffers.',
   },
@@ -124,6 +130,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [5.8, 7.2],
     mw: { acid: 209.24, base: 209.24 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Primary amine buffer. Good alternative to imidazole for His-tag purification.',
   },
   {
@@ -137,6 +144,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.0, 7.2],
     mw: { acid: 190.15, base: 212.14 },
     category: 'biological',
+    suitability: 'limited',
     warnings: ['Forms complexes with most common metal ions'],
     notes: 'Acetamido buffer. One of the original Good buffers.',
   },
@@ -151,6 +159,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.1, 7.5],
     mw: { acid: 182.20, base: 204.19 },
     category: 'biological',
+    suitability: 'limited',
     warnings: ['Forms complexes with metals - consider when using Cu²⁺', 'Absorbs UV at 230 nm'],
     notes: 'Acetamido buffer. One of the original Good buffers.',
   },
@@ -165,6 +174,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.1, 7.5],
     mw: { acid: 302.37, base: 346.33 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Very low temperature sensitivity - excellent choice. One of the original Good buffers.',
   },
   {
@@ -178,6 +188,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.2, 7.6],
     mw: { acid: 225.26, base: 247.25 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Hydroxyl-containing analog of MOPS. Used as carrier electrolyte in capillary electrophoresis.',
   },
   {
@@ -191,6 +202,8 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.3, 9.5],
     mw: { acid: 282.34, base: 282.34 },
     category: 'biological',
+    suitability: 'limited',
+    warnings: ['Primary amine - may interfere with some assays'],
     notes: 'Diprotic - wide buffering range. Enhances stability of restriction enzymes vs Tris.',
   },
   {
@@ -204,6 +217,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.4, 7.8],
     mw: { acid: 213.25, base: 235.24 },
     category: 'biological',
+    suitability: 'general',
     notes: 'One of the original Good buffers. Used in calcium phosphate transfection.',
   },
   {
@@ -217,6 +231,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.5, 7.9],
     mw: { acid: 209.26, base: 231.25 },
     category: 'biological',
+    suitability: 'general',
     warnings: ['Do not autoclave with glucose - Maillard reaction causes degradation'],
     notes: 'Zwitterionic buffer. Very common for electrophoresis. One of the original Good buffers.',
   },
@@ -231,6 +246,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.9, 8.3],
     mw: { acid: 223.29, base: 245.28 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Longer chain morpholino buffer with slightly higher pKa than MOPS.',
   },
 
@@ -246,6 +262,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.8, 8.2],
     mw: { acid: 229.25, base: 251.24 },
     category: 'biological',
+    suitability: 'general',
     notes: 'One of the original Good buffers. Good alternative to HEPES.',
   },
   {
@@ -259,6 +276,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [6.8, 8.2],
     mw: { acid: 238.30, base: 260.29 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Excellent for cell culture, low metal binding. Most popular biological buffer.',
   },
   {
@@ -272,6 +290,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.0, 8.2],
     mw: { acid: 243.30, base: 265.29 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Hydroxyl-containing buffer with good solubility.',
   },
   {
@@ -285,6 +304,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.0, 8.2],
     mw: { acid: 259.28, base: 281.27 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Hydroxyl-containing analog of TAPS. Good stability.',
   },
   {
@@ -298,6 +318,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.0, 9.0],
     mw: { acid: 157.60, base: 121.14 },
     category: 'biological',
+    suitability: 'limited',
     incompatibilities: ['DEPC'],
     warnings: [
       'CRITICAL: Very high temperature sensitivity!',
@@ -319,6 +340,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.1, 8.5],
     mw: { acid: 268.33, base: 290.32 },
     category: 'biological',
+    suitability: 'general',
     warnings: ['Forms radicals - not suitable for redox reactions', 'Complexes with Cu(II) ions'],
     notes: 'Used as ampholytic separator for pH gradients in isoelectric focusing.',
   },
@@ -333,6 +355,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.2, 8.5],
     mw: { acid: 362.40, base: 406.36 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Hydroxyl-containing analog of PIPES with higher pKa.',
   },
   {
@@ -346,6 +369,8 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.3, 8.3],
     mw: { acid: 149.19, base: 149.19 },
     category: 'biological',
+    suitability: 'limited',
+    warnings: ['Tertiary amine - may interfere with some assays'],
     notes: 'Tertiary amine and triol. Used in protein purification and chromatography.',
   },
   {
@@ -359,6 +384,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.3, 8.7],
     mw: { acid: 252.33, base: 274.32 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Also known as HEPPS. Good alternative to HEPES at slightly higher pH.',
   },
   {
@@ -372,6 +398,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.4, 8.8],
     mw: { acid: 179.17, base: 179.17 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Good for SDS-PAGE of small proteins. One of the original Good buffers.',
   },
   {
@@ -385,6 +412,8 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [8.8, 10.6],
     mw: { acid: 75.07, base: 75.07 },
     category: 'biological',
+    suitability: 'limited',
+    warnings: ['Amino acid - may interfere with protein/amino acid assays'],
     notes: 'High pH buffer at pKa2. Common in SDS-PAGE running buffer.',
   },
   {
@@ -398,6 +427,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.6, 9.0],
     mw: { acid: 163.17, base: 163.17 },
     category: 'biological',
+    suitability: 'general',
     notes: 'One of the original Good buffers. Good for crystallography.',
   },
   {
@@ -411,6 +441,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.6, 9.0],
     mw: { acid: 266.36, base: 288.35 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Longer chain HEPES analog with higher pKa.',
   },
   {
@@ -424,6 +455,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.7, 9.1],
     mw: { acid: 243.28, base: 265.27 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Alternative to Tris at higher pH with better temperature stability.',
   },
 
@@ -439,6 +471,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [7.8, 9.7],
     mw: { acid: 105.14, base: 105.14 },
     category: 'biological',
+    suitability: 'limited',
     warnings: ['High temperature sensitivity similar to Tris'],
     notes: 'Primary amine buffer. Also known as AMPD or Ammediol.',
   },
@@ -453,6 +486,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [8.2, 9.6],
     mw: { acid: 257.31, base: 279.30 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Homolog of TES and TAPS with higher pKa. Good stability.',
   },
   {
@@ -466,6 +500,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [8.3, 9.7],
     mw: { acid: 227.28, base: 249.27 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Hydroxyl-containing buffer for high pH applications.',
   },
   {
@@ -479,6 +514,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [8.6, 10.0],
     mw: { acid: 207.29, base: 229.28 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Cyclohexylamino buffer. Low temperature sensitivity at high pH.',
   },
   {
@@ -492,6 +528,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [8.9, 10.3],
     mw: { acid: 237.32, base: 259.31 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Hydroxyl-containing cyclohexylamino buffer.',
   },
   {
@@ -505,6 +542,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [9.0, 10.5],
     mw: { acid: 89.14, base: 89.14 },
     category: 'biological',
+    suitability: 'limited',
     warnings: ['Very high temperature sensitivity'],
     notes: 'Primary amine buffer for high pH. Temperature-sensitive like Tris.',
   },
@@ -519,6 +557,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [9.7, 11.1],
     mw: { acid: 221.32, base: 243.31 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Zwitterionic buffer for very high pH. Used in Western blotting at high pH.',
   },
   {
@@ -532,6 +571,7 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
     effectiveRange: [10.0, 11.4],
     mw: { acid: 235.35, base: 257.34 },
     category: 'biological',
+    suitability: 'general',
     notes: 'Highest pKa zwitterionic buffer. For extreme pH applications.',
   },
 ];
@@ -562,6 +602,7 @@ export const COMMON_BUFFERS: BufferSystem[] = [
       h3po4: 98.00,           // Phosphoric acid
     },
     category: 'common',
+    suitability: 'limited',
     incompatibilities: ['calcium', 'magnesium'],
     warnings: [
       'Precipitates with calcium and magnesium ions',
@@ -584,6 +625,7 @@ export const COMMON_BUFFERS: BufferSystem[] = [
       trihydrate: 136.08,     // Sodium acetate trihydrate
     },
     category: 'common',
+    suitability: 'general',
     notes: 'Very stable, minimal temperature sensitivity',
   },
   {
@@ -602,6 +644,7 @@ export const COMMON_BUFFERS: BufferSystem[] = [
       dihydrate: 294.10,      // Trisodium citrate dihydrate
     },
     category: 'common',
+    suitability: 'limited',
     incompatibilities: ['calcium'],
     warnings: [
       'pKa values overlap - simple H-H equation is inaccurate',
@@ -624,6 +667,7 @@ export const COMMON_BUFFERS: BufferSystem[] = [
       base: 105.99,           // Na2CO3
     },
     category: 'common',
+    suitability: 'limited',
     warnings: ['pH sensitive to CO₂ - use fresh'],
     notes: 'High pH buffer, equilibrates with atmospheric CO₂',
   },
