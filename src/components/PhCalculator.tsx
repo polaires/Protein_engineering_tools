@@ -853,7 +853,7 @@ function BufferZoneVisualization({ buffer, targetPH, temperature }: BufferZoneVi
 
   return (
     <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-      <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+      <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-8 flex items-center gap-2">
         <Info className="w-4 h-4" />
         Buffer Effective Range
       </h4>
