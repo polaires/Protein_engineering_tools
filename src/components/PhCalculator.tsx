@@ -349,12 +349,12 @@ export default function PhCalculator() {
             <div className="md:col-span-2">
               <label className="input-label">Target pH *</label>
               <div className="flex items-center gap-4">
-                {/* pH Slider */}
+                {/* pH Slider - Full range 2-12 */}
                 <div className="flex-1 relative">
                   <input
                     type="range"
-                    min={selectedBuffer ? selectedBuffer.effectiveRange[0] - 1 : 2}
-                    max={selectedBuffer ? selectedBuffer.effectiveRange[1] + 1 : 12}
+                    min={2}
+                    max={12}
                     step="0.1"
                     value={targetPH ?? 7}
                     onChange={(e) => {
@@ -374,16 +374,25 @@ export default function PhCalculator() {
                         #a855f7 100%)`
                     }}
                   />
+                  {/* Buffer effective range indicator */}
+                  {selectedBuffer && (
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 h-5 bg-emerald-500/30 border-2 border-emerald-500 rounded pointer-events-none"
+                      style={{
+                        left: `${((selectedBuffer.effectiveRange[0] - 2) / 10) * 100}%`,
+                        width: `${((selectedBuffer.effectiveRange[1] - selectedBuffer.effectiveRange[0]) / 10) * 100}%`,
+                      }}
+                      title={`Effective range: ${selectedBuffer.effectiveRange[0]} - ${selectedBuffer.effectiveRange[1]}`}
+                    />
+                  )}
                   {/* pKa markers on slider */}
                   {selectedBuffer && selectedBuffer.pKa.map((pKa, idx) => {
-                    const minPH = selectedBuffer.effectiveRange[0] - 1;
-                    const maxPH = selectedBuffer.effectiveRange[1] + 1;
-                    const position = ((pKa - minPH) / (maxPH - minPH)) * 100;
+                    const position = ((pKa - 2) / 10) * 100;
                     if (position < 0 || position > 100) return null;
                     return (
                       <div
                         key={idx}
-                        className="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-slate-800 dark:bg-white pointer-events-none"
+                        className="absolute top-1/2 -translate-y-1/2 w-1 h-6 bg-slate-800 dark:bg-white pointer-events-none rounded"
                         style={{ left: `${position}%` }}
                         title={`pKa${selectedBuffer.pKa.length > 1 ? idx + 1 : ''} = ${pKa.toFixed(2)}`}
                       />
@@ -408,13 +417,19 @@ export default function PhCalculator() {
                 </div>
               </div>
               {/* pH scale labels */}
+              <div className="flex justify-between mt-1 text-xs text-slate-500 px-1">
+                <span>2</span>
+                <span>4</span>
+                <span>6</span>
+                <span className="font-medium">7</span>
+                <span>8</span>
+                <span>10</span>
+                <span>12</span>
+              </div>
+              {/* Selected buffer info */}
               {selectedBuffer && (
-                <div className="flex justify-between mt-1 text-xs text-slate-500 px-1">
-                  <span>{(selectedBuffer.effectiveRange[0] - 1).toFixed(0)}</span>
-                  <span className="text-emerald-600 font-medium">
-                    pKa: {selectedBuffer.pKa.map(p => p.toFixed(1)).join(', ')}
-                  </span>
-                  <span>{(selectedBuffer.effectiveRange[1] + 1).toFixed(0)}</span>
+                <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 text-center">
+                  {selectedBuffer.name} effective range: pH {selectedBuffer.effectiveRange[0].toFixed(1)} - {selectedBuffer.effectiveRange[1].toFixed(1)} | pKa: {selectedBuffer.pKa.map(p => p.toFixed(2)).join(', ')}
                 </div>
               )}
             </div>
