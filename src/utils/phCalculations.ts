@@ -498,8 +498,9 @@ export function calculatePolyproticBufferPreparation(
 // ============================================================================
 
 /**
- * Calculate amount of strong acid needed to adjust buffer to target pH
- * Uses exact formula: Ca = (Cb × [H⁺]) / (Ka + [H⁺]) + [H⁺] - Kw/[H⁺]
+ * Calculate amount of strong acid or base needed to adjust buffer to target pH
+ * For acid: Ca = (Cb × [H⁺]) / (Ka + [H⁺]) + [H⁺] - Kw/[H⁺]
+ * For base: Cb = (Cb_buffer × Ka) / (Ka + [H⁺]) - [H⁺] + Kw/[H⁺]
  */
 export function calculateAcidNeededForPHAdjustment(
   input: PHAdjustmentInput,
@@ -511,70 +512,129 @@ export function calculateAcidNeededForPHAdjustment(
     bufferConcentration,
     bufferPKa,
     volume,
+    adjustingWith,
     adjustingConcentration,
   } = input;
 
   const steps: string[] = [];
   const warnings: string[] = [];
 
-  const Kw = Math.pow(10, -getPKw(temperature));
+  const pKw = getPKw(temperature);
+  const Kw = Math.pow(10, -pKw);
   const Ka = Math.pow(10, -bufferPKa);
   const targetH = Math.pow(10, -targetPH);
+  const currentH = Math.pow(10, -currentPH);
 
   steps.push(`pH Adjustment Calculation`);
   steps.push(`Current pH: ${currentPH.toFixed(2)} → Target pH: ${targetPH.toFixed(2)}`);
   steps.push(`Buffer concentration: ${(bufferConcentration * 1000).toFixed(1)} mM`);
   steps.push(`Buffer pKa: ${bufferPKa.toFixed(2)}`);
   steps.push(`Volume: ${volume.toFixed(1)} mL`);
+  steps.push(`Adjusting with: ${adjustingWith === 'acid' ? 'Strong Acid (HCl)' : 'Strong Base (NaOH)'}`);
   steps.push(``);
 
-  // Exact formula for acid needed
-  // Ca = (Cb × [H⁺]) / (Ka + [H⁺]) + [H⁺] - Kw/[H⁺]
-  const Ca = (bufferConcentration * targetH) / (Ka + targetH) + targetH - Kw / targetH;
-
-  steps.push(`Formula: Cₐ = (C_buffer × [H⁺]) / (Kₐ + [H⁺]) + [H⁺] - Kw/[H⁺]`);
-  steps.push(`[H⁺]_target = 10^(-${targetPH.toFixed(2)}) = ${targetH.toExponential(3)} M`);
-  steps.push(`Kₐ = 10^(-${bufferPKa.toFixed(2)}) = ${Ka.toExponential(3)}`);
-  steps.push(`Cₐ = ${Ca.toExponential(3)} M`);
-
-  // Calculate volume of acid stock to add
   const volumeL = volume / 1000;
-  const acidMoles = Ca * volumeL;
-  const stockVolumeML = (acidMoles / adjustingConcentration) * 1000;
 
-  steps.push(``);
-  steps.push(`Acid needed: ${(Ca * 1000).toFixed(4)} mM = ${(acidMoles * 1000).toFixed(4)} mmol`);
-  steps.push(`Volume of ${adjustingConcentration} M acid stock: ${stockVolumeML.toFixed(3)} mL`);
+  if (adjustingWith === 'acid') {
+    // Lowering pH - adding acid
+    if (targetPH >= currentPH) {
+      warnings.push('Target pH is higher than current pH - use base instead of acid');
+      return { success: false, warnings, steps };
+    }
 
-  if (stockVolumeML < 0) {
-    warnings.push('Negative volume calculated - you need to add base, not acid');
+    // Calculate acid concentration needed at equilibrium
+    // Ca = (Cb × [H⁺]) / (Ka + [H⁺]) + [H⁺] - Kw/[H⁺]
+    const CaTarget = (bufferConcentration * targetH) / (Ka + targetH) + targetH - Kw / targetH;
+    const CaCurrent = (bufferConcentration * currentH) / (Ka + currentH) + currentH - Kw / currentH;
+    const CaDelta = CaTarget - CaCurrent;
+
+    steps.push(`Formula: Cₐ = (C_buffer × [H⁺]) / (Kₐ + [H⁺]) + [H⁺] - Kw/[H⁺]`);
+    steps.push(`[H⁺]_target = 10^(-${targetPH.toFixed(2)}) = ${targetH.toExponential(3)} M`);
+    steps.push(`Kₐ = 10^(-${bufferPKa.toFixed(2)}) = ${Ka.toExponential(3)}`);
+    steps.push(`ΔCₐ = ${CaDelta.toExponential(3)} M`);
+
+    const acidMoles = CaDelta * volumeL;
+    const stockVolumeML = (acidMoles / adjustingConcentration) * 1000;
+
+    steps.push(``);
+    steps.push(`Acid needed: ${(CaDelta * 1000).toFixed(4)} mM = ${(acidMoles * 1000).toFixed(4)} mmol`);
+    steps.push(`Volume of ${adjustingConcentration} M HCl: ${stockVolumeML.toFixed(3)} mL`);
+
+    if (stockVolumeML < 0) {
+      warnings.push('Negative volume calculated - you need to add base, not acid');
+      return { success: false, warnings, steps };
+    }
+
+    steps.push(``);
+    steps.push(`=== Preparation Instructions ===`);
+    steps.push(`1. Start with ~${Math.round(volume * 0.9)} mL of your buffer solution`);
+    steps.push(`2. Add ${stockVolumeML.toFixed(2)} mL of ${adjustingConcentration} M HCl`);
+    steps.push(`3. Mix thoroughly`);
+    steps.push(`4. Top up to ${volume.toFixed(0)} mL final volume`);
+    steps.push(`5. Verify pH with calibrated meter`);
+
     return {
-      success: false,
+      success: true,
+      pH: targetPH,
+      acidAmount: {
+        value: stockVolumeML,
+        unit: 'mL',
+        form: `${adjustingConcentration} M HCl`,
+      },
+      warnings,
+      steps,
+    };
+  } else {
+    // Raising pH - adding base
+    if (targetPH <= currentPH) {
+      warnings.push('Target pH is lower than current pH - use acid instead of base');
+      return { success: false, warnings, steps };
+    }
+
+    // Calculate base concentration needed
+    // For base: need to convert HA → A⁻
+    // Cb = (Cb_buffer × Ka) / (Ka + [H⁺]) - [H⁺] + Kw/[H⁺]
+    const CbTarget = (bufferConcentration * Ka) / (Ka + targetH) - targetH + Kw / targetH;
+    const CbCurrent = (bufferConcentration * Ka) / (Ka + currentH) - currentH + Kw / currentH;
+    const CbDelta = CbTarget - CbCurrent;
+
+    steps.push(`Formula: C_b = (C_buffer × Kₐ) / (Kₐ + [H⁺]) - [H⁺] + Kw/[H⁺]`);
+    steps.push(`[H⁺]_target = 10^(-${targetPH.toFixed(2)}) = ${targetH.toExponential(3)} M`);
+    steps.push(`Kₐ = 10^(-${bufferPKa.toFixed(2)}) = ${Ka.toExponential(3)}`);
+    steps.push(`ΔC_b = ${CbDelta.toExponential(3)} M`);
+
+    const baseMoles = CbDelta * volumeL;
+    const stockVolumeML = (baseMoles / adjustingConcentration) * 1000;
+
+    steps.push(``);
+    steps.push(`Base needed: ${(CbDelta * 1000).toFixed(4)} mM = ${(baseMoles * 1000).toFixed(4)} mmol`);
+    steps.push(`Volume of ${adjustingConcentration} M NaOH: ${stockVolumeML.toFixed(3)} mL`);
+
+    if (stockVolumeML < 0) {
+      warnings.push('Negative volume calculated - you need to add acid, not base');
+      return { success: false, warnings, steps };
+    }
+
+    steps.push(``);
+    steps.push(`=== Preparation Instructions ===`);
+    steps.push(`1. Start with ~${Math.round(volume * 0.9)} mL of your buffer solution`);
+    steps.push(`2. Add ${stockVolumeML.toFixed(2)} mL of ${adjustingConcentration} M NaOH`);
+    steps.push(`3. Mix thoroughly`);
+    steps.push(`4. Top up to ${volume.toFixed(0)} mL final volume`);
+    steps.push(`5. Verify pH with calibrated meter`);
+
+    return {
+      success: true,
+      pH: targetPH,
+      baseAmount: {
+        value: stockVolumeML,
+        unit: 'mL',
+        form: `${adjustingConcentration} M NaOH`,
+      },
       warnings,
       steps,
     };
   }
-
-  // Practical output
-  steps.push(``);
-  steps.push(`=== Preparation Instructions ===`);
-  steps.push(`1. Start with ${Math.round(volume * 0.9)} mL of your buffer solution`);
-  steps.push(`2. Add ${stockVolumeML.toFixed(2)} mL of ${adjustingConcentration} M HCl`);
-  steps.push(`3. Mix thoroughly`);
-  steps.push(`4. Adjust volume to ${volume.toFixed(0)} mL`);
-  steps.push(`5. Verify pH with calibrated meter`);
-
-  return {
-    success: true,
-    pH: targetPH,
-    acidAmount: {
-      value: stockVolumeML,
-      unit: 'mL',
-      form: `${adjustingConcentration} M HCl`,
-    },
-    warnings,
-    steps,
-  };
 }
 
 // ============================================================================
