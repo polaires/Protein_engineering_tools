@@ -33,6 +33,12 @@ export interface PhCalculationResult {
   speciesDistribution?: SpeciesFraction[];
   bufferCapacity?: number;
   ionicStrength?: number;
+  // Alternative preparation using single chemical + HCl/NaOH
+  alternativePreparation?: {
+    chemical: { value: number; unit: string; form: string };
+    titrant: { value: number; unit: string; form: string; type: 'HCl' | 'NaOH'; concentration: number };
+    steps: string[];
+  };
 }
 
 export interface SpeciesFraction {
@@ -325,6 +331,91 @@ export function calculateBufferPreparation(input: BufferCalculationInput): PhCal
   // Calculate buffer capacity (β)
   const bufferCapacity = 2.303 * totalConcentration * ratio / Math.pow(1 + ratio, 2);
 
+  // Calculate alternative preparation method (single chemical + HCl/NaOH)
+  // Determine which is better: acid form + NaOH, or base form + HCl
+  const totalMoles = totalConcentration * volumeL;
+  const titrantConcentration = 1.0; // 1 M stock solution
+
+  // Option 1: Use acid form only + NaOH
+  // Need to neutralize baseConcentration worth to convert acid → base
+  const naohMolesNeeded = baseMoles;
+  const naohVolumeML = (naohMolesNeeded / titrantConcentration) * 1000;
+  const totalAcidMass = totalMoles * bufferSystem.mw.acid;
+
+  // Option 2: Use base form only + HCl
+  // Need to neutralize acidConcentration worth to convert base → acid
+  const hclMolesNeeded = acidMoles;
+  const hclVolumeML = (hclMolesNeeded / titrantConcentration) * 1000;
+  const totalBaseMass = totalMoles * bufferSystem.mw.base;
+
+  // Choose the option that requires less titrant (simpler preparation)
+  const useAcidForm = naohVolumeML <= hclVolumeML;
+
+  const altSteps: string[] = [];
+  altSteps.push(`=== Alternative Preparation (Single Chemical) ===`);
+
+  let alternativePreparation: PhCalculationResult['alternativePreparation'];
+
+  if (useAcidForm) {
+    altSteps.push(`Using acid form (${bufferSystem.acidForm}) + NaOH`);
+    altSteps.push(``);
+    altSteps.push(`1. Weigh ${formatMass(totalAcidMass)} of ${bufferSystem.acidForm}`);
+    altSteps.push(`   (MW = ${bufferSystem.mw.acid.toFixed(2)} g/mol, ${(totalMoles * 1000).toFixed(4)} mmol)`);
+    altSteps.push(``);
+    altSteps.push(`2. Dissolve in ~${(finalVolume * 0.8).toFixed(0)} mL water`);
+    altSteps.push(``);
+    altSteps.push(`3. Add ${naohVolumeML.toFixed(2)} mL of 1 M NaOH`);
+    altSteps.push(`   (${(naohMolesNeeded * 1000).toFixed(4)} mmol NaOH)`);
+    altSteps.push(``);
+    altSteps.push(`4. Check pH and adjust if needed`);
+    altSteps.push(`5. Bring to final volume (${finalVolume.toFixed(0)} mL)`);
+
+    alternativePreparation = {
+      chemical: {
+        value: totalAcidMass,
+        unit: totalAcidMass >= 1 ? 'g' : 'mg',
+        form: bufferSystem.acidForm,
+      },
+      titrant: {
+        value: naohVolumeML,
+        unit: 'mL',
+        form: '1 M NaOH',
+        type: 'NaOH',
+        concentration: titrantConcentration,
+      },
+      steps: altSteps,
+    };
+  } else {
+    altSteps.push(`Using base form (${bufferSystem.baseForm}) + HCl`);
+    altSteps.push(``);
+    altSteps.push(`1. Weigh ${formatMass(totalBaseMass)} of ${bufferSystem.baseForm}`);
+    altSteps.push(`   (MW = ${bufferSystem.mw.base.toFixed(2)} g/mol, ${(totalMoles * 1000).toFixed(4)} mmol)`);
+    altSteps.push(``);
+    altSteps.push(`2. Dissolve in ~${(finalVolume * 0.8).toFixed(0)} mL water`);
+    altSteps.push(``);
+    altSteps.push(`3. Add ${hclVolumeML.toFixed(2)} mL of 1 M HCl`);
+    altSteps.push(`   (${(hclMolesNeeded * 1000).toFixed(4)} mmol HCl)`);
+    altSteps.push(``);
+    altSteps.push(`4. Check pH and adjust if needed`);
+    altSteps.push(`5. Bring to final volume (${finalVolume.toFixed(0)} mL)`);
+
+    alternativePreparation = {
+      chemical: {
+        value: totalBaseMass,
+        unit: totalBaseMass >= 1 ? 'g' : 'mg',
+        form: bufferSystem.baseForm,
+      },
+      titrant: {
+        value: hclVolumeML,
+        unit: 'mL',
+        form: '1 M HCl',
+        type: 'HCl',
+        concentration: titrantConcentration,
+      },
+      steps: altSteps,
+    };
+  }
+
   return {
     success: true,
     pH: targetPH,
@@ -341,6 +432,7 @@ export function calculateBufferPreparation(input: BufferCalculationInput): PhCal
     warnings,
     steps,
     bufferCapacity,
+    alternativePreparation,
   };
 }
 
@@ -475,6 +567,25 @@ export function calculatePolyproticBufferPreparation(
   steps.push(`4. Adjust volume to ${finalVolume.toFixed(0)} mL`);
   steps.push(`5. Verify pH with calibrated meter`);
 
+  // Calculate alternative preparation with 1 M NaOH
+  const titrantConcentration = 1.0; // 1 M stock solution
+  const naohVolumeML = (baseMoles / titrantConcentration) * 1000;
+
+  const altSteps: string[] = [];
+  altSteps.push(`=== Alternative Preparation (Single Chemical) ===`);
+  altSteps.push(`Using acid form (${bufferSystem.acidForm}) + NaOH`);
+  altSteps.push(``);
+  altSteps.push(`1. Weigh ${formatMass(acidMass)} of ${bufferSystem.acidForm}`);
+  altSteps.push(`   (MW = ${bufferSystem.mw.acid.toFixed(2)} g/mol, ${(acidMoles * 1000).toFixed(4)} mmol)`);
+  altSteps.push(``);
+  altSteps.push(`2. Dissolve in ~${(finalVolume * 0.8).toFixed(0)} mL water`);
+  altSteps.push(``);
+  altSteps.push(`3. Add ${naohVolumeML.toFixed(2)} mL of 1 M NaOH`);
+  altSteps.push(`   (${(baseMoles * 1000).toFixed(4)} mmol NaOH)`);
+  altSteps.push(``);
+  altSteps.push(`4. Check pH and adjust if needed`);
+  altSteps.push(`5. Bring to final volume (${finalVolume.toFixed(0)} mL)`);
+
   return {
     success: true,
     pH: targetPH,
@@ -491,6 +602,21 @@ export function calculatePolyproticBufferPreparation(
     warnings,
     steps,
     speciesDistribution: species,
+    alternativePreparation: {
+      chemical: {
+        value: acidMass,
+        unit: acidMass >= 1 ? 'g' : 'mg',
+        form: bufferSystem.acidForm,
+      },
+      titrant: {
+        value: naohVolumeML,
+        unit: 'mL',
+        form: '1 M NaOH',
+        type: 'NaOH',
+        concentration: titrantConcentration,
+      },
+      steps: altSteps,
+    },
   };
 }
 
