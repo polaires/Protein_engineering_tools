@@ -70,12 +70,6 @@ const CALCULATION_MODES = [
     icon: Droplet,
     description: 'Adjust existing solution pH',
   },
-  {
-    mode: 'titration' as PHCalculatorMode,
-    label: 'Species Distribution',
-    icon: Info,
-    description: 'View species distribution at pH',
-  },
 ];
 
 // ============================================================================
@@ -110,12 +104,8 @@ export default function PhCalculator() {
   const [adjustingConc, setAdjustingConc] = useState<number | undefined>(1); // M
   const [adjustingType, setAdjustingType] = useState<'acid' | 'base'>('acid');
 
-  // Species distribution state
-  const [speciesPH, setSpeciesPH] = useState<number | undefined>(7.0);
-  const [speciesConc, setSpeciesConc] = useState<number | undefined>(100); // mM
-
   // Buffer selection view state
-  const [bufferViewMode, setBufferViewMode] = useState<'dropdown' | 'chart'>('dropdown');
+  const [bufferViewMode, setBufferViewMode] = useState<'dropdown' | 'chart'>('chart');
 
   // Result state
   const [result, setResult] = useState<PhCalculationResult | null>(null);
@@ -176,6 +166,24 @@ export default function PhCalculator() {
               ionicStrength: useIonicStrength ? ionicStrength : undefined,
             });
           }
+
+          // Add species distribution to buffer result
+          if (calcResult.success) {
+            const pKaValues = selectedBuffer.pKa.map((_, idx) =>
+              getPKaAtTemperature(selectedBuffer, temperature, idx)
+            );
+            const species = calculateSpeciesDistribution(
+              pKaValues,
+              targetPH,
+              totalConcentration / 1000 // Convert mM to M
+            );
+            calcResult.speciesDistribution = species;
+            calcResult.steps.push(
+              '',
+              'Species Distribution:',
+              ...species.map(s => `  ${s.formula}: ${(s.fraction * 100).toFixed(1)}%${s.concentration ? ` (${(s.concentration * 1000).toFixed(3)} mM)` : ''}`)
+            );
+          }
           break;
 
         case 'strong':
@@ -209,38 +217,6 @@ export default function PhCalculator() {
             },
             temperature
           );
-          break;
-
-        case 'titration':
-          if (!selectedBuffer || speciesPH === undefined) {
-            showToast('error', 'Please select a buffer and enter pH');
-            return;
-          }
-
-          const pKaValues = selectedBuffer.pKa.map((_, idx) =>
-            getPKaAtTemperature(selectedBuffer, temperature, idx)
-          );
-          const species = calculateSpeciesDistribution(
-            pKaValues,
-            speciesPH,
-            speciesConc ? speciesConc / 1000 : undefined
-          );
-
-          calcResult = {
-            success: true,
-            pH: speciesPH,
-            warnings: [],
-            steps: [
-              `Buffer: ${selectedBuffer.name}`,
-              `pH: ${speciesPH.toFixed(2)}`,
-              `Temperature: ${temperature}°C`,
-              `pKa values: ${pKaValues.map(p => p.toFixed(2)).join(', ')}`,
-              '',
-              'Species Distribution:',
-              ...species.map(s => `  ${s.formula}: ${(s.fraction * 100).toFixed(1)}%${s.concentration ? ` (${(s.concentration * 1000).toFixed(3)} mM)` : ''}`),
-            ],
-            speciesDistribution: species,
-          };
           break;
 
         default:
@@ -369,22 +345,78 @@ export default function PhCalculator() {
               )}
             </div>
 
-            {/* Target pH */}
-            <div>
+            {/* Target pH with Interactive Slider */}
+            <div className="md:col-span-2">
               <label className="input-label">Target pH *</label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 7.4"
-                step="0.1"
-                min="0"
-                max="14"
-                value={targetPH ?? ''}
-                onChange={(e) => {
-                  setTargetPH(e.target.value === '' ? undefined : parseFloat(e.target.value));
-                  handleReset();
-                }}
-              />
+              <div className="flex items-center gap-4">
+                {/* pH Slider */}
+                <div className="flex-1 relative">
+                  <input
+                    type="range"
+                    min={selectedBuffer ? selectedBuffer.effectiveRange[0] - 1 : 2}
+                    max={selectedBuffer ? selectedBuffer.effectiveRange[1] + 1 : 12}
+                    step="0.1"
+                    value={targetPH ?? 7}
+                    onChange={(e) => {
+                      setTargetPH(parseFloat(e.target.value));
+                      handleReset();
+                    }}
+                    className="w-full h-3 rounded-lg appearance-none cursor-pointer ph-slider"
+                    style={{
+                      background: `linear-gradient(to right,
+                        #ef4444 0%,
+                        #f97316 15%,
+                        #eab308 30%,
+                        #22c55e 45%,
+                        #22c55e 55%,
+                        #3b82f6 70%,
+                        #8b5cf6 85%,
+                        #a855f7 100%)`
+                    }}
+                  />
+                  {/* pKa markers on slider */}
+                  {selectedBuffer && selectedBuffer.pKa.map((pKa, idx) => {
+                    const minPH = selectedBuffer.effectiveRange[0] - 1;
+                    const maxPH = selectedBuffer.effectiveRange[1] + 1;
+                    const position = ((pKa - minPH) / (maxPH - minPH)) * 100;
+                    if (position < 0 || position > 100) return null;
+                    return (
+                      <div
+                        key={idx}
+                        className="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-slate-800 dark:bg-white pointer-events-none"
+                        style={{ left: `${position}%` }}
+                        title={`pKa${selectedBuffer.pKa.length > 1 ? idx + 1 : ''} = ${pKa.toFixed(2)}`}
+                      />
+                    );
+                  })}
+                </div>
+                {/* pH Number Input */}
+                <div className="w-24">
+                  <input
+                    type="number"
+                    className="input-field text-center font-bold text-lg"
+                    placeholder="7.4"
+                    step="0.1"
+                    min="0"
+                    max="14"
+                    value={targetPH ?? ''}
+                    onChange={(e) => {
+                      setTargetPH(e.target.value === '' ? undefined : parseFloat(e.target.value));
+                      handleReset();
+                    }}
+                  />
+                </div>
+              </div>
+              {/* pH scale labels */}
+              {selectedBuffer && (
+                <div className="flex justify-between mt-1 text-xs text-slate-500 px-1">
+                  <span>{(selectedBuffer.effectiveRange[0] - 1).toFixed(0)}</span>
+                  <span className="text-emerald-600 font-medium">
+                    pKa: {selectedBuffer.pKa.map(p => p.toFixed(1)).join(', ')}
+                  </span>
+                  <span>{(selectedBuffer.effectiveRange[1] + 1).toFixed(0)}</span>
+                </div>
+              )}
             </div>
 
             {/* Total Concentration */}
@@ -803,153 +835,6 @@ export default function PhCalculator() {
         </div>
       )}
 
-      {/* Species Distribution Mode */}
-      {selectedMode === 'titration' && (
-        <div className="card">
-          <h3 className="section-title flex items-center gap-2">
-            <Info className="w-5 h-5" />
-            Species Distribution
-          </h3>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mb-4">
-            Visualize the distribution of protonation states at a given pH.
-            Essential for polyprotic acids like citric acid where pKa values overlap.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Buffer System Selection */}
-            <div className="md:col-span-2">
-              <label className="input-label">Buffer System *</label>
-              <select
-                className="select-field w-full"
-                value={bufferSystemId}
-                onChange={(e) => {
-                  setBufferSystemId(e.target.value);
-                  handleReset();
-                }}
-              >
-                <optgroup label="Polyprotic Acids (Complex)">
-                  {COMMON_BUFFERS.filter(b => b.pKa.length > 1).map((buffer) => (
-                    <option key={buffer.id} value={buffer.id}>
-                      {buffer.name} (pKa: {buffer.pKa.map(p => p.toFixed(1)).join(', ')})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Good's Biological Buffers">
-                  {BIOLOGICAL_BUFFERS.map((buffer) => (
-                    <option key={buffer.id} value={buffer.id}>
-                      {buffer.name} (pKa {buffer.pKa[0].toFixed(2)})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Common Laboratory Buffers">
-                  {COMMON_BUFFERS.filter(b => b.pKa.length === 1).map((buffer) => (
-                    <option key={buffer.id} value={buffer.id}>
-                      {buffer.name} (pKa {buffer.pKa[0].toFixed(2)})
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-
-            {/* pH */}
-            <div>
-              <label className="input-label">pH *</label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 7.0"
-                step="0.1"
-                min="0"
-                max="14"
-                value={speciesPH ?? ''}
-                onChange={(e) => {
-                  setSpeciesPH(e.target.value === '' ? undefined : parseFloat(e.target.value));
-                  handleReset();
-                }}
-              />
-            </div>
-
-            {/* Concentration (optional) */}
-            <div>
-              <label className="input-label">Total Concentration (mM, optional)</label>
-              <input
-                type="number"
-                className="input-field"
-                placeholder="e.g., 100"
-                step="any"
-                min="0"
-                value={speciesConc ?? ''}
-                onChange={(e) => {
-                  setSpeciesConc(e.target.value === '' ? undefined : parseFloat(e.target.value));
-                  handleReset();
-                }}
-              />
-            </div>
-
-            {/* Temperature */}
-            <div>
-              <label className="input-label flex items-center gap-2">
-                <Thermometer className="w-4 h-4" />
-                Temperature (°C)
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  className="input-field flex-1"
-                  placeholder="25"
-                  step="1"
-                  value={temperature}
-                  onChange={(e) => {
-                    setTemperature(parseFloat(e.target.value) || 25);
-                    handleReset();
-                  }}
-                />
-                <div className="flex gap-1">
-                  <button
-                    className={`px-2 py-1 rounded text-xs ${temperature === 4 ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
-                    onClick={() => { setTemperature(4); handleReset(); }}
-                  >
-                    4°C
-                  </button>
-                  <button
-                    className={`px-2 py-1 rounded text-xs ${temperature === 25 ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
-                    onClick={() => { setTemperature(25); handleReset(); }}
-                  >
-                    25°C
-                  </button>
-                  <button
-                    className={`px-2 py-1 rounded text-xs ${temperature === 37 ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
-                    onClick={() => { setTemperature(37); handleReset(); }}
-                  >
-                    37°C
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Info about polyprotic complexity */}
-          {selectedBuffer && selectedBuffer.pKa.length > 1 && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                <strong>{selectedBuffer.name}</strong> has {selectedBuffer.pKa.length} pKa values
-                ({selectedBuffer.pKa.map(p => p.toFixed(2)).join(', ')}).
-                {Math.min(...selectedBuffer.pKa.slice(1).map((p, i) => Math.abs(p - selectedBuffer.pKa[i]))) < 2.5 && (
-                  <> The pKa values are close together, meaning multiple species coexist at most pH values.
-                  Simple Henderson-Hasselbalch calculations would be inaccurate.</>
-                )}
-              </p>
-            </div>
-          )}
-
-          <button
-            onClick={handleCalculate}
-            className="btn-primary w-full mt-4"
-          >
-            Calculate Species Distribution
-          </button>
-        </div>
-      )}
 
       {/* Results Display */}
       {result && result.success && (
@@ -997,6 +882,40 @@ export default function PhCalculator() {
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Alternative Preparation Method */}
+          {result.alternativePreparation && (
+            <div className="mb-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+              <h4 className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-3 flex items-center gap-2">
+                <FlaskConical className="w-4 h-4" />
+                Alternative: Single Chemical + {result.alternativePreparation.titrant.type}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-white dark:bg-slate-800 rounded border border-emerald-200 dark:border-emerald-700">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-1">
+                    {result.alternativePreparation.chemical.form}
+                  </p>
+                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
+                    {result.alternativePreparation.chemical.value >= 1
+                      ? result.alternativePreparation.chemical.value.toFixed(4)
+                      : (result.alternativePreparation.chemical.value * 1000).toFixed(2)}{' '}
+                    {result.alternativePreparation.chemical.value >= 1 ? result.alternativePreparation.chemical.unit : 'mg'}
+                  </p>
+                </div>
+                <div className="p-3 bg-white dark:bg-slate-800 rounded border border-emerald-200 dark:border-emerald-700">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-1">
+                    {result.alternativePreparation.titrant.form}
+                  </p>
+                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
+                    {result.alternativePreparation.titrant.value.toFixed(2)} {result.alternativePreparation.titrant.unit}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-3">
+                Dissolve the buffer chemical in ~80% of final volume, add the titrant, verify pH, then bring to final volume.
+              </p>
             </div>
           )}
 
