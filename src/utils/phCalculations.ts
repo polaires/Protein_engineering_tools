@@ -249,10 +249,11 @@ export function calculateBufferPreparation(input: BufferCalculationInput): PhCal
     );
   }
 
-  // Check if in dead zone
+  // Check if in dead zone (outside pKa ± 1 for all pKa values)
   if (isInDeadZone(bufferSystem, targetPH)) {
+    const pKaRanges = bufferSystem.pKa.map(pKa => `${(pKa - 1).toFixed(1)}-${(pKa + 1).toFixed(1)} (pKa ${pKa.toFixed(2)})`).join(', ');
     warnings.push(
-      `⚠️ Target pH ${targetPH.toFixed(1)} is outside the effective buffering range (${bufferSystem.effectiveRange[0]}-${bufferSystem.effectiveRange[1]}). Poor buffer capacity expected.`
+      `⚠️ Target pH ${targetPH.toFixed(1)} is outside the optimal buffering range (pKa ± 1: ${pKaRanges}). Poor buffer capacity expected.`
     );
   }
 
