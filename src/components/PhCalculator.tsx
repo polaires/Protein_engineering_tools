@@ -1193,10 +1193,10 @@ function BufferWarnings({ buffer, temperature, targetPH, inDeadZone, suggestedBu
                 {buffer.name} has optimal buffering at pH {buffer.pKa.map(p => p.toFixed(1)).join(', ')} (±1 unit).
                 Your target pH is outside this range.
               </p>
-              {suggestedBuffers.length > 0 && (
+              {suggestedBuffers.filter(b => b.id !== buffer.id).length > 0 && (
                 <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
                   <strong>Suggested alternatives:</strong>{' '}
-                  {suggestedBuffers.slice(0, 3).map(b => b.name).join(', ')}
+                  {suggestedBuffers.filter(b => b.id !== buffer.id).slice(0, 3).map(b => b.name).join(', ')}
                 </p>
               )}
             </div>
