@@ -212,9 +212,11 @@ export default function ProteinViewer() {
   // Setup measurement mode click handler
   useEffect(() => {
     if (!pluginRef.current || !measurementMode) {
-      // Reset selected loci when measurement mode is disabled
-      if (!measurementMode) {
+      // Reset selected loci and clear order labels when measurement mode is disabled
+      if (!measurementMode && pluginRef.current) {
         setSelectedLoci([]);
+        // Clear order labels when exiting measurement mode (Molstar approach)
+        pluginRef.current.managers.structure.measurement.addOrderLabels([]);
       }
       return;
     }
@@ -281,13 +283,17 @@ export default function ProteinViewer() {
 
       console.log('Parent structure resolved:', parentCell?.transform.ref);
 
+      // Reconstruct loci with parent structure for proper cross-component support
+      const reconstructedLoci = StructureElement.Bundle.toLoci(bundle, parentStructure);
+
       // Store immutable data AND serialized bundle with PARENT structure reference
       const atomData = {
         position,
         atomInfo,
         bundle: bundle,  // Serialized bundle (immutable)
         structure: parentStructure,  // Use PARENT structure for cross-component measurements
-        parentRef: parentCell?.transform.ref  // Keep ref for debugging
+        parentRef: parentCell?.transform.ref,  // Keep ref for debugging
+        loci: reconstructedLoci  // Store reconstructed loci for order labels
       };
 
       setSelectedLoci((prev: any[]) => {
@@ -295,6 +301,10 @@ export default function ProteinViewer() {
 
         console.log('Selected loci count:', newLoci.length);
         console.log('New atom data:', atomData);
+
+        // Update order labels in 3D scene (Molstar approach - shows "1", "2" on atoms)
+        const lociForLabels = newLoci.map((item: any) => item.loci);
+        plugin.managers.structure.measurement.addOrderLabels(lociForLabels);
 
         // If we have 2 or more atoms, calculate and display distance
         if (newLoci.length >= 2) {
@@ -321,18 +331,21 @@ export default function ProteinViewer() {
           (async () => {
             try {
               console.log('===== ADDING VISUAL MEASUREMENT =====');
-              // Reconstruct Loci from stored bundles
-              const firstLoci = StructureElement.Bundle.toLoci(first.bundle, first.structure);
-              const secondLoci = StructureElement.Bundle.toLoci(second.bundle, second.structure);
+              // Use stored loci (already reconstructed with parent structure)
+              const firstLoci = first.loci;
+              const secondLoci = second.loci;
 
-              console.log('Reconstructed firstLoci:', firstLoci);
-              console.log('Reconstructed secondLoci:', secondLoci);
+              console.log('Using stored firstLoci:', firstLoci);
+              console.log('Using stored secondLoci:', secondLoci);
 
               // Check if measurement manager exists
               if (!plugin.managers?.structure?.measurement) {
                 console.error('Measurement manager not available');
                 return;
               }
+
+              // Clear order labels now that measurement is being added (Molstar approach)
+              plugin.managers.structure.measurement.addOrderLabels([]);
 
               // Add distance measurement with unique tags to prevent conflicts
               const measurementId = Date.now().toString();
@@ -345,10 +358,11 @@ export default function ProteinViewer() {
               if (result) {
                 console.log('Successfully added distance measurement to scene');
 
-                // Add persistent highlights for both atoms
-                plugin.managers.interactivity.lociHighlights.highlight({ loci: firstLoci }, false);
-                plugin.managers.interactivity.lociHighlights.highlight({ loci: secondLoci }, false);
-                console.log('Added persistent highlights to both atoms');
+                // Use Molstar's selection manager for persistent selection (Molstar approach)
+                // This creates a proper selection highlight that persists
+                plugin.managers.structure.selection.fromLoci('add', firstLoci);
+                plugin.managers.structure.selection.fromLoci('add', secondLoci);
+                console.log('Added persistent selections for both atoms');
               } else {
                 console.warn('AddDistance returned undefined - measurement may have failed');
               }
@@ -361,8 +375,9 @@ export default function ProteinViewer() {
           return [];
         }
 
-        // For first atom: Use highlight() instead of highlightOnly() to preserve previous highlights
-        plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
+        // For first atom: The order labels already provide visual feedback (shows "1")
+        // Also add temporary highlight using the reconstructed loci with parent structure
+        plugin.managers.interactivity.lociHighlights.highlight({ loci: reconstructedLoci }, false);
 
         if (newLoci.length === 1) {
           showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
@@ -372,9 +387,13 @@ export default function ProteinViewer() {
       });
     });
 
-    // Cleanup subscription
+    // Cleanup subscription and clear order labels
     return () => {
       subscription.unsubscribe();
+      // Clear order labels when subscription is cleaned up
+      if (plugin.managers?.structure?.measurement) {
+        plugin.managers.structure.measurement.addOrderLabels([]);
+      }
     };
   }, [measurementMode, showToast]);
 
