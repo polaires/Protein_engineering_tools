@@ -283,33 +283,44 @@ export default function ProteinViewer() {
 
       console.log('Parent structure resolved:', parentCell?.transform.ref);
 
-      // Reconstruct loci with parent structure for proper cross-component support
-      const reconstructedLoci = StructureElement.Bundle.toLoci(bundle, parentStructure);
+      // Store the ORIGINAL loci - don't reconstruct with parent structure
+      // The original loci correctly references the clicked atom in its substructure
+      // Molstar's addDistance() internally handles parent structure resolution via MultiStructureSelectionFromBundle
 
-      // Store immutable data AND serialized bundle with PARENT structure reference
+      // Store immutable data with original loci
       const atomData = {
         position,
         atomInfo,
         bundle: bundle,  // Serialized bundle (immutable)
-        structure: parentStructure,  // Use PARENT structure for cross-component measurements
+        structure: parentStructure,  // Parent structure reference for API calls
         parentRef: parentCell?.transform.ref,  // Keep ref for debugging
-        loci: reconstructedLoci  // Store reconstructed loci for order labels
+        loci: loci  // Store ORIGINAL loci - it correctly references the clicked atom
       };
 
       setSelectedLoci((prev: any[]) => {
+        // Check if this atom is already selected (dedupe by atomInfo)
+        // This allows repeated clicks on calcium to keep it as "1"
+        const alreadySelected = prev.find((item: any) => item.atomInfo === atomData.atomInfo);
+        if (alreadySelected) {
+          console.log('Atom already selected, skipping:', atomData.atomInfo);
+          showToast('info', `${atomData.atomInfo} is already selected as #${prev.indexOf(alreadySelected) + 1}`);
+          return prev;
+        }
+
         const newLoci = [...prev, atomData];
 
         console.log('Selected loci count:', newLoci.length);
         console.log('New atom data:', atomData);
 
-        // Update order labels in 3D scene (Molstar approach - shows "1", "2" on atoms)
+        // Update order labels in 3D scene (Molstar approach - shows "1", "2", "3"... on atoms)
         const lociForLabels = newLoci.map((item: any) => item.loci);
         plugin.managers.structure.measurement.addOrderLabels(lociForLabels);
 
-        // If we have 2 or more atoms, calculate and display distance
+        // If we have 2 or more atoms, measure between FIRST and LATEST atom
+        // This enables calcium coordination measurements: Ca(1) → Atom2, Ca(1) → Atom3, etc.
         if (newLoci.length >= 2) {
-          const first = newLoci[newLoci.length - 2];
-          const second = newLoci[newLoci.length - 1];
+          const first = newLoci[0];  // Always measure from first (reference) atom
+          const second = newLoci[newLoci.length - 1];  // To the latest selected atom
 
           console.log('===== MEASURING DISTANCE =====');
           console.log('First atom:', first);
@@ -331,7 +342,7 @@ export default function ProteinViewer() {
           (async () => {
             try {
               console.log('===== ADDING VISUAL MEASUREMENT =====');
-              // Use stored loci (already reconstructed with parent structure)
+              // Use stored ORIGINAL loci - Molstar's addDistance handles parent structure internally
               const firstLoci = first.loci;
               const secondLoci = second.loci;
 
@@ -344,8 +355,8 @@ export default function ProteinViewer() {
                 return;
               }
 
-              // Clear order labels now that measurement is being added (Molstar approach)
-              plugin.managers.structure.measurement.addOrderLabels([]);
+              // Don't clear order labels - keep them for multi-measurement mode
+              // User can measure multiple distances from reference atom (e.g., calcium coordination)
 
               // Add distance measurement with unique tags to prevent conflicts
               const measurementId = Date.now().toString();
@@ -372,15 +383,16 @@ export default function ProteinViewer() {
             }
           })();
 
-          return [];
+          // Keep all selected atoms for multi-measurement (don't clear)
+          return newLoci;
         }
 
         // For first atom: The order labels already provide visual feedback (shows "1")
-        // Also add temporary highlight using the reconstructed loci with parent structure
-        plugin.managers.interactivity.lociHighlights.highlight({ loci: reconstructedLoci }, false);
+        // Also add temporary highlight using the original loci
+        plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
 
         if (newLoci.length === 1) {
-          showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
+          showToast('info', `Reference atom selected: ${atomInfo}. Click other atoms to measure distances.`);
         }
 
         return newLoci;
