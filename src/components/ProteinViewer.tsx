@@ -267,12 +267,27 @@ export default function ProteinViewer() {
       // Serialize loci to bundle immediately (prevents mutation issues)
       const bundle = StructureElement.Bundle.fromLoci(loci);
 
-      // Store immutable data AND serialized bundle
+      // Get the PARENT structure using Molstar's substructureParent helper
+      // This is critical for measurements between different components (polymer, ion, ligand)
+      // Each component creates a substructure, but they share the same parent structure
+      const parentCell = plugin.helpers.substructureParent.get(loci.structure);
+      const parentStructure = parentCell?.obj?.data;
+
+      if (!parentStructure) {
+        console.error('Could not get parent structure for loci');
+        showToast('error', 'Could not resolve structure for measurement');
+        return;
+      }
+
+      console.log('Parent structure resolved:', parentCell?.transform.ref);
+
+      // Store immutable data AND serialized bundle with PARENT structure reference
       const atomData = {
         position,
         atomInfo,
         bundle: bundle,  // Serialized bundle (immutable)
-        structure: loci.structure  // Need structure reference for reconstruction
+        structure: parentStructure,  // Use PARENT structure for cross-component measurements
+        parentRef: parentCell?.transform.ref  // Keep ref for debugging
       };
 
       setSelectedLoci((prev: any[]) => {
