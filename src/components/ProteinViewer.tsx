@@ -18,14 +18,12 @@ import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { StateObjectRef } from 'molstar/lib/mol-state';
 import { Sequence } from 'molstar/lib/mol-model/sequence';
-import { StructureElement, StructureProperties as SP, Structure, StructureSelection, QueryContext } from 'molstar/lib/mol-model/structure';
+import { StructureElement, StructureProperties as SP, Structure } from 'molstar/lib/mol-model/structure';
 import { OrderedSet } from 'molstar/lib/mol-data/int';
 import { Vec3 } from 'molstar/lib/mol-math/linear-algebra';
 import { getPalette } from 'molstar/lib/mol-util/color/palette';
 import { Color } from 'molstar/lib/mol-util/color';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
-import { compile } from 'molstar/lib/mol-script/runtime/query/compiler';
-import { SetUtils } from 'molstar/lib/mol-util/set';
 import {
   saveStructure, getAllStructures, deleteStructure, generateStructureId,
 } from '@/services/proteinViewer';
@@ -84,7 +82,7 @@ export default function ProteinViewer() {
 
   // Metal coordination highlighting mode
   const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(false);
-  const [coordinationRadius, setCoordinationRadius] = useState(3.0); // Å - typical metal coordination distance
+  const coordinationRadius = 3.0; // Å - typical metal coordination distance
 
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -864,7 +862,8 @@ export default function ProteinViewer() {
   const createCoordinatingLoci = (structure: Structure, atomIndices: Map<number, Set<number>>): StructureElement.Loci | null => {
     if (atomIndices.size === 0) return null;
 
-    const elements: StructureElement.Loci['elements'] = [];
+    // Build elements array (mutable, will be passed to Loci constructor)
+    const elements: { unit: any; indices: OrderedSet<number> }[] = [];
 
     for (const unit of structure.units) {
       const indices = atomIndices.get(unit.id);
@@ -880,7 +879,7 @@ export default function ProteinViewer() {
 
     if (elements.length === 0) return null;
 
-    return StructureElement.Loci(structure, elements);
+    return StructureElement.Loci(structure, elements as any);
   };
 
   // Show coordinating waters even when bulk water is hidden
