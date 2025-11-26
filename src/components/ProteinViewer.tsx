@@ -82,7 +82,7 @@ export default function ProteinViewer() {
 
   // Metal coordination highlighting mode (on by default)
   const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(true);
-  const coordinationRadius = 3.0; // Å - typical metal coordination distance
+  const [coordinationRadius, setCoordinationRadius] = useState(3.0); // Å - typical metal coordination distance
 
   // Coordination data for persistent panel (shows when showCoordinationHighlight is true)
   const [coordinationData, setCoordinationData] = useState<{
@@ -1562,8 +1562,22 @@ export default function ProteinViewer() {
           await PluginCommands.State.RemoveObject(pluginRef.current, { state, ref: rep.transform.ref });
         }
 
+        // Re-apply normal visualization to clear the highlighting colors
+        await updateVisualization(selectedRepresentation, selectedColorScheme);
+
         showToast('info', 'Coordination highlighting cleared');
       }
+    }
+  };
+
+  // Re-apply coordination highlighting when radius changes
+  const handleRadiusChange = async (newRadius: number) => {
+    setCoordinationRadius(newRadius);
+    if (showCoordinationHighlight && pluginRef.current && structureRef.current) {
+      // Small delay to allow state update
+      setTimeout(async () => {
+        await applyCoordinationHighlighting(structureRef.current!);
+      }, 100);
     }
   };
 
@@ -2363,49 +2377,9 @@ export default function ProteinViewer() {
             </div>
           )}
 
-          {/* Overlay Controls */}
+          {/* Minimal Overlay Controls - Only Help button */}
           {isViewerReady && currentStructure && (
-            <div className="absolute top-4 right-4 space-y-2">
-              <button
-                onClick={resetCamera}
-                className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
-                title="Reset Camera"
-              >
-                <RotateCcw className="w-5 h-5" />
-              </button>
-              <button
-                onClick={focusOnStructure}
-                className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
-                title="Focus on Structure"
-              >
-                <Focus className="w-5 h-5" />
-              </button>
-              <button
-                onClick={toggleMeasurement}
-                className={`btn-icon bg-white dark:bg-slate-800 shadow-lg relative ${measurementMode ? 'ring-2 ring-primary-500 bg-primary-100 dark:bg-primary-900' : ''}`}
-                title={measurementMode ? `Measurement mode active${selectedLoci.length > 0 ? ` (${selectedLoci.length}/2 atoms selected)` : ''}` : 'Enable measurement tool'}
-              >
-                <Ruler className={`w-5 h-5 ${measurementMode ? 'text-primary-600 dark:text-primary-400' : ''}`} />
-                {measurementMode && selectedLoci.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                    {selectedLoci.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={takeSnapshot}
-                className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
-                title="Take Snapshot"
-              >
-                <Camera className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setShowInfo(!showInfo)}
-                className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
-                title="Structure Info"
-              >
-                <Info className="w-5 h-5" />
-              </button>
+            <div className="absolute top-4 right-4">
               <button
                 onClick={() => setShowHelpModal(true)}
                 className="btn-icon bg-white dark:bg-slate-800 shadow-lg"
@@ -2556,9 +2530,78 @@ export default function ProteinViewer() {
                         ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 ring-2 ring-amber-400'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
                     }`}
-                    title="Metal Coordination Highlight - Highlights residues coordinating metal ions (within 3Å)"
+                    title={`Metal Coordination Analysis (within ${coordinationRadius}Å)`}
                   >
                     <Target className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Vertical Separator */}
+              <div className="h-8 w-px bg-slate-300 dark:bg-slate-600" />
+
+              {/* Tools Section */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Tools:
+                </span>
+                <div className="flex gap-1">
+                  {/* Measurement Tool */}
+                  <button
+                    onClick={toggleMeasurement}
+                    className={`p-2 rounded transition-colors relative ${
+                      measurementMode
+                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 ring-2 ring-primary-400'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
+                    }`}
+                    title={measurementMode ? `Measurement mode (${selectedLoci.length}/2 atoms)` : 'Distance Measurement'}
+                  >
+                    <Ruler className="w-4 h-4" />
+                    {measurementMode && selectedLoci.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                        {selectedLoci.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Reset Camera */}
+                  <button
+                    onClick={resetCamera}
+                    className="p-2 rounded transition-colors bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    title="Reset Camera"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+
+                  {/* Focus on Structure */}
+                  <button
+                    onClick={focusOnStructure}
+                    className="p-2 rounded transition-colors bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    title="Focus on Structure"
+                  >
+                    <Focus className="w-4 h-4" />
+                  </button>
+
+                  {/* Take Snapshot */}
+                  <button
+                    onClick={takeSnapshot}
+                    className="p-2 rounded transition-colors bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    title="Take Snapshot"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+
+                  {/* Structure Info Toggle */}
+                  <button
+                    onClick={() => setShowInfo(!showInfo)}
+                    className={`p-2 rounded transition-colors ${
+                      showInfo
+                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
+                    }`}
+                    title="Structure Info Panel"
+                  >
+                    <Info className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -3003,9 +3046,23 @@ export default function ProteinViewer() {
               <h3 className="font-semibold text-slate-900 dark:text-slate-100">
                 Metal Coordination Analysis
               </h3>
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                (within {coordinationRadius}Å)
-              </span>
+              {/* Radius Adjuster */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Radius:</span>
+                <input
+                  type="range"
+                  min="2.0"
+                  max="5.0"
+                  step="0.1"
+                  value={coordinationRadius}
+                  onChange={(e) => handleRadiusChange(parseFloat(e.target.value))}
+                  className="w-20 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                  title={`Coordination radius: ${coordinationRadius}Å`}
+                />
+                <span className="text-sm font-mono text-amber-700 dark:text-amber-300 min-w-[3rem]">
+                  {coordinationRadius.toFixed(1)}Å
+                </span>
+              </div>
             </div>
             {/* Summary badges */}
             <div className="flex gap-4 text-sm">
@@ -3214,7 +3271,7 @@ export default function ProteinViewer() {
 
             {/* Content */}
             <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
                 <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
                   <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Mouse Controls</h4>
                   <ul className="space-y-1 text-slate-600 dark:text-slate-400">
@@ -3225,33 +3282,59 @@ export default function ProteinViewer() {
                   </ul>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Features</h4>
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Toolbar Icons</h4>
                   <ul className="space-y-1 text-slate-600 dark:text-slate-400">
-                    <li>• <strong>Drag & drop:</strong> File upload</li>
-                    <li>• <strong>Representations:</strong> 7 styles</li>
-                    <li>• <strong>Color schemes:</strong> 5 themes</li>
-                    <li>• <strong>Export:</strong> PDB, CIF, FASTA</li>
+                    <li>• <strong><Hexagon className="w-3 h-3 inline" /></strong> Ligands</li>
+                    <li>• <strong><Atom className="w-3 h-3 inline" /></strong> Ions/Metals</li>
+                    <li>• <strong><Droplet className="w-3 h-3 inline" /></strong> Waters</li>
+                    <li>• <strong><Target className="w-3 h-3 inline text-amber-600" /></strong> Metal Analysis</li>
                   </ul>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Popular Examples</h4>
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">Tools</h4>
                   <ul className="space-y-1 text-slate-600 dark:text-slate-400">
-                    <li>• <strong>1CRN:</strong> Crambin (small)</li>
-                    <li>• <strong>1UBQ:</strong> Ubiquitin</li>
-                    <li>• <strong>7BV2:</strong> Spike protein</li>
+                    <li>• <strong><Ruler className="w-3 h-3 inline" /></strong> Measure distance (click 2 atoms)</li>
+                    <li>• <strong><RotateCcw className="w-3 h-3 inline" /></strong> Reset camera view</li>
+                    <li>• <strong><Focus className="w-3 h-3 inline" /></strong> Focus on structure</li>
+                    <li>• <strong><Camera className="w-3 h-3 inline" /></strong> Take snapshot</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                  <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">PDB Examples</h4>
+                  <ul className="space-y-1 text-slate-600 dark:text-slate-400">
+                    <li>• <strong>1CRN:</strong> Crambin</li>
                     <li>• <strong>1HHO:</strong> Hemoglobin</li>
+                    <li>• <strong>6LU7:</strong> SARS-CoV-2 Mpro</li>
+                    <li>• <strong>4XEY:</strong> Lanmodulin</li>
                   </ul>
                 </div>
               </div>
 
-              <div className="mt-4 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-                <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2">Tips</h4>
-                <ul className="space-y-1 text-sm text-primary-600 dark:text-primary-400">
-                  <li>• Use the toolbar below the viewer to quickly change representation and color schemes</li>
-                  <li>• Toggle additional components (ligands, ions, water) with the icon buttons</li>
-                  <li>• Color legend only appears when relevant to the selected color scheme</li>
-                  <li>• For heteromers, use the chain selector to analyze different chains individually</li>
-                </ul>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700">
+                  <h4 className="font-semibold text-amber-700 dark:text-amber-300 mb-2 flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Metal Coordination Analysis
+                  </h4>
+                  <ul className="space-y-1 text-sm text-amber-600 dark:text-amber-400">
+                    <li>• Uses CShM (Continuous Shape Measures) for accurate geometry classification</li>
+                    <li>• Supports CN 2-12 including lanthanide geometries</li>
+                    <li>• Adjustable search radius (2-5Å) in analysis panel</li>
+                    <li>• Shows coordinating residues and waters</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+                  <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
+                    <Ruler className="w-4 h-4" />
+                    Distance Measurement
+                  </h4>
+                  <ul className="space-y-1 text-sm text-primary-600 dark:text-primary-400">
+                    <li>• Click <Ruler className="w-3 h-3 inline" /> to enable measurement mode</li>
+                    <li>• Select first atom (labeled "1"), then second atom (labeled "2")</li>
+                    <li>• Distance line and label appear automatically</li>
+                    <li>• Continue clicking to measure multiple distances from atom 1</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
