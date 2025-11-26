@@ -80,13 +80,26 @@ export default function ProteinViewer() {
   const [showIons, setShowIons] = useState(true);
   const [showWater, setShowWater] = useState(false);
 
-  // Metal coordination highlighting mode
-  const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(false);
+  // Metal coordination highlighting mode (on by default)
+  const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(true);
   const coordinationRadius = 3.0; // Å - typical metal coordination distance
 
   // Coordination data for persistent panel (shows when showCoordinationHighlight is true)
   const [coordinationData, setCoordinationData] = useState<{
-    metals: { element: string; info: string; coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean }[] }[];
+    metals: {
+      element: string;
+      info: string;
+      coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean; position: Vec3 }[];
+      geometry: {
+        coordinationNumber: number;
+        geometryType: string;
+        idealGeometry: string;
+        angles: { atom1: string; atom2: string; angle: number }[];
+        avgAngle: number;
+        rmsd: number;
+        distortion: 'ideal' | 'low' | 'moderate' | 'high' | 'severe';
+      } | null;
+    }[];
     totalResidues: number;
     totalWaters: number;
   } | null>(null);
@@ -749,7 +762,8 @@ export default function ProteinViewer() {
         metals: metalCoordination.metalDetails.map(m => ({
           element: m.element,
           info: m.info,
-          coordinating: m.coordinating
+          coordinating: m.coordinating,
+          geometry: m.geometry
         })),
         totalResidues: metalCoordination.coordinatingResidues.size,
         totalWaters: metalCoordination.coordinatingWaters.size
@@ -779,6 +793,161 @@ export default function ProteinViewer() {
     }
   };
 
+  // Ideal coordination geometries with their expected angles
+  const COORDINATION_GEOMETRIES: {
+    [cn: number]: { name: string; angles: number[]; tolerance: number }[];
+  } = {
+    2: [
+      { name: 'Linear', angles: [180], tolerance: 15 }
+    ],
+    3: [
+      { name: 'Trigonal Planar', angles: [120, 120, 120], tolerance: 15 },
+      { name: 'T-shaped', angles: [90, 90, 180], tolerance: 15 }
+    ],
+    4: [
+      { name: 'Tetrahedral', angles: [109.5, 109.5, 109.5, 109.5, 109.5, 109.5], tolerance: 15 },
+      { name: 'Square Planar', angles: [90, 90, 90, 90, 180, 180], tolerance: 15 },
+      { name: 'See-saw', angles: [90, 90, 120, 90, 90, 180], tolerance: 20 }
+    ],
+    5: [
+      { name: 'Trigonal Bipyramidal', angles: [90, 90, 90, 90, 90, 90, 120, 120, 120, 180], tolerance: 15 },
+      { name: 'Square Pyramidal', angles: [90, 90, 90, 90, 90, 90, 90, 90, 180, 180], tolerance: 15 }
+    ],
+    6: [
+      { name: 'Octahedral', angles: [90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 180, 180, 180], tolerance: 15 }
+    ],
+    7: [
+      { name: 'Pentagonal Bipyramidal', angles: [], tolerance: 20 },
+      { name: 'Capped Octahedral', angles: [], tolerance: 20 }
+    ],
+    8: [
+      { name: 'Square Antiprismatic', angles: [], tolerance: 20 },
+      { name: 'Dodecahedral', angles: [], tolerance: 20 }
+    ]
+  };
+
+  // Calculate angle between three points (in degrees) - angle at point B
+  const calculateAngle = (a: Vec3, b: Vec3, c: Vec3): number => {
+    const ba = Vec3.sub(Vec3(), a, b);
+    const bc = Vec3.sub(Vec3(), c, b);
+
+    const dot = Vec3.dot(ba, bc);
+    const magBA = Vec3.magnitude(ba);
+    const magBC = Vec3.magnitude(bc);
+
+    if (magBA === 0 || magBC === 0) return 0;
+
+    const cosAngle = Math.max(-1, Math.min(1, dot / (magBA * magBC)));
+    return Math.acos(cosAngle) * (180 / Math.PI);
+  };
+
+  // Analyze coordination geometry for a metal center
+  const analyzeCoordinationGeometry = (
+    metalPos: Vec3,
+    ligandPositions: { atom: string; pos: Vec3 }[]
+  ): {
+    coordinationNumber: number;
+    geometryType: string;
+    idealGeometry: string;
+    angles: { atom1: string; atom2: string; angle: number }[];
+    avgAngle: number;
+    rmsd: number;
+    distortion: 'ideal' | 'low' | 'moderate' | 'high' | 'severe';
+  } | null => {
+    const cn = ligandPositions.length;
+
+    if (cn < 2) {
+      return {
+        coordinationNumber: cn,
+        geometryType: cn === 1 ? 'Monocoordinate' : 'None',
+        idealGeometry: cn === 1 ? 'Terminal' : 'N/A',
+        angles: [],
+        avgAngle: 0,
+        rmsd: 0,
+        distortion: 'ideal'
+      };
+    }
+
+    // Calculate all L-M-L angles
+    const angles: { atom1: string; atom2: string; angle: number }[] = [];
+    for (let i = 0; i < cn; i++) {
+      for (let j = i + 1; j < cn; j++) {
+        const angle = calculateAngle(ligandPositions[i].pos, metalPos, ligandPositions[j].pos);
+        angles.push({
+          atom1: ligandPositions[i].atom,
+          atom2: ligandPositions[j].atom,
+          angle: angle
+        });
+      }
+    }
+
+    // Sort angles for consistent comparison
+    const sortedAngles = angles.map(a => a.angle).sort((a, b) => a - b);
+    const avgAngle = sortedAngles.reduce((sum, a) => sum + a, 0) / sortedAngles.length;
+
+    // Find best matching geometry
+    let bestGeometry = 'Irregular';
+    let bestIdealGeometry = `CN-${cn}`;
+    let bestRmsd = Infinity;
+
+    const geometries = COORDINATION_GEOMETRIES[cn];
+    if (geometries) {
+      for (const geom of geometries) {
+        if (geom.angles.length === 0) {
+          // For higher CN without defined ideal angles, use a simplified match
+          bestGeometry = geom.name;
+          bestIdealGeometry = geom.name;
+          bestRmsd = 0;
+          continue;
+        }
+
+        // Sort ideal angles for comparison
+        const idealSorted = [...geom.angles].sort((a, b) => a - b);
+
+        // Ensure we're comparing same number of angles
+        if (idealSorted.length !== sortedAngles.length) continue;
+
+        // Calculate RMSD
+        let sumSqDiff = 0;
+        for (let i = 0; i < sortedAngles.length; i++) {
+          const diff = sortedAngles[i] - idealSorted[i];
+          sumSqDiff += diff * diff;
+        }
+        const rmsd = Math.sqrt(sumSqDiff / sortedAngles.length);
+
+        if (rmsd < bestRmsd) {
+          bestRmsd = rmsd;
+          bestGeometry = geom.name;
+          bestIdealGeometry = geom.name;
+        }
+      }
+    }
+
+    // Determine distortion level based on RMSD
+    let distortion: 'ideal' | 'low' | 'moderate' | 'high' | 'severe';
+    if (bestRmsd <= 5) distortion = 'ideal';
+    else if (bestRmsd <= 10) distortion = 'low';
+    else if (bestRmsd <= 20) distortion = 'moderate';
+    else if (bestRmsd <= 35) distortion = 'high';
+    else distortion = 'severe';
+
+    // For undefined geometries (CN > 6 without angles), estimate distortion
+    if (cn > 6 && geometries?.[0]?.angles.length === 0) {
+      bestRmsd = 0;
+      distortion = 'low'; // Assume reasonable for high CN
+    }
+
+    return {
+      coordinationNumber: cn,
+      geometryType: bestGeometry,
+      idealGeometry: bestIdealGeometry,
+      angles: angles.sort((a, b) => a.angle - b.angle),
+      avgAngle,
+      rmsd: bestRmsd,
+      distortion
+    };
+  };
+
   // Find metal ions and their coordinating atoms within the given radius
   const findMetalCoordination = (structure: Structure, radius: number) => {
     // Comprehensive list of ALL metal elements (alkali, alkaline earth, transition, post-transition, lanthanides, actinides)
@@ -805,12 +974,12 @@ export default function ProteinViewer() {
     const coordinatingWaters = new Set<string>();
     let metalCount = 0;
 
-    // Store detailed metal info for popup
+    // Store detailed metal info with positions for geometry analysis
     const metalDetails: {
       element: string;
       info: string;
       pos: Vec3;
-      coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean }[];
+      coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean; position: Vec3 }[];
     }[] = [];
 
     // First pass: find all metal ions and their positions
@@ -876,13 +1045,14 @@ export default function ProteinViewer() {
             }
             coordinatingAtomIndices.get(unitId)!.add(i);
 
-            // Add to metal's coordinating list
+            // Add to metal's coordinating list with position
             metal.coordinating.push({
               atom: atomName,
               residue: `${resName}${resSeq}`,
               chain: chainId,
               distance: dist,
-              isWater
+              isWater,
+              position: Vec3.clone(atomPos)
             });
 
             // Check if it's water
@@ -902,14 +1072,29 @@ export default function ProteinViewer() {
       }
     }
 
-    // Sort coordinating atoms by distance for each metal
-    metalDetails.forEach(metal => {
+    // Sort coordinating atoms by distance for each metal and analyze geometry
+    const metalDetailsWithGeometry = metalDetails.map(metal => {
       metal.coordinating.sort((a, b) => a.distance - b.distance);
+
+      // Analyze coordination geometry
+      const ligandPositions = metal.coordinating.map(c => ({
+        atom: `${c.atom}(${c.residue})`,
+        pos: c.position
+      }));
+
+      const geometry = analyzeCoordinationGeometry(metal.pos, ligandPositions);
+
+      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, RMSD=${geometry?.rmsd.toFixed(1)}°`);
+
+      return {
+        ...metal,
+        geometry
+      };
     });
 
     return {
       metalCount,
-      metalDetails,
+      metalDetails: metalDetailsWithGeometry,
       coordinatingAtomIndices,
       coordinatingWaterIndices,
       coordinatingResidues,
@@ -2489,19 +2674,83 @@ export default function ProteinViewer() {
             <div className="p-3 space-y-3">
               {coordinationData.metals.map((metal, metalIdx) => (
                 <div key={metalIdx} className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden">
-                  {/* Metal Header */}
-                  <div className="bg-amber-100 dark:bg-amber-900/30 px-3 py-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-xs">
-                        {metal.element}
-                      </span>
-                      <span className="font-medium text-sm text-slate-700 dark:text-slate-300">
-                        {metal.info}
+                  {/* Metal Header with Geometry Info */}
+                  <div className="bg-amber-100 dark:bg-amber-900/30 px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-xs">
+                          {metal.element}
+                        </span>
+                        <span className="font-medium text-sm text-slate-700 dark:text-slate-300">
+                          {metal.info}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {metal.coordinating.length} atom{metal.coordinating.length !== 1 ? 's' : ''}
                       </span>
                     </div>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {metal.coordinating.length} atom{metal.coordinating.length !== 1 ? 's' : ''}
-                    </span>
+
+                    {/* Geometry Analysis Section */}
+                    {metal.geometry && (
+                      <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {/* Coordination Number */}
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/40 rounded text-purple-700 dark:text-purple-300 font-medium">
+                            CN: {metal.geometry.coordinationNumber}
+                          </span>
+
+                          {/* Geometry Type */}
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 dark:bg-indigo-900/40 rounded text-indigo-700 dark:text-indigo-300 font-medium">
+                            {metal.geometry.geometryType}
+                          </span>
+
+                          {/* Distortion Level */}
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded font-medium ${
+                            metal.geometry.distortion === 'ideal' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
+                            metal.geometry.distortion === 'low' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
+                            metal.geometry.distortion === 'moderate' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300' :
+                            metal.geometry.distortion === 'high' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' :
+                            'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                          }`}>
+                            {metal.geometry.distortion === 'ideal' ? '✓ Ideal' :
+                             metal.geometry.distortion === 'low' ? '○ Low distortion' :
+                             metal.geometry.distortion === 'moderate' ? '△ Moderate' :
+                             metal.geometry.distortion === 'high' ? '▲ High distortion' :
+                             '⚠ Severe distortion'}
+                          </span>
+
+                          {/* RMSD */}
+                          {metal.geometry.rmsd > 0 && (
+                            <span className="text-slate-500 dark:text-slate-400">
+                              RMSD: {metal.geometry.rmsd.toFixed(1)}°
+                            </span>
+                          )}
+                        </div>
+
+                        {/* L-M-L Angles (expandable) */}
+                        {metal.geometry.angles.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">
+                              View L-M-L angles ({metal.geometry.angles.length})
+                            </summary>
+                            <div className="mt-1 p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-600 max-h-32 overflow-y-auto">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-[10px]">
+                                {metal.geometry.angles.map((angle, angleIdx) => (
+                                  <div key={angleIdx} className="flex justify-between gap-1 px-1 py-0.5 bg-slate-50 dark:bg-slate-700/50 rounded">
+                                    <span className="text-slate-600 dark:text-slate-400 truncate" title={`${angle.atom1} - M - ${angle.atom2}`}>
+                                      {angle.atom1.split('(')[0]}-M-{angle.atom2.split('(')[0]}
+                                    </span>
+                                    <span className="font-mono text-slate-800 dark:text-slate-200">
+                                      {angle.angle.toFixed(1)}°
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Coordinating Atoms Table - Compact */}
