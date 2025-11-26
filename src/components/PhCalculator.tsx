@@ -110,6 +110,7 @@ export default function PhCalculator() {
   // Result state
   const [result, setResult] = useState<PhCalculationResult | null>(null);
   const [showSteps, setShowSteps] = useState(false);
+  const [showBufferGuide, setShowBufferGuide] = useState(false);
 
   // Get selected buffer system
   const selectedBuffer = useMemo(() => getBufferById(bufferSystemId), [bufferSystemId]);
@@ -343,6 +344,89 @@ export default function PhCalculator() {
                   }}
                 />
               )}
+
+              {/* Buffer Selection Guide - Always visible toggle */}
+              <div className="mt-2">
+                <button
+                  onClick={() => setShowBufferGuide(!showBufferGuide)}
+                  className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                >
+                  <Info className="w-4 h-4" />
+                  <span>Buffer Selection Guide</span>
+                  {showBufferGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {showBufferGuide && (
+                  <div className="mt-2 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* pH Range Reference */}
+                      <div>
+                        <h4 className="font-semibold text-primary-800 dark:text-primary-200 mb-2">Buffer pH Ranges</h4>
+                        <table className="w-full text-xs">
+                          <tbody className="text-slate-600 dark:text-slate-400">
+                            <tr className="border-b border-primary-200 dark:border-primary-700">
+                              <td className="py-1 font-medium">Very Low (pH 1-3)</td>
+                              <td className="py-1">Glycine-HCl, Oxalate, Pyruvate, Phthalate</td>
+                            </tr>
+                            <tr className="border-b border-primary-200 dark:border-primary-700">
+                              <td className="py-1 font-medium">Low (pH 3-5)</td>
+                              <td className="py-1">Formate, Tartrate, Lactate, Acetate, Citrate</td>
+                            </tr>
+                            <tr className="border-b border-primary-200 dark:border-primary-700">
+                              <td className="py-1 font-medium">Neutral (pH 5-8)</td>
+                              <td className="py-1">MES, PIPES, MOPS, HEPES, Tris, Phosphate</td>
+                            </tr>
+                            <tr>
+                              <td className="py-1 font-medium">High (pH 8-11)</td>
+                              <td className="py-1">Bicine, TAPS, CHES, CAPS, Carbonate</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Application Guide */}
+                      <div>
+                        <h4 className="font-semibold text-primary-800 dark:text-primary-200 mb-2">Common Applications</h4>
+                        <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                          <li><span className="font-medium">Protein elution:</span> Glycine-HCl (pH 2.2-3.0)</li>
+                          <li><span className="font-medium">Enzyme assays:</span> Succinate, Malate, Citrate</li>
+                          <li><span className="font-medium">Cell culture:</span> HEPES, Phosphate, Bicarbonate</li>
+                          <li><span className="font-medium">Electrophoresis:</span> Tris-Glycine, MOPS, MES</li>
+                          <li><span className="font-medium">His-tag purification:</span> Phosphate, Bis-Tris</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Species Solver Info */}
+                    <div className="mt-3 pt-3 border-t border-primary-200 dark:border-primary-700">
+                      <h4 className="font-semibold text-primary-800 dark:text-primary-200 mb-1 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                        Species Distribution Solver
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        For polyprotic acids with close pKa values (difference &lt; 2.5), the calculator automatically uses a
+                        species distribution solver for accurate results. Applies to: <strong>Citrate, Tartrate, Succinate,
+                        Malate, Oxalate, Phthalate</strong>. The simple Henderson-Hasselbalch equation is insufficient for these buffers.
+                      </p>
+                    </div>
+
+                    {/* Color Legend */}
+                    <div className="mt-3 pt-3 border-t border-primary-200 dark:border-primary-700">
+                      <h4 className="font-semibold text-primary-800 dark:text-primary-200 mb-1">Suitability Legend</h4>
+                      <div className="flex gap-4 text-xs">
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded bg-cyan-500" />
+                          <span className="text-slate-600 dark:text-slate-400">General use - minimal interference, zwitterionic</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded bg-rose-500" />
+                          <span className="text-slate-600 dark:text-slate-400">Use with caution - metal binding, reactive, or toxic</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Target pH with Interactive Slider */}
@@ -1316,23 +1400,31 @@ function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: Buffer
 
         {/* pH scale at bottom */}
         <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-600">
-          <div className="relative h-2 ml-20 mr-20">
-            {/* Scale line */}
-            <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-400" />
-            {/* Scale ticks */}
-            {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((ph) => (
-              <div
-                key={ph}
-                className="absolute top-0 bottom-0 w-px bg-slate-400"
-                style={{ left: `${((ph - minPH) / phRange) * 100}%` }}
-              >
-                <span className="absolute top-3 left-1/2 -translate-x-1/2 text-xs text-slate-500">
-                  {ph}
-                </span>
-              </div>
-            ))}
+          {/* Match the exact layout of buffer rows: name(w-20 pr-2) + bar(flex-1) + label(w-20 pl-2) + scrollbar(pr-2) */}
+          <div className="flex items-center pr-2">
+            <div className="w-20 flex-shrink-0 pr-2" /> {/* Spacer matching buffer name */}
+            <div className="flex-1 relative h-6">
+              {/* Scale line */}
+              <div className="absolute left-0 right-0 top-0 h-px bg-slate-400" />
+              {/* Scale ticks */}
+              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((ph) => (
+                <div
+                  key={ph}
+                  className="absolute top-0 w-px bg-slate-400"
+                  style={{
+                    left: `${((ph - minPH) / phRange) * 100}%`,
+                    height: '6px'
+                  }}
+                >
+                  <span className="absolute top-2 left-1/2 -translate-x-1/2 text-xs text-slate-500 whitespace-nowrap">
+                    {ph}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="w-20 flex-shrink-0 pl-2" /> {/* Spacer matching range label */}
           </div>
-          <div className="text-center mt-4 text-xs text-slate-500">pH</div>
+          <div className="text-center mt-3 text-xs text-slate-500">pH</div>
         </div>
       </div>
 
