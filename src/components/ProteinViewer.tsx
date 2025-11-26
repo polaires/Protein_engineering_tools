@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
-  Droplet, Atom, Hexagon, HelpCircle, X
+  Droplet, Atom, Hexagon, HelpCircle, X, Target
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -18,11 +18,14 @@ import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { StateObjectRef } from 'molstar/lib/mol-state';
 import { Sequence } from 'molstar/lib/mol-model/sequence';
-import { StructureElement, StructureProperties as SP } from 'molstar/lib/mol-model/structure';
+import { StructureElement, StructureProperties as SP, Structure, StructureSelection, QueryContext } from 'molstar/lib/mol-model/structure';
 import { OrderedSet } from 'molstar/lib/mol-data/int';
 import { Vec3 } from 'molstar/lib/mol-math/linear-algebra';
 import { getPalette } from 'molstar/lib/mol-util/color/palette';
 import { Color } from 'molstar/lib/mol-util/color';
+import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
+import { compile } from 'molstar/lib/mol-script/runtime/query/compiler';
+import { SetUtils } from 'molstar/lib/mol-util/set';
 import {
   saveStructure, getAllStructures, deleteStructure, generateStructureId,
 } from '@/services/proteinViewer';
@@ -78,6 +81,10 @@ export default function ProteinViewer() {
   const [showLigands, setShowLigands] = useState(true);
   const [showIons, setShowIons] = useState(true);
   const [showWater, setShowWater] = useState(false);
+
+  // Metal coordination highlighting mode
+  const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(false);
+  const [coordinationRadius, setCoordinationRadius] = useState(3.0); // Å - typical metal coordination distance
 
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -283,33 +290,44 @@ export default function ProteinViewer() {
 
       console.log('Parent structure resolved:', parentCell?.transform.ref);
 
-      // Reconstruct loci with parent structure for proper cross-component support
-      const reconstructedLoci = StructureElement.Bundle.toLoci(bundle, parentStructure);
+      // Store the ORIGINAL loci - don't reconstruct with parent structure
+      // The original loci correctly references the clicked atom in its substructure
+      // Molstar's addDistance() internally handles parent structure resolution via MultiStructureSelectionFromBundle
 
-      // Store immutable data AND serialized bundle with PARENT structure reference
+      // Store immutable data with original loci
       const atomData = {
         position,
         atomInfo,
         bundle: bundle,  // Serialized bundle (immutable)
-        structure: parentStructure,  // Use PARENT structure for cross-component measurements
+        structure: parentStructure,  // Parent structure reference for API calls
         parentRef: parentCell?.transform.ref,  // Keep ref for debugging
-        loci: reconstructedLoci  // Store reconstructed loci for order labels
+        loci: loci  // Store ORIGINAL loci - it correctly references the clicked atom
       };
 
       setSelectedLoci((prev: any[]) => {
+        // Check if this atom is already selected (dedupe by atomInfo)
+        // This allows repeated clicks on calcium to keep it as "1"
+        const alreadySelected = prev.find((item: any) => item.atomInfo === atomData.atomInfo);
+        if (alreadySelected) {
+          console.log('Atom already selected, skipping:', atomData.atomInfo);
+          showToast('info', `${atomData.atomInfo} is already selected as #${prev.indexOf(alreadySelected) + 1}`);
+          return prev;
+        }
+
         const newLoci = [...prev, atomData];
 
         console.log('Selected loci count:', newLoci.length);
         console.log('New atom data:', atomData);
 
-        // Update order labels in 3D scene (Molstar approach - shows "1", "2" on atoms)
+        // Update order labels in 3D scene (Molstar approach - shows "1", "2", "3"... on atoms)
         const lociForLabels = newLoci.map((item: any) => item.loci);
         plugin.managers.structure.measurement.addOrderLabels(lociForLabels);
 
-        // If we have 2 or more atoms, calculate and display distance
+        // If we have 2 or more atoms, measure between FIRST and LATEST atom
+        // This enables calcium coordination measurements: Ca(1) → Atom2, Ca(1) → Atom3, etc.
         if (newLoci.length >= 2) {
-          const first = newLoci[newLoci.length - 2];
-          const second = newLoci[newLoci.length - 1];
+          const first = newLoci[0];  // Always measure from first (reference) atom
+          const second = newLoci[newLoci.length - 1];  // To the latest selected atom
 
           console.log('===== MEASURING DISTANCE =====');
           console.log('First atom:', first);
@@ -331,7 +349,7 @@ export default function ProteinViewer() {
           (async () => {
             try {
               console.log('===== ADDING VISUAL MEASUREMENT =====');
-              // Use stored loci (already reconstructed with parent structure)
+              // Use stored ORIGINAL loci - Molstar's addDistance handles parent structure internally
               const firstLoci = first.loci;
               const secondLoci = second.loci;
 
@@ -344,8 +362,8 @@ export default function ProteinViewer() {
                 return;
               }
 
-              // Clear order labels now that measurement is being added (Molstar approach)
-              plugin.managers.structure.measurement.addOrderLabels([]);
+              // Don't clear order labels - keep them for multi-measurement mode
+              // User can measure multiple distances from reference atom (e.g., calcium coordination)
 
               // Add distance measurement with unique tags to prevent conflicts
               const measurementId = Date.now().toString();
@@ -372,15 +390,16 @@ export default function ProteinViewer() {
             }
           })();
 
-          return [];
+          // Keep all selected atoms for multi-measurement (don't clear)
+          return newLoci;
         }
 
         // For first atom: The order labels already provide visual feedback (shows "1")
-        // Also add temporary highlight using the reconstructed loci with parent structure
-        plugin.managers.interactivity.lociHighlights.highlight({ loci: reconstructedLoci }, false);
+        // Also add temporary highlight using the original loci
+        plugin.managers.interactivity.lociHighlights.highlight({ loci }, false);
 
         if (newLoci.length === 1) {
-          showToast('info', `First atom selected: ${atomInfo}. Click another atom to measure distance.`);
+          showToast('info', `Reference atom selected: ${atomInfo}. Click other atoms to measure distances.`);
         }
 
         return newLoci;
@@ -682,8 +701,262 @@ export default function ProteinViewer() {
       }
 
       console.log('Visualization applied successfully');
+
+      // Apply coordination highlighting if enabled
+      if (showCoordinationHighlight) {
+        await applyCoordinationHighlighting(structureRefToUse);
+      }
     } catch (error) {
       console.error('Failed to apply visualization:', error);
+    }
+  };
+
+  // Apply metal coordination highlighting - highlights residues coordinating metal ions
+  const applyCoordinationHighlighting = async (structureRefToUse: StateObjectRef<any>) => {
+    if (!pluginRef.current) return;
+
+    const plugin = pluginRef.current;
+    const state = plugin.state.data;
+    const cell = state.cells.get(structureRefToUse as any);
+
+    if (!cell || !cell.obj?.data) {
+      console.warn('applyCoordinationHighlighting: Structure not found');
+      return;
+    }
+
+    const structure: Structure = cell.obj.data;
+    console.log('Applying coordination highlighting...');
+
+    try {
+      // Find all metal ions and their coordinating atoms
+      const metalCoordination = findMetalCoordination(structure, coordinationRadius);
+
+      if (metalCoordination.metalCount === 0) {
+        showToast('info', 'No metal ions found in structure');
+        return;
+      }
+
+      console.log(`Found ${metalCoordination.metalCount} metal ions with ${metalCoordination.coordinatingResidues.size} coordinating residues`);
+
+      // Create a custom selection for coordinating residues
+      const coordinatingLoci = createCoordinatingLoci(structure, metalCoordination.coordinatingAtomIndices);
+
+      if (coordinatingLoci && StructureElement.Loci.size(coordinatingLoci) > 0) {
+        // Highlight coordinating residues using selection manager
+        plugin.managers.structure.selection.clear();
+        plugin.managers.structure.selection.fromLoci('add', coordinatingLoci);
+
+        // Show coordinating waters if they exist (even if bulk water is hidden)
+        if (metalCoordination.coordinatingWaters.size > 0) {
+          await showCoordinatingWaters(structureRefToUse, metalCoordination.coordinatingWaterIndices);
+        }
+
+        showToast('success',
+          `Highlighted ${metalCoordination.coordinatingResidues.size} coordinating residues around ${metalCoordination.metalCount} metal ion(s)` +
+          (metalCoordination.coordinatingWaters.size > 0 ? ` (+ ${metalCoordination.coordinatingWaters.size} waters)` : '')
+        );
+      }
+    } catch (error) {
+      console.error('Failed to apply coordination highlighting:', error);
+      showToast('error', 'Failed to apply coordination highlighting');
+    }
+  };
+
+  // Find metal ions and their coordinating atoms within the given radius
+  const findMetalCoordination = (structure: Structure, radius: number) => {
+    const metalElements = new Set(['CA', 'MG', 'ZN', 'FE', 'MN', 'CO', 'NI', 'CU', 'NA', 'K', 'CD', 'HG', 'PB', 'SR', 'BA']);
+    const coordinatingAtomIndices: Map<number, Set<number>> = new Map(); // unitId -> elementIndices
+    const coordinatingWaterIndices: Map<number, Set<number>> = new Map();
+    const coordinatingResidues = new Set<string>(); // "chainId:resSeq:resName"
+    const coordinatingWaters = new Set<string>();
+    let metalCount = 0;
+    const metalPositions: { pos: Vec3; element: string; info: string }[] = [];
+
+    // First pass: find all metal ions and their positions
+    const l = StructureElement.Location.create(structure);
+    for (const unit of structure.units) {
+      if (!unit.model) continue;
+
+      for (let i = 0; i < unit.elements.length; i++) {
+        const elementIdx = unit.elements[i];
+        StructureElement.Location.set(l, structure, unit, elementIdx);
+
+        const element = SP.atom.type_symbol(l).toUpperCase();
+
+        if (metalElements.has(element)) {
+          const pos = Vec3();
+          unit.conformation.position(elementIdx, pos);
+          const chainId = SP.chain.label_asym_id(l);
+          const resSeq = SP.residue.label_seq_id(l);
+          const resName = SP.atom.label_comp_id(l);
+
+          metalPositions.push({
+            pos: Vec3.clone(pos),
+            element,
+            info: `${element} (${resName}${resSeq}, Chain ${chainId})`
+          });
+          metalCount++;
+        }
+      }
+    }
+
+    console.log(`Found ${metalCount} metal ions:`, metalPositions.map(m => m.info));
+
+    // Second pass: find atoms within coordination distance of metals
+    for (const unit of structure.units) {
+      if (!unit.model) continue;
+
+      const unitId = unit.id;
+
+      for (let i = 0; i < unit.elements.length; i++) {
+        const elementIdx = unit.elements[i];
+        StructureElement.Location.set(l, structure, unit, elementIdx);
+
+        const atomPos = Vec3();
+        unit.conformation.position(elementIdx, atomPos);
+
+        // Check distance to each metal
+        for (const metal of metalPositions) {
+          const dist = Vec3.distance(atomPos, metal.pos);
+
+          if (dist > 0.1 && dist <= radius) { // Exclude self (dist > 0.1)
+            const entityType = SP.entity.type(l);
+            const chainId = SP.chain.label_asym_id(l);
+            const resSeq = SP.residue.label_seq_id(l);
+            const resName = SP.atom.label_comp_id(l);
+            const atomName = SP.atom.label_atom_id(l);
+            const resKey = `${chainId}:${resSeq}:${resName}`;
+
+            // Track coordinating atom
+            if (!coordinatingAtomIndices.has(unitId)) {
+              coordinatingAtomIndices.set(unitId, new Set());
+            }
+            coordinatingAtomIndices.get(unitId)!.add(i);
+
+            // Check if it's water
+            if (entityType === 'water' || resName === 'HOH' || resName === 'WAT') {
+              coordinatingWaters.add(resKey);
+              if (!coordinatingWaterIndices.has(unitId)) {
+                coordinatingWaterIndices.set(unitId, new Set());
+              }
+              coordinatingWaterIndices.get(unitId)!.add(i);
+              console.log(`  Coordinating water: ${atomName} (${resName}${resSeq}) at ${dist.toFixed(2)}Å from ${metal.element}`);
+            } else {
+              coordinatingResidues.add(resKey);
+              console.log(`  Coordinating atom: ${atomName} (${resName}${resSeq}, Chain ${chainId}) at ${dist.toFixed(2)}Å from ${metal.element}`);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      metalCount,
+      metalPositions,
+      coordinatingAtomIndices,
+      coordinatingWaterIndices,
+      coordinatingResidues,
+      coordinatingWaters
+    };
+  };
+
+  // Create a StructureElement.Loci for coordinating atoms
+  const createCoordinatingLoci = (structure: Structure, atomIndices: Map<number, Set<number>>): StructureElement.Loci | null => {
+    if (atomIndices.size === 0) return null;
+
+    const elements: StructureElement.Loci['elements'] = [];
+
+    for (const unit of structure.units) {
+      const indices = atomIndices.get(unit.id);
+      if (indices && indices.size > 0) {
+        // Convert Set to sorted array for OrderedSet
+        const sortedIndices = Array.from(indices).sort((a, b) => a - b);
+        elements.push({
+          unit,
+          indices: OrderedSet.ofSortedArray(sortedIndices)
+        });
+      }
+    }
+
+    if (elements.length === 0) return null;
+
+    return StructureElement.Loci(structure, elements);
+  };
+
+  // Show coordinating waters even when bulk water is hidden
+  const showCoordinatingWaters = async (structureRefToUse: StateObjectRef<any>, waterIndices: Map<number, Set<number>>) => {
+    if (!pluginRef.current || waterIndices.size === 0) return;
+
+    const plugin = pluginRef.current;
+    const state = plugin.state.data;
+    const cell = state.cells.get(structureRefToUse as any);
+
+    if (!cell || !cell.obj?.data) return;
+
+    const structure: Structure = cell.obj.data;
+
+    // Create loci for coordinating waters
+    const waterLoci = createCoordinatingLoci(structure, waterIndices);
+
+    if (waterLoci && StructureElement.Loci.size(waterLoci) > 0) {
+      // Add waters to selection so they're highlighted
+      plugin.managers.structure.selection.fromLoci('add', waterLoci);
+
+      // If water component doesn't exist or is hidden, we need to create a representation for coordinating waters
+      if (!showWater) {
+        try {
+          // Create a custom component for coordinating waters only
+          const waterComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+            structureRefToUse,
+            MS.struct.modifier.union([
+              MS.struct.generator.atomGroups({
+                'entity-test': MS.core.rel.eq([MS.ammp('entityType'), 'water'])
+              })
+            ]),
+            'coordinating-water',
+            { label: 'Coordinating Waters' }
+          );
+
+          if (waterComponent) {
+            await plugin.builders.structure.representation.addRepresentation(waterComponent, {
+              type: 'ball-and-stick',
+              color: 'element-symbol' as any,
+              typeParams: {
+                sizeFactor: 0.25,
+                alpha: 1.0
+              },
+            }, { tag: 'coordinating-water' });
+          }
+        } catch (error) {
+          console.error('Failed to show coordinating waters:', error);
+        }
+      }
+    }
+  };
+
+  // Toggle coordination highlighting
+  const toggleCoordinationHighlight = async () => {
+    const newState = !showCoordinationHighlight;
+    setShowCoordinationHighlight(newState);
+
+    if (pluginRef.current && structureRef.current) {
+      if (newState) {
+        await applyCoordinationHighlighting(structureRef.current);
+      } else {
+        // Clear highlighting
+        pluginRef.current.managers.structure.selection.clear();
+
+        // Remove coordinating water representation if it exists
+        const state = pluginRef.current.state.data;
+        const waterReps = state.select(state.tree.root.ref).filter(
+          (cell: any) => cell.obj?.tags?.includes('coordinating-water')
+        );
+        for (const rep of waterReps) {
+          await PluginCommands.State.RemoveObject(pluginRef.current, { state, ref: rep.transform.ref });
+        }
+
+        showToast('info', 'Coordination highlighting cleared');
+      }
     }
   };
 
@@ -1663,6 +1936,22 @@ export default function ProteinViewer() {
                     title="Water Molecules"
                   >
                     <Droplet className="w-4 h-4" />
+                  </button>
+
+                  {/* Separator */}
+                  <div className="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1" />
+
+                  {/* Metal Coordination Highlighting Toggle */}
+                  <button
+                    onClick={toggleCoordinationHighlight}
+                    className={`p-2 rounded transition-colors ${
+                      showCoordinationHighlight
+                        ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 ring-2 ring-amber-400'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
+                    }`}
+                    title="Metal Coordination Highlight - Highlights residues coordinating metal ions (within 3Å)"
+                  >
+                    <Target className="w-4 h-4" />
                   </button>
                 </div>
               </div>
