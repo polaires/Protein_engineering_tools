@@ -1154,6 +1154,8 @@ function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: Buffer
   const maxPH = 12;
   const phRange = maxPH - minPH;
 
+  const [showHelp, setShowHelp] = useState(false);
+
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-slate-50 dark:bg-slate-800/50">
       {/* Legend */}
@@ -1167,6 +1169,14 @@ function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: Buffer
             <div className="w-3 h-3 rounded bg-rose-500" />
             <span className="text-slate-600 dark:text-slate-400">Use with Caution</span>
           </div>
+          <button
+            onClick={() => setShowHelp(!showHelp)}
+            className="flex items-center gap-1 text-primary-600 hover:text-primary-700 dark:text-primary-400"
+            title="Buffer selection guide"
+          >
+            <Info className="w-3.5 h-3.5" />
+            <span>Help</span>
+          </button>
         </div>
         {targetPH !== undefined && (
           <div className="flex items-center gap-1">
@@ -1175,6 +1185,44 @@ function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: Buffer
           </div>
         )}
       </div>
+
+      {/* Help Section */}
+      {showHelp && (
+        <div className="mb-3 p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg text-xs space-y-2 border border-primary-200 dark:border-primary-800">
+          <div className="font-semibold text-primary-800 dark:text-primary-200">Buffer Selection Guide</div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">pH Ranges:</div>
+              <ul className="text-slate-600 dark:text-slate-400 space-y-0.5">
+                <li><span className="font-medium">Very Low (pH 1-3):</span> Glycine-HCl, Oxalate, Pyruvate, Phthalate</li>
+                <li><span className="font-medium">Low (pH 3-5):</span> Formate, Tartrate, Lactate, Acetate, Citrate</li>
+                <li><span className="font-medium">Near Neutral (pH 5-8):</span> MES, PIPES, MOPS, HEPES, Tris, Phosphate</li>
+                <li><span className="font-medium">High (pH 8-11):</span> Bicine, TAPS, CHES, CAPS, Carbonate</li>
+              </ul>
+            </div>
+
+            <div>
+              <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">Common Applications:</div>
+              <ul className="text-slate-600 dark:text-slate-400 space-y-0.5">
+                <li><span className="font-medium">Protein elution:</span> Glycine-HCl (pH 2.2-3.0)</li>
+                <li><span className="font-medium">Enzyme assays:</span> Succinate, Malate, Citrate</li>
+                <li><span className="font-medium">Cell culture:</span> HEPES, Phosphate</li>
+                <li><span className="font-medium">Electrophoresis:</span> Tris-Glycine, MOPS</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-primary-200 dark:border-primary-700">
+            <div className="font-medium text-slate-700 dark:text-slate-300 mb-1">Species Distribution Solver:</div>
+            <p className="text-slate-600 dark:text-slate-400">
+              For polyprotic acids with close pKa values (Δ &lt; 2.5), the calculator automatically uses a species
+              distribution solver instead of the simple Henderson-Hasselbalch equation for more accurate results.
+              This applies to: Citrate, Tartrate, Succinate, Malate, and other di/triprotic acids.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Chart */}
       <div className="relative">

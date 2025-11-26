@@ -702,7 +702,12 @@ export const COMMON_BUFFERS: BufferSystem[] = [
     },
     category: 'common',
     suitability: 'general',
-    notes: 'Diprotic acid with well-separated pKa values. Common in food chemistry and wine analysis.',
+    incompatibilities: ['calcium'],
+    warnings: [
+      'pKa values close together (Δ=1.33) - species solver used for accuracy',
+      'May complex with Ca²⁺ at high concentrations',
+    ],
+    notes: 'Diprotic acid. Common in food chemistry and wine analysis. Chiral compound (use L-form).',
   },
   {
     id: 'lactate',
@@ -737,6 +742,9 @@ export const COMMON_BUFFERS: BufferSystem[] = [
     },
     category: 'common',
     suitability: 'general',
+    warnings: [
+      'pKa values close together (Δ=1.43) - species solver used for accuracy',
+    ],
     notes: 'Diprotic acid. TCA cycle intermediate. Good buffering capacity over wide pH range.',
   },
   {
@@ -754,7 +762,10 @@ export const COMMON_BUFFERS: BufferSystem[] = [
     },
     category: 'common',
     suitability: 'general',
-    notes: 'Diprotic acid. TCA cycle intermediate. Common in fruit juice analysis.',
+    warnings: [
+      'pKa values close together (Δ=1.71) - species solver used for accuracy',
+    ],
+    notes: 'Diprotic acid. TCA cycle intermediate. Common in fruit juice analysis. Chiral (use L-form).',
   },
   {
     id: 'maleate',
@@ -983,6 +994,43 @@ export const INCOMPATIBILITY_WARNINGS: IncompatibilityWarning[] = [
     severity: 'moderate',
     description: 'Borate forms complexes with cis-diol containing compounds (sugars, nucleotides)',
     context: 'Avoid for carbohydrate or nucleotide work',
+  },
+  // Low pH buffer incompatibilities
+  {
+    chemicals: ['oxalate', 'calcium'],
+    severity: 'high',
+    description: 'Oxalate precipitates calcium as calcium oxalate (CaC₂O₄)',
+    context: 'Complete removal of free Ca²⁺ from solution',
+  },
+  {
+    chemicals: ['oxalate', 'iron'],
+    severity: 'high',
+    description: 'Oxalate chelates iron ions, interfering with iron-dependent processes',
+    context: 'Avoid for iron-containing enzymes or redox studies',
+  },
+  {
+    chemicals: ['tartrate', 'calcium'],
+    severity: 'moderate',
+    description: 'Tartrate can complex with calcium ions',
+    context: 'May affect calcium-dependent assays at high concentrations',
+  },
+  {
+    chemicals: ['lactate', 'copper'],
+    severity: 'moderate',
+    description: 'Lactate forms complexes with Cu²⁺ ions',
+    context: 'Consider for copper-containing enzyme assays',
+  },
+  {
+    chemicals: ['succinate', 'iron'],
+    severity: 'low',
+    description: 'Succinate can weakly coordinate with iron',
+    context: 'Generally acceptable, but note for sensitive iron assays',
+  },
+  {
+    chemicals: ['formate', 'oxidizers'],
+    severity: 'moderate',
+    description: 'Formic acid can be oxidized by strong oxidizing agents',
+    context: 'Avoid with permanganate, dichromate, or peroxides',
   },
 ];
 
