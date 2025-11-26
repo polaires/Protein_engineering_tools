@@ -3047,7 +3047,7 @@ export default function ProteinViewer() {
                 Metal Coordination Analysis
               </h3>
               {/* Radius Adjuster */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 relative">
                 <span className="text-xs text-slate-500 dark:text-slate-400">Radius:</span>
                 <input
                   type="range"
@@ -3062,6 +3062,48 @@ export default function ProteinViewer() {
                 <span className="text-sm font-mono text-amber-700 dark:text-amber-300 min-w-[3rem]">
                   {coordinationRadius.toFixed(1)}Å
                 </span>
+                {/* Help tooltip for coordination radius */}
+                <div className="group relative">
+                  <button
+                    className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-500 flex items-center justify-center text-[10px] font-bold"
+                    title="Typical metal-ligand distances"
+                  >
+                    ?
+                  </button>
+                  {/* Tooltip content */}
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-64 p-3 bg-slate-800 dark:bg-slate-900 text-white text-xs rounded-lg shadow-xl z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                    <div className="font-semibold mb-2 text-amber-400">Typical Metal-Ligand Distances</div>
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        <tr className="border-b border-slate-700">
+                          <td className="py-1 text-slate-300">Alkali (Na⁺, K⁺)</td>
+                          <td className="py-1 text-right font-mono">2.3-2.8 Å</td>
+                        </tr>
+                        <tr className="border-b border-slate-700">
+                          <td className="py-1 text-slate-300">Alkaline earth (Mg²⁺, Ca²⁺)</td>
+                          <td className="py-1 text-right font-mono">2.0-2.5 Å</td>
+                        </tr>
+                        <tr className="border-b border-slate-700">
+                          <td className="py-1 text-slate-300">1st row TM (Fe, Cu, Zn)</td>
+                          <td className="py-1 text-right font-mono">1.9-2.3 Å</td>
+                        </tr>
+                        <tr className="border-b border-slate-700">
+                          <td className="py-1 text-slate-300">Lanthanides (La-Lu)</td>
+                          <td className="py-1 text-right font-mono">2.3-2.6 Å</td>
+                        </tr>
+                        <tr>
+                          <td className="py-1 text-slate-300">Heavy metals (Pb, Hg)</td>
+                          <td className="py-1 text-right font-mono">2.3-2.8 Å</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div className="mt-2 pt-2 border-t border-slate-700 text-[9px] text-slate-400">
+                      Ref: CRC Handbook; Shannon ionic radii (1976)
+                    </div>
+                    {/* Arrow */}
+                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-800 dark:bg-slate-900 rotate-45"></div>
+                  </div>
+                </div>
               </div>
             </div>
             {/* Summary badges */}
