@@ -793,58 +793,239 @@ export default function ProteinViewer() {
     }
   };
 
-  // Ideal coordination geometries with their expected angles
-  const COORDINATION_GEOMETRIES: {
-    [cn: number]: { name: string; angles: number[]; tolerance: number }[];
+  // ============================================================================
+  // Continuous Shape Measures (CShM) Implementation
+  // Based on Alvarez et al. methodology for accurate coordination geometry analysis
+  // Reference: Coord. Chem. Rev. 249 (2005) 1693-1708
+  // CShM = 100 × min[Σ|qi - pi|²] / Σ|qi - q0|²
+  // Values: 0 = perfect, <1 = minor distortion, 1-3 = moderate, >3 = significant
+  // ============================================================================
+
+  // Reference polyhedra coordinates (normalized, centered at origin)
+  // These are ideal vertex positions for each geometry type
+  const REFERENCE_POLYHEDRA: {
+    [cn: number]: { name: string; vertices: number[][] }[];
   } = {
     2: [
-      { name: 'Linear', angles: [180], tolerance: 15 }
+      { name: 'Linear', vertices: [[0, 0, 1], [0, 0, -1]] }
     ],
     3: [
-      { name: 'Trigonal Planar', angles: [120, 120, 120], tolerance: 15 },
-      { name: 'T-shaped', angles: [90, 90, 180], tolerance: 15 }
+      { name: 'Trigonal Planar', vertices: [
+        [1, 0, 0], [-0.5, 0.866, 0], [-0.5, -0.866, 0]
+      ]},
+      { name: 'T-shaped', vertices: [
+        [1, 0, 0], [-1, 0, 0], [0, 1, 0]
+      ]},
+      { name: 'Trigonal Pyramidal', vertices: [
+        [0.943, 0, -0.333], [-0.471, 0.816, -0.333], [-0.471, -0.816, -0.333]
+      ]}
     ],
     4: [
-      { name: 'Tetrahedral', angles: [109.5, 109.5, 109.5, 109.5, 109.5, 109.5], tolerance: 15 },
-      { name: 'Square Planar', angles: [90, 90, 90, 90, 180, 180], tolerance: 15 },
-      { name: 'See-saw', angles: [90, 90, 120, 90, 90, 180], tolerance: 20 }
+      { name: 'Tetrahedral', vertices: [
+        [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]
+      ].map(v => v.map(c => c / Math.sqrt(3)))},
+      { name: 'Square Planar', vertices: [
+        [1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]
+      ]},
+      { name: 'See-saw', vertices: [
+        [0, 0, 1], [0, 0, -1], [1, 0, 0], [-0.5, 0.866, 0]
+      ]}
     ],
     5: [
-      { name: 'Trigonal Bipyramidal', angles: [90, 90, 90, 90, 90, 90, 120, 120, 120, 180], tolerance: 15 },
-      { name: 'Square Pyramidal', angles: [90, 90, 90, 90, 90, 90, 90, 90, 180, 180], tolerance: 15 }
+      { name: 'Trigonal Bipyramidal', vertices: [
+        [0, 0, 1], [0, 0, -1], // axial
+        [1, 0, 0], [-0.5, 0.866, 0], [-0.5, -0.866, 0] // equatorial
+      ]},
+      { name: 'Square Pyramidal', vertices: [
+        [0, 0, 1], // apex
+        [1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0] // base
+      ]},
+      { name: 'Pentagonal Planar', vertices: [
+        [1, 0, 0], [0.309, 0.951, 0], [-0.809, 0.588, 0], [-0.809, -0.588, 0], [0.309, -0.951, 0]
+      ]}
     ],
     6: [
-      { name: 'Octahedral', angles: [90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 180, 180, 180], tolerance: 15 }
+      { name: 'Octahedral', vertices: [
+        [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+      ]},
+      { name: 'Trigonal Prismatic', vertices: [
+        [1, 0, 0.5], [-0.5, 0.866, 0.5], [-0.5, -0.866, 0.5],
+        [1, 0, -0.5], [-0.5, 0.866, -0.5], [-0.5, -0.866, -0.5]
+      ]},
+      { name: 'Pentagonal Pyramidal', vertices: [
+        [0, 0, 1], // apex
+        [1, 0, 0], [0.309, 0.951, 0], [-0.809, 0.588, 0], [-0.809, -0.588, 0], [0.309, -0.951, 0]
+      ]}
     ],
     7: [
-      { name: 'Pentagonal Bipyramidal', angles: [], tolerance: 20 },
-      { name: 'Capped Octahedral', angles: [], tolerance: 20 },
-      { name: 'Capped Trigonal Prismatic', angles: [], tolerance: 20 }
+      { name: 'Pentagonal Bipyramidal', vertices: [
+        [0, 0, 1], [0, 0, -1], // axial
+        [1, 0, 0], [0.309, 0.951, 0], [-0.809, 0.588, 0], [-0.809, -0.588, 0], [0.309, -0.951, 0]
+      ]},
+      { name: 'Capped Octahedral', vertices: [
+        [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+        [0.577, 0.577, 0.577] // cap
+      ]},
+      { name: 'Capped Trigonal Prismatic', vertices: [
+        [1, 0, 0.5], [-0.5, 0.866, 0.5], [-0.5, -0.866, 0.5],
+        [1, 0, -0.5], [-0.5, 0.866, -0.5], [-0.5, -0.866, -0.5],
+        [0, 0, 0] // face cap (rectangular face)
+      ]}
     ],
     8: [
-      { name: 'Square Antiprismatic', angles: [], tolerance: 20 },
-      { name: 'Dodecahedral', angles: [], tolerance: 20 },
-      { name: 'Bicapped Trigonal Prismatic', angles: [], tolerance: 20 },
-      { name: 'Hexagonal Bipyramidal', angles: [], tolerance: 20 }
+      { name: 'Square Antiprismatic', vertices: (() => {
+        // Two squares rotated 45° relative to each other
+        const h = 0.5;
+        const r = 1;
+        const top = [[r, 0, h], [0, r, h], [-r, 0, h], [0, -r, h]];
+        const a = Math.PI / 4; // 45° rotation
+        const bottom = [
+          [r * Math.cos(a), r * Math.sin(a), -h],
+          [-r * Math.sin(a), r * Math.cos(a), -h],
+          [-r * Math.cos(a), -r * Math.sin(a), -h],
+          [r * Math.sin(a), -r * Math.cos(a), -h]
+        ];
+        return [...top, ...bottom];
+      })()},
+      { name: 'Dodecahedral', vertices: [
+        // D2d dodecahedron (bicapped trigonal antiprism)
+        [1, 0, 0.5], [-1, 0, 0.5], [0, 1, -0.5], [0, -1, -0.5],
+        [0.707, 0.707, 0], [-0.707, 0.707, 0], [-0.707, -0.707, 0], [0.707, -0.707, 0]
+      ]},
+      { name: 'Bicapped Trigonal Prismatic', vertices: [
+        [1, 0, 0.577], [-0.5, 0.866, 0.577], [-0.5, -0.866, 0.577],
+        [1, 0, -0.577], [-0.5, 0.866, -0.577], [-0.5, -0.866, -0.577],
+        [0, 0, 1], [0, 0, -1] // caps on triangular faces
+      ]},
+      { name: 'Cubic', vertices: [
+        [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
+        [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1]
+      ].map(v => v.map(c => c / Math.sqrt(3)))}
     ],
     9: [
-      { name: 'Tricapped Trigonal Prismatic', angles: [], tolerance: 25 },
-      { name: 'Capped Square Antiprismatic', angles: [], tolerance: 25 },
-      { name: 'Muffin', angles: [], tolerance: 25 }
+      { name: 'Tricapped Trigonal Prismatic', vertices: [
+        // Trigonal prism (D3h) - most common for lanthanides
+        [1, 0, 0.816], [-0.5, 0.866, 0.816], [-0.5, -0.866, 0.816],
+        [1, 0, -0.816], [-0.5, 0.866, -0.816], [-0.5, -0.866, -0.816],
+        // Three caps on rectangular faces
+        [0.25, 0.433, 0], [-0.5, 0, 0], [0.25, -0.433, 0]
+      ]},
+      { name: 'Capped Square Antiprismatic', vertices: (() => {
+        const h = 0.5;
+        const r = 1;
+        const top = [[r, 0, h], [0, r, h], [-r, 0, h], [0, -r, h]];
+        const a = Math.PI / 4;
+        const bottom = [
+          [r * Math.cos(a), r * Math.sin(a), -h],
+          [-r * Math.sin(a), r * Math.cos(a), -h],
+          [-r * Math.cos(a), -r * Math.sin(a), -h],
+          [r * Math.sin(a), -r * Math.cos(a), -h]
+        ];
+        return [...top, ...bottom, [0, 0, 1]]; // cap on top
+      })()},
+      { name: 'Muffin', vertices: [
+        // 9-coordinate "muffin" shape (Cs symmetry)
+        [1, 0, 0], [0.5, 0.866, 0], [-0.5, 0.866, 0], [-1, 0, 0], [-0.5, -0.866, 0], [0.5, -0.866, 0],
+        [0.5, 0.289, 0.816], [-0.5, 0.289, 0.816], [0, -0.577, 0.816]
+      ]}
     ],
     10: [
-      { name: 'Bicapped Square Antiprismatic', angles: [], tolerance: 25 },
-      { name: 'Sphenocorona', angles: [], tolerance: 25 },
-      { name: 'Staggered Dodecahedral', angles: [], tolerance: 25 }
+      { name: 'Bicapped Square Antiprismatic', vertices: (() => {
+        const h = 0.5;
+        const r = 1;
+        const top = [[r, 0, h], [0, r, h], [-r, 0, h], [0, -r, h]];
+        const a = Math.PI / 4;
+        const bottom = [
+          [r * Math.cos(a), r * Math.sin(a), -h],
+          [-r * Math.sin(a), r * Math.cos(a), -h],
+          [-r * Math.cos(a), -r * Math.sin(a), -h],
+          [r * Math.sin(a), -r * Math.cos(a), -h]
+        ];
+        return [...top, ...bottom, [0, 0, 1], [0, 0, -1]]; // two caps
+      })()},
+      { name: 'Sphenocorona', vertices: [
+        // Johnson solid J86
+        [1, 0, 0], [-1, 0, 0], [0.5, 0.866, 0.3], [-0.5, 0.866, 0.3],
+        [0.5, -0.866, 0.3], [-0.5, -0.866, 0.3], [0, 0.5, 0.8], [0, -0.5, 0.8],
+        [0, 0.5, -0.5], [0, -0.5, -0.5]
+      ]},
+      { name: 'Pentagonal Antiprismatic', vertices: (() => {
+        const h = 0.5;
+        const top: number[][] = [];
+        const bottom: number[][] = [];
+        for (let i = 0; i < 5; i++) {
+          const angle1 = (2 * Math.PI * i) / 5;
+          const angle2 = (2 * Math.PI * i) / 5 + Math.PI / 5;
+          top.push([Math.cos(angle1), Math.sin(angle1), h]);
+          bottom.push([Math.cos(angle2), Math.sin(angle2), -h]);
+        }
+        return [...top, ...bottom];
+      })()}
     ],
     11: [
-      { name: 'Capped Pentagonal Antiprismatic', angles: [], tolerance: 30 },
-      { name: 'Elongated Pentagonal Bipyramidal', angles: [], tolerance: 30 }
+      { name: 'Capped Pentagonal Antiprismatic', vertices: (() => {
+        const h = 0.5;
+        const top: number[][] = [];
+        const bottom: number[][] = [];
+        for (let i = 0; i < 5; i++) {
+          const angle1 = (2 * Math.PI * i) / 5;
+          const angle2 = (2 * Math.PI * i) / 5 + Math.PI / 5;
+          top.push([Math.cos(angle1), Math.sin(angle1), h]);
+          bottom.push([Math.cos(angle2), Math.sin(angle2), -h]);
+        }
+        return [...top, ...bottom, [0, 0, 1]]; // cap
+      })()},
+      { name: 'Elongated Pentagonal Pyramidal', vertices: (() => {
+        const vertices: number[][] = [];
+        // Pentagon base
+        for (let i = 0; i < 5; i++) {
+          const angle = (2 * Math.PI * i) / 5;
+          vertices.push([Math.cos(angle), Math.sin(angle), 0]);
+        }
+        // Second pentagon layer
+        for (let i = 0; i < 5; i++) {
+          const angle = (2 * Math.PI * i) / 5 + Math.PI / 5;
+          vertices.push([0.8 * Math.cos(angle), 0.8 * Math.sin(angle), 0.6]);
+        }
+        // Apex
+        vertices.push([0, 0, 1.2]);
+        return vertices;
+      })()}
     ],
     12: [
-      { name: 'Icosahedral', angles: [], tolerance: 30 },
-      { name: 'Cuboctahedral', angles: [], tolerance: 30 },
-      { name: 'Anticuboctahedral', angles: [], tolerance: 30 }
+      { name: 'Icosahedral', vertices: (() => {
+        // Regular icosahedron vertices
+        const phi = (1 + Math.sqrt(5)) / 2; // golden ratio
+        const vertices: number[][] = [
+          [0, 1, phi], [0, -1, phi], [0, 1, -phi], [0, -1, -phi],
+          [1, phi, 0], [-1, phi, 0], [1, -phi, 0], [-1, -phi, 0],
+          [phi, 0, 1], [-phi, 0, 1], [phi, 0, -1], [-phi, 0, -1]
+        ];
+        // Normalize
+        const norm = Math.sqrt(1 + phi * phi);
+        return vertices.map(v => v.map(c => c / norm));
+      })()},
+      { name: 'Cuboctahedral', vertices: [
+        [1, 1, 0], [1, -1, 0], [-1, 1, 0], [-1, -1, 0],
+        [1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1],
+        [0, 1, 1], [0, 1, -1], [0, -1, 1], [0, -1, -1]
+      ].map(v => v.map(c => c / Math.sqrt(2)))},
+      { name: 'Anticuboctahedral', vertices: (() => {
+        // Triangular orthobicupola
+        const vertices: number[][] = [];
+        const h = 0.4;
+        // Top hexagon
+        for (let i = 0; i < 6; i++) {
+          const angle = (2 * Math.PI * i) / 6;
+          vertices.push([Math.cos(angle), Math.sin(angle), h]);
+        }
+        // Bottom hexagon (rotated)
+        for (let i = 0; i < 6; i++) {
+          const angle = (2 * Math.PI * i) / 6 + Math.PI / 6;
+          vertices.push([Math.cos(angle), Math.sin(angle), -h]);
+        }
+        return vertices;
+      })()}
     ]
   };
 
@@ -863,7 +1044,183 @@ export default function ProteinViewer() {
     return Math.acos(cosAngle) * (180 / Math.PI);
   };
 
-  // Analyze coordination geometry for a metal center
+  // Calculate centroid of a set of points
+  const calculateCentroid = (points: number[][]): number[] => {
+    const n = points.length;
+    const centroid = [0, 0, 0];
+    for (const p of points) {
+      centroid[0] += p[0];
+      centroid[1] += p[1];
+      centroid[2] += p[2];
+    }
+    return centroid.map(c => c / n);
+  };
+
+  // Center points at origin
+  const centerPoints = (points: number[][]): number[][] => {
+    const centroid = calculateCentroid(points);
+    return points.map(p => [p[0] - centroid[0], p[1] - centroid[1], p[2] - centroid[2]]);
+  };
+
+  // Scale points to unit RMS distance from origin
+  const normalizeScale = (points: number[][]): number[][] => {
+    let sumSq = 0;
+    for (const p of points) {
+      sumSq += p[0] * p[0] + p[1] * p[1] + p[2] * p[2];
+    }
+    const rms = Math.sqrt(sumSq / points.length);
+    if (rms === 0) return points;
+    return points.map(p => [p[0] / rms, p[1] / rms, p[2] / rms]);
+  };
+
+  // Calculate CShM for a specific permutation
+  const calculateCShMForPermutation = (
+    observed: number[][],
+    reference: number[][],
+    permutation: number[]
+  ): number => {
+    // Calculate sum of squared distances from centroid (denominator)
+    let denominator = 0;
+    for (const p of observed) {
+      denominator += p[0] * p[0] + p[1] * p[1] + p[2] * p[2];
+    }
+    if (denominator === 0) return 100;
+
+    // Calculate sum of squared deviations (numerator)
+    let numerator = 0;
+    for (let i = 0; i < observed.length; i++) {
+      const obs = observed[i];
+      const ref = reference[permutation[i]];
+      const dx = obs[0] - ref[0];
+      const dy = obs[1] - ref[1];
+      const dz = obs[2] - ref[2];
+      numerator += dx * dx + dy * dy + dz * dz;
+    }
+
+    return 100 * numerator / denominator;
+  };
+
+  // Simple rotation matrix application
+  const rotatePoint = (p: number[], rotMatrix: number[][]): number[] => {
+    return [
+      rotMatrix[0][0] * p[0] + rotMatrix[0][1] * p[1] + rotMatrix[0][2] * p[2],
+      rotMatrix[1][0] * p[0] + rotMatrix[1][1] * p[1] + rotMatrix[1][2] * p[2],
+      rotMatrix[2][0] * p[0] + rotMatrix[2][1] * p[1] + rotMatrix[2][2] * p[2]
+    ];
+  };
+
+  // Generate rotation matrix from Euler angles
+  const eulerRotationMatrix = (alpha: number, beta: number, gamma: number): number[][] => {
+    const ca = Math.cos(alpha), sa = Math.sin(alpha);
+    const cb = Math.cos(beta), sb = Math.sin(beta);
+    const cg = Math.cos(gamma), sg = Math.sin(gamma);
+    return [
+      [ca * cb * cg - sa * sg, -ca * cb * sg - sa * cg, ca * sb],
+      [sa * cb * cg + ca * sg, -sa * cb * sg + ca * cg, sa * sb],
+      [-sb * cg, sb * sg, cb]
+    ];
+  };
+
+  // Calculate CShM with optimal rotation (simplified Kabsch-like approach)
+  const calculateCShMWithRotation = (
+    observed: number[][],
+    reference: number[][],
+    permutation: number[]
+  ): number => {
+    // Try multiple rotations to find minimum CShM
+    let minCShM = Infinity;
+    const nTrials = 50; // Number of random rotation trials
+
+    for (let t = 0; t < nTrials; t++) {
+      // Generate rotation angles
+      const alpha = (t === 0) ? 0 : Math.random() * 2 * Math.PI;
+      const beta = (t === 0) ? 0 : Math.random() * Math.PI;
+      const gamma = (t === 0) ? 0 : Math.random() * 2 * Math.PI;
+
+      const rotMatrix = eulerRotationMatrix(alpha, beta, gamma);
+      const rotatedRef = reference.map(p => rotatePoint(p, rotMatrix));
+
+      const cshm = calculateCShMForPermutation(observed, rotatedRef, permutation);
+      if (cshm < minCShM) {
+        minCShM = cshm;
+      }
+    }
+
+    return minCShM;
+  };
+
+  // Generate permutations (for small n) or sample permutations (for large n)
+  const generatePermutations = (n: number, maxPerm: number = 5000): number[][] => {
+    if (n <= 6) {
+      // Full permutation for small n
+      const result: number[][] = [];
+      const permute = (arr: number[], start: number) => {
+        if (start === arr.length) {
+          result.push([...arr]);
+          return;
+        }
+        for (let i = start; i < arr.length; i++) {
+          [arr[start], arr[i]] = [arr[i], arr[start]];
+          permute(arr, start + 1);
+          [arr[start], arr[i]] = [arr[i], arr[start]];
+        }
+      };
+      permute(Array.from({ length: n }, (_, i) => i), 0);
+      return result;
+    } else {
+      // Sample random permutations for larger n
+      const result: number[][] = [];
+      const identity = Array.from({ length: n }, (_, i) => i);
+      result.push([...identity]);
+
+      for (let i = 0; i < maxPerm - 1; i++) {
+        const perm = [...identity];
+        // Fisher-Yates shuffle
+        for (let j = n - 1; j > 0; j--) {
+          const k = Math.floor(Math.random() * (j + 1));
+          [perm[j], perm[k]] = [perm[k], perm[j]];
+        }
+        result.push(perm);
+      }
+      return result;
+    }
+  };
+
+  // Main CShM calculation function
+  const calculateCShM = (
+    observedPositions: Vec3[],
+    referenceGeometry: { name: string; vertices: number[][] }
+  ): { cshm: number; geometryName: string } => {
+    const n = observedPositions.length;
+    if (n !== referenceGeometry.vertices.length) {
+      return { cshm: 100, geometryName: referenceGeometry.name };
+    }
+
+    // Convert Vec3 to number arrays and normalize
+    let observed = observedPositions.map(v => [v[0], v[1], v[2]]);
+    let reference = referenceGeometry.vertices.map(v => [...v]);
+
+    // Center and normalize both sets
+    observed = normalizeScale(centerPoints(observed));
+    reference = normalizeScale(centerPoints(reference));
+
+    // Try permutations to find best match
+    const permutations = generatePermutations(n, n <= 8 ? 5000 : 1000);
+    let minCShM = Infinity;
+
+    for (const perm of permutations) {
+      const cshm = calculateCShMWithRotation(observed, reference, perm);
+      if (cshm < minCShM) {
+        minCShM = cshm;
+      }
+      // Early termination if we found a very good match
+      if (minCShM < 0.1) break;
+    }
+
+    return { cshm: minCShM, geometryName: referenceGeometry.name };
+  };
+
+  // Analyze coordination geometry for a metal center using CShM
   const analyzeCoordinationGeometry = (
     metalPos: Vec3,
     ligandPositions: { atom: string; pos: Vec3 }[]
@@ -890,7 +1247,7 @@ export default function ProteinViewer() {
       };
     }
 
-    // Calculate all L-M-L angles
+    // Calculate all L-M-L angles (for display purposes)
     const angles: { atom1: string; atom2: string; angle: number }[] = [];
     for (let i = 0; i < cn; i++) {
       for (let j = i + 1; j < cn; j++) {
@@ -903,69 +1260,53 @@ export default function ProteinViewer() {
       }
     }
 
-    // Sort angles for consistent comparison
-    const sortedAngles = angles.map(a => a.angle).sort((a, b) => a - b);
-    const avgAngle = sortedAngles.reduce((sum, a) => sum + a, 0) / sortedAngles.length;
+    const avgAngle = angles.reduce((sum, a) => sum + a.angle, 0) / angles.length;
 
-    // Find best matching geometry
-    let bestGeometry = 'Irregular';
-    let bestIdealGeometry = `CN-${cn}`;
-    let bestRmsd = Infinity;
+    // Get reference geometries for this CN
+    const referenceGeometries = REFERENCE_POLYHEDRA[cn];
 
-    const geometries = COORDINATION_GEOMETRIES[cn];
-    if (geometries) {
-      for (const geom of geometries) {
-        if (geom.angles.length === 0) {
-          // For higher CN without defined ideal angles, use a simplified match
-          bestGeometry = geom.name;
-          bestIdealGeometry = geom.name;
-          bestRmsd = 0;
-          continue;
-        }
+    if (!referenceGeometries || referenceGeometries.length === 0) {
+      // No reference for this CN
+      return {
+        coordinationNumber: cn,
+        geometryType: `CN-${cn} (no reference)`,
+        idealGeometry: `CN-${cn}`,
+        angles: angles.sort((a, b) => a.angle - b.angle),
+        avgAngle,
+        rmsd: 0,
+        distortion: 'moderate'
+      };
+    }
 
-        // Sort ideal angles for comparison
-        const idealSorted = [...geom.angles].sort((a, b) => a - b);
+    // Calculate CShM for each reference geometry
+    const ligandVectors = ligandPositions.map(lp => lp.pos);
+    let bestGeometry = '';
+    let bestCShM = Infinity;
 
-        // Ensure we're comparing same number of angles
-        if (idealSorted.length !== sortedAngles.length) continue;
-
-        // Calculate RMSD
-        let sumSqDiff = 0;
-        for (let i = 0; i < sortedAngles.length; i++) {
-          const diff = sortedAngles[i] - idealSorted[i];
-          sumSqDiff += diff * diff;
-        }
-        const rmsd = Math.sqrt(sumSqDiff / sortedAngles.length);
-
-        if (rmsd < bestRmsd) {
-          bestRmsd = rmsd;
-          bestGeometry = geom.name;
-          bestIdealGeometry = geom.name;
-        }
+    for (const refGeom of referenceGeometries) {
+      const result = calculateCShM(ligandVectors, refGeom);
+      if (result.cshm < bestCShM) {
+        bestCShM = result.cshm;
+        bestGeometry = result.geometryName;
       }
     }
 
-    // Determine distortion level based on RMSD
+    // Determine distortion level based on CShM value
+    // CShM interpretation: 0 = perfect, <1 = minor, 1-3 = moderate, >3 = significant
     let distortion: 'ideal' | 'low' | 'moderate' | 'high' | 'severe';
-    if (bestRmsd <= 5) distortion = 'ideal';
-    else if (bestRmsd <= 10) distortion = 'low';
-    else if (bestRmsd <= 20) distortion = 'moderate';
-    else if (bestRmsd <= 35) distortion = 'high';
+    if (bestCShM < 0.5) distortion = 'ideal';
+    else if (bestCShM < 1.0) distortion = 'low';
+    else if (bestCShM < 3.0) distortion = 'moderate';
+    else if (bestCShM < 5.0) distortion = 'high';
     else distortion = 'severe';
-
-    // For undefined geometries (CN > 6 without angles), estimate distortion
-    if (cn > 6 && geometries?.[0]?.angles.length === 0) {
-      bestRmsd = 0;
-      distortion = 'low'; // Assume reasonable for high CN
-    }
 
     return {
       coordinationNumber: cn,
       geometryType: bestGeometry,
-      idealGeometry: bestIdealGeometry,
+      idealGeometry: bestGeometry,
       angles: angles.sort((a, b) => a.angle - b.angle),
       avgAngle,
-      rmsd: bestRmsd,
+      rmsd: bestCShM, // Using CShM value instead of angle RMSD
       distortion
     };
   };
@@ -1106,7 +1447,7 @@ export default function ProteinViewer() {
 
       const geometry = analyzeCoordinationGeometry(metal.pos, ligandPositions);
 
-      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, RMSD=${geometry?.rmsd.toFixed(1)}°`);
+      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}`);
 
       return {
         ...metal,
@@ -2741,10 +3082,10 @@ export default function ProteinViewer() {
                              '⚠ Severe distortion'}
                           </span>
 
-                          {/* RMSD */}
+                          {/* CShM (Continuous Shape Measure) */}
                           {metal.geometry.rmsd > 0 && (
                             <span className="text-slate-500 dark:text-slate-400">
-                              RMSD: {metal.geometry.rmsd.toFixed(1)}°
+                              CShM: {metal.geometry.rmsd.toFixed(2)}
                             </span>
                           )}
                         </div>
