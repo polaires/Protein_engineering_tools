@@ -818,11 +818,33 @@ export default function ProteinViewer() {
     ],
     7: [
       { name: 'Pentagonal Bipyramidal', angles: [], tolerance: 20 },
-      { name: 'Capped Octahedral', angles: [], tolerance: 20 }
+      { name: 'Capped Octahedral', angles: [], tolerance: 20 },
+      { name: 'Capped Trigonal Prismatic', angles: [], tolerance: 20 }
     ],
     8: [
       { name: 'Square Antiprismatic', angles: [], tolerance: 20 },
-      { name: 'Dodecahedral', angles: [], tolerance: 20 }
+      { name: 'Dodecahedral', angles: [], tolerance: 20 },
+      { name: 'Bicapped Trigonal Prismatic', angles: [], tolerance: 20 },
+      { name: 'Hexagonal Bipyramidal', angles: [], tolerance: 20 }
+    ],
+    9: [
+      { name: 'Tricapped Trigonal Prismatic', angles: [], tolerance: 25 },
+      { name: 'Capped Square Antiprismatic', angles: [], tolerance: 25 },
+      { name: 'Muffin', angles: [], tolerance: 25 }
+    ],
+    10: [
+      { name: 'Bicapped Square Antiprismatic', angles: [], tolerance: 25 },
+      { name: 'Sphenocorona', angles: [], tolerance: 25 },
+      { name: 'Staggered Dodecahedral', angles: [], tolerance: 25 }
+    ],
+    11: [
+      { name: 'Capped Pentagonal Antiprismatic', angles: [], tolerance: 30 },
+      { name: 'Elongated Pentagonal Bipyramidal', angles: [], tolerance: 30 }
+    ],
+    12: [
+      { name: 'Icosahedral', angles: [], tolerance: 30 },
+      { name: 'Cuboctahedral', angles: [], tolerance: 30 },
+      { name: 'Anticuboctahedral', angles: [], tolerance: 30 }
     ]
   };
 

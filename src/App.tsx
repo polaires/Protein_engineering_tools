@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, FlaskConical, Settings, Github, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom, Box } from 'lucide-react';
+import { Calculator as CalcIcon, FlaskConical, Settings, Sun, Moon, Dna as DnaIcon, Droplets, LogOut, LogIn, User as UserIcon, Atom, Box } from 'lucide-react';
 import { AppProvider, useApp } from '@/contexts/AppContext';
 import Calculator from '@/components/Calculator';
 import ProtParam from '@/components/ProtParam';
@@ -23,6 +23,22 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>('solution');
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    // Initialize from localStorage or system preference
+    const stored = localStorage.getItem('darkMode');
+    if (stored !== null) return stored === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  // Apply dark mode class to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', String(darkMode));
+  }, [darkMode]);
 
   // Check for email verification token or password reset token in URL
   useEffect(() => {
@@ -132,15 +148,13 @@ function AppContent() {
                 </button>
               )}
 
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => setDarkMode(!darkMode)}
                 className="btn-icon"
-                title="View on GitHub"
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
-                <Github className="w-5 h-5" />
-              </a>
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
