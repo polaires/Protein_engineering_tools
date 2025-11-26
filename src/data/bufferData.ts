@@ -581,6 +581,204 @@ export const BIOLOGICAL_BUFFERS: BufferSystem[] = [
 // ============================================================================
 
 export const COMMON_BUFFERS: BufferSystem[] = [
+  // ---- Very Low pH Range (1.0-3.0) ----
+  {
+    id: 'glycine-hcl',
+    name: 'Glycine-HCl',
+    fullName: 'Glycine-hydrochloric acid buffer',
+    acidForm: 'Glycine + HCl',
+    baseForm: 'Glycine',
+    pKa: [2.34],
+    dpKadT: -0.0025,
+    effectiveRange: [2.2, 3.6],
+    mw: {
+      acid: 75.07,            // Glycine
+      base: 75.07,            // Glycine
+    },
+    category: 'common',
+    suitability: 'general',
+    notes: 'Standard low pH buffer. Commonly used for protein elution from affinity columns and antibody elution.',
+  },
+  {
+    id: 'oxalate',
+    name: 'Oxalate',
+    fullName: 'Oxalate buffer',
+    acidForm: 'Oxalic acid',
+    baseForm: 'Sodium oxalate',
+    pKa: [1.25, 4.27],
+    dpKadT: -0.002,
+    effectiveRange: [0.8, 4.5],
+    mw: {
+      acid: 90.03,            // Oxalic acid anhydrous
+      acidH2O: 126.07,        // Oxalic acid dihydrate
+      base: 134.00,           // Sodium oxalate
+    },
+    category: 'common',
+    suitability: 'limited',
+    incompatibilities: ['calcium', 'iron'],
+    warnings: [
+      'Strong calcium chelator - precipitates calcium oxalate',
+      'Toxic - handle with care',
+      'May inhibit metalloenzymes',
+    ],
+    notes: 'Diprotic acid. Very low pH buffer range. Used in analytical chemistry.',
+  },
+  {
+    id: 'pyruvate',
+    name: 'Pyruvate',
+    fullName: 'Pyruvate buffer',
+    acidForm: 'Pyruvic acid',
+    baseForm: 'Sodium pyruvate',
+    pKa: [2.49],
+    dpKadT: -0.002,
+    effectiveRange: [1.5, 3.5],
+    mw: {
+      acid: 88.06,            // Pyruvic acid
+      base: 110.04,           // Sodium pyruvate
+    },
+    category: 'common',
+    suitability: 'limited',
+    warnings: [
+      'Metabolically active - may interfere with metabolic studies',
+      'Unstable - decomposes over time',
+    ],
+    notes: 'Useful when pyruvate is desired as part of the buffer system. Common in cell culture.',
+  },
+  {
+    id: 'phthalate',
+    name: 'Phthalate',
+    fullName: 'Potassium hydrogen phthalate buffer',
+    acidForm: 'Potassium hydrogen phthalate',
+    baseForm: 'Potassium hydrogen phthalate + NaOH',
+    pKa: [2.95, 5.41],
+    dpKadT: -0.0012,
+    effectiveRange: [2.2, 3.8],
+    mw: {
+      acid: 204.22,           // Potassium hydrogen phthalate (KHP)
+      base: 204.22,           // KHP
+    },
+    category: 'common',
+    suitability: 'limited',
+    warnings: [
+      'Not suitable for biological systems - may be toxic to cells',
+      'Primary standard for pH calibration',
+    ],
+    notes: 'Reference buffer for pH meter calibration (pH 4.01 at 25°C). Very stable.',
+  },
+
+  // ---- Low pH Range (3.0-5.5) ----
+  {
+    id: 'formate',
+    name: 'Formate',
+    fullName: 'Formate buffer',
+    acidForm: 'Formic acid',
+    baseForm: 'Sodium formate',
+    pKa: [3.75],
+    dpKadT: -0.0002,
+    effectiveRange: [2.8, 4.8],
+    mw: {
+      acid: 46.03,            // Formic acid
+      base: 68.01,            // Sodium formate
+    },
+    category: 'common',
+    suitability: 'general',
+    notes: 'Simple monoprotic buffer. Low temperature sensitivity. Used in HPLC mobile phases.',
+  },
+  {
+    id: 'tartrate',
+    name: 'Tartrate',
+    fullName: 'Tartrate buffer',
+    acidForm: 'L-Tartaric acid',
+    baseForm: 'Sodium potassium tartrate',
+    pKa: [3.04, 4.37],
+    dpKadT: -0.003,
+    effectiveRange: [2.2, 5.2],
+    mw: {
+      acid: 150.09,           // L-Tartaric acid
+      base: 282.22,           // Sodium potassium tartrate (Rochelle salt) tetrahydrate
+      monosodium: 172.07,     // Monosodium tartrate
+      disodium: 194.05,       // Disodium tartrate anhydrous
+      disodiumH2O: 230.08,    // Disodium tartrate dihydrate
+    },
+    category: 'common',
+    suitability: 'general',
+    notes: 'Diprotic acid with well-separated pKa values. Common in food chemistry and wine analysis.',
+  },
+  {
+    id: 'lactate',
+    name: 'Lactate',
+    fullName: 'Lactate buffer',
+    acidForm: 'L-Lactic acid',
+    baseForm: 'Sodium lactate',
+    pKa: [3.86],
+    dpKadT: -0.002,
+    effectiveRange: [2.8, 4.8],
+    mw: {
+      acid: 90.08,            // L-Lactic acid
+      base: 112.06,           // Sodium lactate
+    },
+    category: 'common',
+    suitability: 'general',
+    notes: 'Physiologically relevant buffer. Used in Ringer\'s lactate solution.',
+  },
+  {
+    id: 'succinate',
+    name: 'Succinate',
+    fullName: 'Succinate buffer',
+    acidForm: 'Succinic acid',
+    baseForm: 'Sodium succinate',
+    pKa: [4.21, 5.64],
+    dpKadT: -0.001,
+    effectiveRange: [3.2, 6.4],
+    mw: {
+      acid: 118.09,           // Succinic acid
+      base: 162.05,           // Disodium succinate anhydrous
+      hexahydrate: 270.14,    // Disodium succinate hexahydrate
+    },
+    category: 'common',
+    suitability: 'general',
+    notes: 'Diprotic acid. TCA cycle intermediate. Good buffering capacity over wide pH range.',
+  },
+  {
+    id: 'malate',
+    name: 'Malate',
+    fullName: 'Malate buffer',
+    acidForm: 'L-Malic acid',
+    baseForm: 'Sodium malate',
+    pKa: [3.40, 5.11],
+    dpKadT: -0.002,
+    effectiveRange: [2.8, 5.8],
+    mw: {
+      acid: 134.09,           // L-Malic acid
+      base: 178.05,           // Disodium malate
+    },
+    category: 'common',
+    suitability: 'general',
+    notes: 'Diprotic acid. TCA cycle intermediate. Common in fruit juice analysis.',
+  },
+  {
+    id: 'maleate',
+    name: 'Maleate',
+    fullName: 'Maleate buffer',
+    acidForm: 'Maleic acid',
+    baseForm: 'Sodium maleate',
+    pKa: [1.92, 6.27],
+    dpKadT: -0.006,
+    effectiveRange: [5.2, 7.2],
+    mw: {
+      acid: 116.07,           // Maleic acid
+      base: 160.03,           // Disodium maleate
+    },
+    category: 'common',
+    suitability: 'limited',
+    warnings: [
+      'cis-isomer of fumaric acid - do not confuse',
+      'May inhibit some enzymes',
+    ],
+    notes: 'Diprotic acid with well-separated pKa values. Used mainly around pKa2.',
+  },
+
+  // ---- Standard Lab Buffers ----
   {
     id: 'phosphate',
     name: 'Phosphate',

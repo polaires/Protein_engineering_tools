@@ -1145,12 +1145,12 @@ function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: Buffer
   // Sort buffers by pKa (first pKa value)
   const sortedBuffers = useMemo(() => {
     return [...buffers]
-      .filter(b => b.category === 'biological') // Only show biological buffers in chart
+      .filter(b => b.category === 'biological' || b.category === 'common') // Show biological and common buffers
       .sort((a, b) => a.pKa[0] - b.pKa[0]);
   }, [buffers]);
 
-  // pH range for the chart (4 to 12)
-  const minPH = 4;
+  // pH range for the chart (2 to 12 to include low pH buffers)
+  const minPH = 2;
   const maxPH = 12;
   const phRange = maxPH - minPH;
 
@@ -1272,7 +1272,7 @@ function BufferChartSelector({ buffers, selectedId, targetPH, onSelect }: Buffer
             {/* Scale line */}
             <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-400" />
             {/* Scale ticks */}
-            {[4, 5, 6, 7, 8, 9, 10, 11, 12].map((ph) => (
+            {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((ph) => (
               <div
                 key={ph}
                 className="absolute top-0 bottom-0 w-px bg-slate-400"
