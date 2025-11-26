@@ -84,6 +84,14 @@ export default function ProteinViewer() {
   const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(false);
   const coordinationRadius = 3.0; // Å - typical metal coordination distance
 
+  // Coordination details popup
+  const [showCoordinationDetails, setShowCoordinationDetails] = useState(false);
+  const [coordinationData, setCoordinationData] = useState<{
+    metals: { element: string; info: string; coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean }[] }[];
+    totalResidues: number;
+    totalWaters: number;
+  } | null>(null);
+
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState(false);
 
@@ -731,10 +739,25 @@ export default function ProteinViewer() {
 
       if (metalCoordination.metalCount === 0) {
         showToast('info', 'No metal ions found in structure');
+        setCoordinationData(null);
         return;
       }
 
       console.log(`Found ${metalCoordination.metalCount} metal ions with ${metalCoordination.coordinatingResidues.size} coordinating residues`);
+
+      // Store coordination data for popup display
+      setCoordinationData({
+        metals: metalCoordination.metalDetails.map(m => ({
+          element: m.element,
+          info: m.info,
+          coordinating: m.coordinating
+        })),
+        totalResidues: metalCoordination.coordinatingResidues.size,
+        totalWaters: metalCoordination.coordinatingWaters.size
+      });
+
+      // Show the coordination details popup
+      setShowCoordinationDetails(true);
 
       // Create a custom selection for coordinating residues
       const coordinatingLoci = createCoordinatingLoci(structure, metalCoordination.coordinatingAtomIndices);
@@ -762,13 +785,37 @@ export default function ProteinViewer() {
 
   // Find metal ions and their coordinating atoms within the given radius
   const findMetalCoordination = (structure: Structure, radius: number) => {
-    const metalElements = new Set(['CA', 'MG', 'ZN', 'FE', 'MN', 'CO', 'NI', 'CU', 'NA', 'K', 'CD', 'HG', 'PB', 'SR', 'BA']);
+    // Comprehensive list of ALL metal elements (alkali, alkaline earth, transition, post-transition, lanthanides, actinides)
+    const metalElements = new Set([
+      // Alkali metals
+      'LI', 'NA', 'K', 'RB', 'CS', 'FR',
+      // Alkaline earth metals
+      'BE', 'MG', 'CA', 'SR', 'BA', 'RA',
+      // Transition metals (3d, 4d, 5d)
+      'SC', 'TI', 'V', 'CR', 'MN', 'FE', 'CO', 'NI', 'CU', 'ZN',
+      'Y', 'ZR', 'NB', 'MO', 'TC', 'RU', 'RH', 'PD', 'AG', 'CD',
+      'HF', 'TA', 'W', 'RE', 'OS', 'IR', 'PT', 'AU', 'HG',
+      // Post-transition metals
+      'AL', 'GA', 'IN', 'SN', 'TL', 'PB', 'BI', 'PO',
+      // Lanthanides (rare earths)
+      'LA', 'CE', 'PR', 'ND', 'PM', 'SM', 'EU', 'GD', 'TB', 'DY', 'HO', 'ER', 'TM', 'YB', 'LU',
+      // Actinides
+      'AC', 'TH', 'PA', 'U', 'NP', 'PU', 'AM', 'CM', 'BK', 'CF', 'ES', 'FM', 'MD', 'NO', 'LR'
+    ]);
+
     const coordinatingAtomIndices: Map<number, Set<number>> = new Map(); // unitId -> elementIndices
     const coordinatingWaterIndices: Map<number, Set<number>> = new Map();
     const coordinatingResidues = new Set<string>(); // "chainId:resSeq:resName"
     const coordinatingWaters = new Set<string>();
     let metalCount = 0;
-    const metalPositions: { pos: Vec3; element: string; info: string }[] = [];
+
+    // Store detailed metal info for popup
+    const metalDetails: {
+      element: string;
+      info: string;
+      pos: Vec3;
+      coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean }[];
+    }[] = [];
 
     // First pass: find all metal ions and their positions
     const l = StructureElement.Location.create(structure);
@@ -788,17 +835,18 @@ export default function ProteinViewer() {
           const resSeq = SP.residue.label_seq_id(l);
           const resName = SP.atom.label_comp_id(l);
 
-          metalPositions.push({
+          metalDetails.push({
             pos: Vec3.clone(pos),
             element,
-            info: `${element} (${resName}${resSeq}, Chain ${chainId})`
+            info: `${element} (${resName}${resSeq}, Chain ${chainId})`,
+            coordinating: []
           });
           metalCount++;
         }
       }
     }
 
-    console.log(`Found ${metalCount} metal ions:`, metalPositions.map(m => m.info));
+    console.log(`Found ${metalCount} metal ions:`, metalDetails.map(m => m.info));
 
     // Second pass: find atoms within coordination distance of metals
     for (const unit of structure.units) {
@@ -814,7 +862,7 @@ export default function ProteinViewer() {
         unit.conformation.position(elementIdx, atomPos);
 
         // Check distance to each metal
-        for (const metal of metalPositions) {
+        for (const metal of metalDetails) {
           const dist = Vec3.distance(atomPos, metal.pos);
 
           if (dist > 0.1 && dist <= radius) { // Exclude self (dist > 0.1)
@@ -824,6 +872,7 @@ export default function ProteinViewer() {
             const resName = SP.atom.label_comp_id(l);
             const atomName = SP.atom.label_atom_id(l);
             const resKey = `${chainId}:${resSeq}:${resName}`;
+            const isWater = entityType === 'water' || resName === 'HOH' || resName === 'WAT';
 
             // Track coordinating atom
             if (!coordinatingAtomIndices.has(unitId)) {
@@ -831,8 +880,17 @@ export default function ProteinViewer() {
             }
             coordinatingAtomIndices.get(unitId)!.add(i);
 
+            // Add to metal's coordinating list
+            metal.coordinating.push({
+              atom: atomName,
+              residue: `${resName}${resSeq}`,
+              chain: chainId,
+              distance: dist,
+              isWater
+            });
+
             // Check if it's water
-            if (entityType === 'water' || resName === 'HOH' || resName === 'WAT') {
+            if (isWater) {
               coordinatingWaters.add(resKey);
               if (!coordinatingWaterIndices.has(unitId)) {
                 coordinatingWaterIndices.set(unitId, new Set());
@@ -848,9 +906,14 @@ export default function ProteinViewer() {
       }
     }
 
+    // Sort coordinating atoms by distance for each metal
+    metalDetails.forEach(metal => {
+      metal.coordinating.sort((a, b) => a.distance - b.distance);
+    });
+
     return {
       metalCount,
-      metalPositions,
+      metalDetails,
       coordinatingAtomIndices,
       coordinatingWaterIndices,
       coordinatingResidues,
@@ -942,8 +1005,10 @@ export default function ProteinViewer() {
       if (newState) {
         await applyCoordinationHighlighting(structureRef.current);
       } else {
-        // Clear highlighting
+        // Clear highlighting and close popup
         pluginRef.current.managers.structure.selection.clear();
+        setShowCoordinationDetails(false);
+        setCoordinationData(null);
 
         // Remove coordinating water representation if it exists
         const state = pluginRef.current.state.data;
@@ -2384,6 +2449,158 @@ export default function ProteinViewer() {
           </div>
         )}
       </div>
+
+      {/* Metal Coordination Details Modal */}
+      {showCoordinationDetails && coordinationData && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShowCoordinationDetails(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-4xl w-full m-4 max-h-[85vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 bg-amber-50 dark:bg-amber-900/20">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Target className="w-5 h-5 text-amber-600" />
+                Metal Coordination Analysis
+                <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-2">
+                  (within {coordinationRadius}Å)
+                </span>
+              </h3>
+              <button
+                onClick={() => setShowCoordinationDetails(false)}
+                className="btn-icon text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Summary */}
+            <div className="px-4 py-3 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex gap-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <Atom className="w-4 h-4 text-amber-600" />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    {coordinationData.metals.length} Metal Ion{coordinationData.metals.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Hexagon className="w-4 h-4 text-blue-600" />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    {coordinationData.totalResidues} Coordinating Residue{coordinationData.totalResidues !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                {coordinationData.totalWaters > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Droplet className="w-4 h-4 text-cyan-600" />
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      {coordinationData.totalWaters} Water{coordinationData.totalWaters !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                {coordinationData.metals.map((metal, metalIdx) => (
+                  <div key={metalIdx} className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden">
+                    {/* Metal Header */}
+                    <div className="bg-amber-100 dark:bg-amber-900/30 px-4 py-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-500 text-white font-bold text-sm">
+                          {metal.element}
+                        </span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
+                          {metal.info}
+                        </span>
+                      </div>
+                      <span className="text-sm text-slate-500 dark:text-slate-400">
+                        {metal.coordinating.length} coordinating atom{metal.coordinating.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    {/* Coordinating Atoms Table */}
+                    {metal.coordinating.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+                              <th className="px-4 py-2 text-left font-medium">Atom</th>
+                              <th className="px-4 py-2 text-left font-medium">Residue</th>
+                              <th className="px-4 py-2 text-left font-medium">Chain</th>
+                              <th className="px-4 py-2 text-right font-medium">Distance (Å)</th>
+                              <th className="px-4 py-2 text-center font-medium">Type</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {metal.coordinating.map((coord, coordIdx) => (
+                              <tr
+                                key={coordIdx}
+                                className={`border-t border-slate-100 dark:border-slate-700 ${
+                                  coord.isWater
+                                    ? 'bg-cyan-50 dark:bg-cyan-900/10'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                                }`}
+                              >
+                                <td className="px-4 py-2 font-mono text-slate-700 dark:text-slate-300">
+                                  {coord.atom}
+                                </td>
+                                <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                                  {coord.residue}
+                                </td>
+                                <td className="px-4 py-2 text-slate-500 dark:text-slate-400">
+                                  {coord.chain}
+                                </td>
+                                <td className="px-4 py-2 text-right font-mono text-slate-700 dark:text-slate-300">
+                                  {coord.distance.toFixed(2)}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  {coord.isWater ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 text-xs">
+                                      <Droplet className="w-3 h-3" />
+                                      Water
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs">
+                                      <Hexagon className="w-3 h-3" />
+                                      Residue
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="px-4 py-3 text-slate-500 dark:text-slate-400 text-sm italic">
+                        No coordinating atoms found within {coordinationRadius}Å
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 flex justify-between items-center">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Coordination radius: {coordinationRadius}Å • Typical metal-ligand bonds: 1.8-2.8Å
+              </span>
+              <button
+                onClick={() => setShowCoordinationDetails(false)}
+                className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Help Modal */}
       {showHelpModal && (
