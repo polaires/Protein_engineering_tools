@@ -173,6 +173,9 @@ export default function ProteinViewer() {
   // Custom residue highlighting
   const [showResidueHighlight, setShowResidueHighlight] = useState(false);
   const [selectedResidueTypes, setSelectedResidueTypes] = useState<string[]>([]);
+
+  // Track view mode for each metal's ligand details (list vs 2D map)
+  const [metalLigandViewMode, setMetalLigandViewMode] = useState<{[key: number]: 'list' | '2dmap'}>({});
   const [highlightColor, setHighlightColor] = useState('#FF6B6B'); // Default highlight color (used when "Use custom color" is enabled)
   const [useCustomColor, setUseCustomColor] = useState(false); // Toggle between category colors and custom color
 
@@ -4519,57 +4522,250 @@ export default function ProteinViewer() {
                         )}
                       </div>
 
-                      {/* Column 3: Ligand Details Card */}
+                      {/* Column 3: Ligand Details / 2D Interaction Map Card */}
                       <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600 flex flex-col">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Ruler className="w-4 h-4 text-teal-500" />
-                            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Ligand Details</h4>
+                            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                              {(metalLigandViewMode[metalIdx] || 'list') === 'list' ? 'Ligand Details' : '2D Interaction Map'}
+                            </h4>
                           </div>
-                          {/* Average Distance - More prominent */}
-                          {metal.coordinating.length > 0 && (
-                            <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
-                              <span className="text-xs text-teal-600 dark:text-teal-400">Avg:</span>
-                              <span className="text-sm font-mono font-bold text-teal-700 dark:text-teal-300">{(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å</span>
-                            </div>
-                          )}
+                          {/* View Toggle Buttons */}
+                          <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-600 rounded-lg p-0.5">
+                            <button
+                              onClick={() => setMetalLigandViewMode(prev => ({ ...prev, [metalIdx]: 'list' }))}
+                              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
+                                (metalLigandViewMode[metalIdx] || 'list') === 'list'
+                                  ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm'
+                                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                              }`}
+                              title="Show ligand list"
+                            >
+                              List
+                            </button>
+                            <button
+                              onClick={() => setMetalLigandViewMode(prev => ({ ...prev, [metalIdx]: '2dmap' }))}
+                              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
+                                metalLigandViewMode[metalIdx] === '2dmap'
+                                  ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm'
+                                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                              }`}
+                              title="Show 2D interaction map (LigPlot style)"
+                            >
+                              2D Map
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Coordinating Atoms - Extended List */}
-                        {metal.coordinating.length > 0 ? (
-                          <div className="space-y-1.5 flex-1">
-                            {metal.coordinating.map((coord, coordIdx) => (
-                              <div
-                                key={coordIdx}
-                                className={`flex items-center justify-between px-2.5 py-2 rounded ${
-                                  coord.isWater
-                                    ? 'bg-cyan-50 dark:bg-cyan-900/20'
-                                    : 'bg-white dark:bg-slate-800'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {coord.isWater ? (
-                                    <Droplet className="w-3.5 h-3.5 text-cyan-500" />
-                                  ) : (
-                                    <Hexagon className="w-3.5 h-3.5 text-purple-500" />
-                                  )}
-                                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                                    {coord.residue}
-                                  </span>
-                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                                    {coord.atom}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                    :{coord.chain}
-                                  </span>
+                        {/* List View */}
+                        {(metalLigandViewMode[metalIdx] || 'list') === 'list' && (
+                          <>
+                            {/* Average Distance Badge */}
+                            {metal.coordinating.length > 0 && (
+                              <div className="flex justify-center mb-2">
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+                                  <span className="text-xs text-teal-600 dark:text-teal-400">Avg:</span>
+                                  <span className="text-sm font-mono font-bold text-teal-700 dark:text-teal-300">{(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å</span>
                                 </div>
-                                <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-400">
-                                  {coord.distance.toFixed(2)}Å
-                                </span>
                               </div>
-                            ))}
+                            )}
+                            {/* Coordinating Atoms List */}
+                            {metal.coordinating.length > 0 ? (
+                              <div className="space-y-1.5 flex-1">
+                                {metal.coordinating.map((coord, coordIdx) => (
+                                  <div
+                                    key={coordIdx}
+                                    className={`flex items-center justify-between px-2.5 py-2 rounded ${
+                                      coord.isWater
+                                        ? 'bg-cyan-50 dark:bg-cyan-900/20'
+                                        : 'bg-white dark:bg-slate-800'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {coord.isWater ? (
+                                        <Droplet className="w-3.5 h-3.5 text-cyan-500" />
+                                      ) : (
+                                        <Hexagon className="w-3.5 h-3.5 text-purple-500" />
+                                      )}
+                                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                        {coord.residue}
+                                      </span>
+                                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                        {coord.atom}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                        :{coord.chain}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-400">
+                                      {coord.distance.toFixed(2)}Å
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-slate-400 dark:text-slate-500 italic text-center py-4">
+                                No coordinating atoms found
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* 2D Interaction Map View (LigPlot style) */}
+                        {metalLigandViewMode[metalIdx] === '2dmap' && metal.coordinating.length > 0 && (
+                          <div className="flex-1 flex flex-col">
+                            {/* 2D LigPlot-style SVG */}
+                            <div className="flex justify-center">
+                              {(() => {
+                                const coords = metal.coordinating;
+                                const size = 220;
+                                const centerX = size / 2;
+                                const centerY = size / 2;
+                                const metalRadius = 22;
+                                const ligandRadius = 55; // Distance from center to ligand positions
+                                const residueBoxWidth = 48;
+                                const residueBoxHeight = 28;
+
+                                // Distance color coding: green (ideal) -> yellow (normal) -> red (strained)
+                                const getDistanceColor = (dist: number) => {
+                                  if (dist <= 2.2) return '#22c55e'; // green - ideal
+                                  if (dist <= 2.5) return '#84cc16'; // lime - good
+                                  if (dist <= 2.8) return '#eab308'; // yellow - normal
+                                  if (dist <= 3.2) return '#f97316'; // orange - stretched
+                                  return '#ef4444'; // red - strained
+                                };
+
+                                return (
+                                  <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                                    {/* Background circle for context */}
+                                    <circle cx={centerX} cy={centerY} r={ligandRadius + 35} fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4,4" className="dark:stroke-slate-600" />
+
+                                    {/* Draw bonds first */}
+                                    {coords.map((coord, idx) => {
+                                      const angle = (2 * Math.PI * idx) / coords.length - Math.PI / 2;
+                                      const endX = centerX + ligandRadius * Math.cos(angle);
+                                      const endY = centerY + ligandRadius * Math.sin(angle);
+                                      const color = getDistanceColor(coord.distance);
+
+                                      // Calculate midpoint for distance label
+                                      const midX = centerX + (ligandRadius * 0.5) * Math.cos(angle);
+                                      const midY = centerY + (ligandRadius * 0.5) * Math.sin(angle);
+
+                                      return (
+                                        <g key={`bond-${idx}`}>
+                                          {/* Bond line */}
+                                          <line
+                                            x1={centerX}
+                                            y1={centerY}
+                                            x2={endX}
+                                            y2={endY}
+                                            stroke={color}
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                          />
+                                          {/* Distance label on bond */}
+                                          <g transform={`translate(${midX}, ${midY})`}>
+                                            <rect
+                                              x="-14"
+                                              y="-8"
+                                              width="28"
+                                              height="16"
+                                              rx="3"
+                                              fill="white"
+                                              className="dark:fill-slate-800"
+                                              stroke={color}
+                                              strokeWidth="1"
+                                            />
+                                            <text
+                                              x="0"
+                                              y="4"
+                                              textAnchor="middle"
+                                              className="text-[9px] font-mono font-bold"
+                                              fill={color}
+                                            >
+                                              {coord.distance.toFixed(2)}
+                                            </text>
+                                          </g>
+                                        </g>
+                                      );
+                                    })}
+
+                                    {/* Metal center */}
+                                    <circle cx={centerX} cy={centerY} r={metalRadius} fill="#6366f1" />
+                                    <circle cx={centerX} cy={centerY} r={metalRadius - 3} fill="none" stroke="white" strokeWidth="2" opacity="0.3" />
+                                    <text x={centerX} y={centerY + 6} textAnchor="middle" className="text-base font-bold fill-white">
+                                      {metal.element}
+                                    </text>
+
+                                    {/* Residue boxes around the circle */}
+                                    {coords.map((coord, idx) => {
+                                      const angle = (2 * Math.PI * idx) / coords.length - Math.PI / 2;
+                                      const boxX = centerX + (ligandRadius + 30) * Math.cos(angle);
+                                      const boxY = centerY + (ligandRadius + 30) * Math.sin(angle);
+                                      const color = getDistanceColor(coord.distance);
+
+                                      return (
+                                        <g key={`residue-${idx}`} transform={`translate(${boxX}, ${boxY})`}>
+                                          {/* Residue box */}
+                                          <rect
+                                            x={-residueBoxWidth / 2}
+                                            y={-residueBoxHeight / 2}
+                                            width={residueBoxWidth}
+                                            height={residueBoxHeight}
+                                            rx="4"
+                                            fill={coord.isWater ? '#ecfeff' : '#faf5ff'}
+                                            className={coord.isWater ? 'dark:fill-cyan-900/40' : 'dark:fill-purple-900/40'}
+                                            stroke={coord.isWater ? '#22d3ee' : '#a855f7'}
+                                            strokeWidth="1.5"
+                                          />
+                                          {/* Residue name */}
+                                          <text
+                                            x="0"
+                                            y="1"
+                                            textAnchor="middle"
+                                            className="text-[10px] font-semibold"
+                                            fill={coord.isWater ? '#0891b2' : '#7c3aed'}
+                                          >
+                                            {coord.residue}
+                                          </text>
+                                          {/* Atom name */}
+                                          <text
+                                            x="0"
+                                            y="10"
+                                            textAnchor="middle"
+                                            className="text-[8px] font-mono"
+                                            fill="#64748b"
+                                          >
+                                            {coord.atom}
+                                          </text>
+                                        </g>
+                                      );
+                                    })}
+                                  </svg>
+                                );
+                              })()}
+                            </div>
+                            {/* Legend */}
+                            <div className="flex justify-center gap-3 mt-2 text-[9px]">
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-1.5 rounded bg-green-500"></span>
+                                <span className="text-slate-500">&lt;2.2Å</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-1.5 rounded bg-yellow-500"></span>
+                                <span className="text-slate-500">2.5-2.8Å</span>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-1.5 rounded bg-red-500"></span>
+                                <span className="text-slate-500">&gt;3.2Å</span>
+                              </span>
+                            </div>
                           </div>
-                        ) : (
+                        )}
+
+                        {/* Empty state for 2D map */}
+                        {metalLigandViewMode[metalIdx] === '2dmap' && metal.coordinating.length === 0 && (
                           <div className="text-sm text-slate-400 dark:text-slate-500 italic text-center py-4">
                             No coordinating atoms found
                           </div>
