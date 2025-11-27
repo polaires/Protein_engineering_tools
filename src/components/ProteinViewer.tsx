@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
-  Droplet, Atom, Hexagon, HelpCircle, X, Target
+  Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -99,9 +99,36 @@ export default function ProteinViewer() {
         rmsd: number;
         distortion: 'ideal' | 'low' | 'moderate' | 'high' | 'severe';
       } | null;
+      bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain'; // Classification
+      bindingSiteReason: string; // Explanation for classification
     }[];
     totalResidues: number;
     totalWaters: number;
+  } | null>(null);
+
+  // Ligand analysis mode
+  const [showLigandAnalysis, setShowLigandAnalysis] = useState(false);
+  const [ligandRadius, setLigandRadius] = useState(4.0); // Å - typical ligand contact distance
+
+  // Ligand analysis data
+  const [ligandData, setLigandData] = useState<{
+    ligands: {
+      name: string;
+      info: string; // e.g., "ATP A 501"
+      atoms: number;
+      contacts: {
+        residue: string;
+        chain: string;
+        atom: string;
+        distance: number;
+        interactionType: 'hydrogen_bond' | 'hydrophobic' | 'salt_bridge' | 'pi_stacking' | 'other';
+      }[];
+      bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain';
+      bindingSiteReason: string;
+      proteinContactCount: number;
+      waterContactCount: number;
+    }[];
+    totalLigands: number;
   } | null>(null);
 
   // Help modal state
@@ -763,7 +790,9 @@ export default function ProteinViewer() {
           element: m.element,
           info: m.info,
           coordinating: m.coordinating,
-          geometry: m.geometry
+          geometry: m.geometry,
+          bindingSiteType: m.bindingSiteType,
+          bindingSiteReason: m.bindingSiteReason
         })),
         totalResidues: metalCoordination.coordinatingResidues.size,
         totalWaters: metalCoordination.coordinatingWaters.size
@@ -1447,11 +1476,48 @@ export default function ProteinViewer() {
 
       const geometry = analyzeCoordinationGeometry(metal.pos, ligandPositions);
 
-      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}`);
+      // Classify binding site: functional vs crystal artifact
+      const proteinContacts = metal.coordinating.filter(c => !c.isWater).length;
+      const waterContacts = metal.coordinating.filter(c => c.isWater).length;
+      const totalContacts = metal.coordinating.length;
+
+      // Binding site classification criteria:
+      // 1. Functional: >=3 protein contacts OR (>=2 protein contacts with proper geometry)
+      // 2. Crystal artifact: 0-1 protein contacts, mostly/all water
+      // 3. Uncertain: 2 protein contacts without clear geometry
+      let bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain';
+      let bindingSiteReason: string;
+
+      if (proteinContacts >= 3) {
+        bindingSiteType = 'functional';
+        bindingSiteReason = `${proteinContacts} protein contacts - likely functional binding site`;
+      } else if (proteinContacts === 0 && waterContacts > 0) {
+        bindingSiteType = 'crystal_artifact';
+        bindingSiteReason = `Only water coordination (${waterContacts}) - likely crystal additive`;
+      } else if (proteinContacts === 1 && waterContacts >= 3) {
+        bindingSiteType = 'crystal_artifact';
+        bindingSiteReason = `Minimal protein contact (1), mostly water (${waterContacts}) - likely adventitious`;
+      } else if (proteinContacts >= 2 && geometry && geometry.distortion !== 'severe') {
+        bindingSiteType = 'functional';
+        bindingSiteReason = `${proteinContacts} protein contacts with ${geometry.geometryType} geometry`;
+      } else if (proteinContacts === 2 && waterContacts >= 2) {
+        bindingSiteType = 'uncertain';
+        bindingSiteReason = `Mixed coordination (${proteinContacts} protein, ${waterContacts} water) - needs manual review`;
+      } else if (totalContacts <= 2) {
+        bindingSiteType = 'uncertain';
+        bindingSiteReason = `Low coordination number (${totalContacts}) - incomplete or artifact`;
+      } else {
+        bindingSiteType = 'uncertain';
+        bindingSiteReason = `${proteinContacts} protein, ${waterContacts} water contacts`;
+      }
+
+      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}, Type=${bindingSiteType}`);
 
       return {
         ...metal,
-        geometry
+        geometry,
+        bindingSiteType,
+        bindingSiteReason
       };
     });
 
@@ -1463,6 +1529,245 @@ export default function ProteinViewer() {
       coordinatingResidues,
       coordinatingWaters
     };
+  };
+
+  // Common crystallization additives and buffers to flag
+  const CRYSTAL_ADDITIVES = new Set([
+    'SO4', 'PO4', 'GOL', 'EDO', 'PEG', 'MPD', 'DMS', 'ACT', 'CIT', 'TRS',
+    'BME', 'MES', 'EPE', 'IMD', 'SCN', 'NO3', 'CL', 'BR', 'IOD', 'F',
+    'BU3', 'PG4', '1PE', 'P6G', 'PGE', 'ARS'
+  ]);
+
+  // Find ligands and their protein contacts
+  const findLigandContacts = (structure: Structure, radius: number) => {
+    // Atoms that can form H-bonds
+    const hBondDonors = new Set(['N', 'O', 'S']);
+    const hBondAcceptors = new Set(['N', 'O', 'S', 'F']);
+    // Hydrophobic atoms
+    const hydrophobicAtoms = new Set(['C']);
+    // Charged atoms for salt bridges
+    const positiveResidues = new Set(['ARG', 'LYS', 'HIS']);
+    const negativeResidues = new Set(['ASP', 'GLU']);
+
+    const ligandDetails: {
+      name: string;
+      info: string;
+      atoms: number;
+      chainId: string;
+      resSeq: number;
+      contacts: {
+        residue: string;
+        chain: string;
+        atom: string;
+        distance: number;
+        interactionType: 'hydrogen_bond' | 'hydrophobic' | 'salt_bridge' | 'pi_stacking' | 'other';
+      }[];
+      proteinContactCount: number;
+      waterContactCount: number;
+      bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain';
+      bindingSiteReason: string;
+    }[] = [];
+
+    // First pass: identify all ligand residues
+    const ligandResidues = new Map<string, { name: string; chainId: string; resSeq: number; atomIndices: number[]; unitId: number }>();
+    const l = StructureElement.Location.create(structure);
+
+    for (const unit of structure.units) {
+      if (!unit.model) continue;
+
+      for (let i = 0; i < unit.elements.length; i++) {
+        const elementIdx = unit.elements[i];
+        StructureElement.Location.set(l, structure, unit, elementIdx);
+
+        const entityType = SP.entity.type(l);
+        const resName = SP.atom.label_comp_id(l);
+
+        // Check if this is a ligand (non-polymer, non-water, non-ion)
+        if (entityType === 'non-polymer' && resName !== 'HOH' && resName !== 'WAT') {
+          const chainId = SP.chain.label_asym_id(l);
+          const resSeq = SP.residue.label_seq_id(l);
+          const key = `${chainId}:${resSeq}:${resName}`;
+
+          if (!ligandResidues.has(key)) {
+            ligandResidues.set(key, {
+              name: resName,
+              chainId,
+              resSeq,
+              atomIndices: [],
+              unitId: unit.id
+            });
+          }
+          ligandResidues.get(key)!.atomIndices.push(i);
+        }
+      }
+    }
+
+    console.log(`Found ${ligandResidues.size} ligands:`, Array.from(ligandResidues.keys()));
+
+    // Second pass: find contacts for each ligand
+    for (const [ligKey, ligand] of ligandResidues) {
+      const contacts: typeof ligandDetails[0]['contacts'] = [];
+      const contactedResidues = new Set<string>();
+      let proteinContactCount = 0;
+      let waterContactCount = 0;
+
+      // Get positions of all ligand atoms
+      const ligandAtomPositions: Vec3[] = [];
+      for (const unit of structure.units) {
+        if (unit.id !== ligand.unitId) continue;
+
+        for (const atomIdx of ligand.atomIndices) {
+          const pos = Vec3();
+          unit.conformation.position(unit.elements[atomIdx], pos);
+          ligandAtomPositions.push(Vec3.clone(pos));
+        }
+      }
+
+      // Check all protein/water atoms for contacts
+      for (const unit of structure.units) {
+        if (!unit.model) continue;
+
+        for (let i = 0; i < unit.elements.length; i++) {
+          const elementIdx = unit.elements[i];
+          StructureElement.Location.set(l, structure, unit, elementIdx);
+
+          const entityType = SP.entity.type(l);
+          const chainId = SP.chain.label_asym_id(l);
+          const resSeq = SP.residue.label_seq_id(l);
+          const resName = SP.atom.label_comp_id(l);
+          const atomName = SP.atom.label_atom_id(l);
+          const resKey = `${chainId}:${resSeq}:${resName}`;
+
+          // Skip if same residue as ligand
+          if (resKey === ligKey) continue;
+
+          const atomPos = Vec3();
+          unit.conformation.position(elementIdx, atomPos);
+
+          // Check distance to any ligand atom
+          let minDist = Infinity;
+          for (const ligPos of ligandAtomPositions) {
+            const dist = Vec3.distance(atomPos, ligPos);
+            if (dist < minDist) minDist = dist;
+          }
+
+          if (minDist <= radius) {
+            const isWater = entityType === 'water' || resName === 'HOH' || resName === 'WAT';
+            const isProtein = entityType === 'polymer';
+
+            if (isWater) {
+              waterContactCount++;
+            } else if (isProtein) {
+              proteinContactCount++;
+
+              // Determine interaction type
+              let interactionType: 'hydrogen_bond' | 'hydrophobic' | 'salt_bridge' | 'pi_stacking' | 'other' = 'other';
+              const atomElement = SP.atom.type_symbol(l);
+
+              if (minDist <= 3.5 && (hBondDonors.has(atomElement) || hBondAcceptors.has(atomElement))) {
+                interactionType = 'hydrogen_bond';
+              } else if (minDist <= 4.0 && hydrophobicAtoms.has(atomElement)) {
+                interactionType = 'hydrophobic';
+              } else if (minDist <= 4.0 && (positiveResidues.has(resName) || negativeResidues.has(resName))) {
+                interactionType = 'salt_bridge';
+              }
+
+              // Only add unique residue contacts
+              if (!contactedResidues.has(resKey)) {
+                contactedResidues.add(resKey);
+                contacts.push({
+                  residue: `${resName}${resSeq}`,
+                  chain: chainId,
+                  atom: atomName,
+                  distance: minDist,
+                  interactionType
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // Sort contacts by distance
+      contacts.sort((a, b) => a.distance - b.distance);
+
+      // Classify binding site
+      let bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain';
+      let bindingSiteReason: string;
+      const uniqueProteinResidues = contacts.length;
+      const isCrystalAdditive = CRYSTAL_ADDITIVES.has(ligand.name);
+
+      if (isCrystalAdditive && uniqueProteinResidues < 3) {
+        bindingSiteType = 'crystal_artifact';
+        bindingSiteReason = `Known crystallization additive (${ligand.name}) with few contacts`;
+      } else if (uniqueProteinResidues >= 5) {
+        bindingSiteType = 'functional';
+        bindingSiteReason = `${uniqueProteinResidues} protein residue contacts - well-defined binding pocket`;
+      } else if (uniqueProteinResidues >= 3) {
+        bindingSiteType = isCrystalAdditive ? 'uncertain' : 'functional';
+        bindingSiteReason = `${uniqueProteinResidues} protein contacts${isCrystalAdditive ? ' (common additive - verify)' : ''}`;
+      } else if (uniqueProteinResidues <= 1) {
+        bindingSiteType = 'crystal_artifact';
+        bindingSiteReason = `Minimal protein contacts (${uniqueProteinResidues}) - likely surface-bound additive`;
+      } else {
+        bindingSiteType = 'uncertain';
+        bindingSiteReason = `${uniqueProteinResidues} protein contacts - needs manual inspection`;
+      }
+
+      ligandDetails.push({
+        name: ligand.name,
+        info: `${ligand.name} (Chain ${ligand.chainId}, ${ligand.resSeq})`,
+        atoms: ligand.atomIndices.length,
+        chainId: ligand.chainId,
+        resSeq: ligand.resSeq,
+        contacts,
+        proteinContactCount,
+        waterContactCount,
+        bindingSiteType,
+        bindingSiteReason
+      });
+    }
+
+    return {
+      ligandCount: ligandDetails.length,
+      ligandDetails
+    };
+  };
+
+  // Toggle ligand analysis
+  const toggleLigandAnalysis = async () => {
+    const newState = !showLigandAnalysis;
+    setShowLigandAnalysis(newState);
+
+    if (pluginRef.current && structureRef.current && newState) {
+      await analyzeLigands(structureRef.current);
+    } else if (!newState) {
+      setLigandData(null);
+    }
+  };
+
+  // Analyze ligands in the structure
+  const analyzeLigands = async (structureRefToUse: StateObjectRef<any>) => {
+    if (!pluginRef.current) return;
+
+    const plugin = pluginRef.current;
+    const state = plugin.state.data;
+    const cell = state.cells.get(structureRefToUse as any);
+
+    if (!cell || !cell.obj?.data) return;
+
+    const structure: Structure = cell.obj.data;
+    const result = findLigandContacts(structure, ligandRadius);
+
+    if (result.ligandCount > 0) {
+      setLigandData({
+        ligands: result.ligandDetails,
+        totalLigands: result.ligandCount
+      });
+    } else {
+      setLigandData(null);
+      showToast('info', 'No ligands found in structure');
+    }
   };
 
   // Create a StructureElement.Loci for coordinating atoms
@@ -2534,6 +2839,19 @@ export default function ProteinViewer() {
                   >
                     <Target className="w-4 h-4" />
                   </button>
+
+                  {/* Ligand Analysis Toggle */}
+                  <button
+                    onClick={toggleLigandAnalysis}
+                    className={`p-2 rounded transition-colors ${
+                      showLigandAnalysis
+                        ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 ring-2 ring-purple-400'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
+                    }`}
+                    title={`Ligand Binding Analysis (within ${ligandRadius}Å)`}
+                  >
+                    <Pill className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
@@ -3137,7 +3455,13 @@ export default function ProteinViewer() {
               {coordinationData.metals.map((metal, metalIdx) => (
                 <div key={metalIdx} className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden">
                   {/* Metal Header with Geometry Info */}
-                  <div className="bg-amber-100 dark:bg-amber-900/30 px-3 py-2">
+                  <div className={`px-3 py-2 ${
+                    metal.bindingSiteType === 'crystal_artifact'
+                      ? 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400'
+                      : metal.bindingSiteType === 'uncertain'
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400'
+                      : 'bg-amber-100 dark:bg-amber-900/30'
+                  }`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-xs">
@@ -3145,6 +3469,21 @@ export default function ProteinViewer() {
                         </span>
                         <span className="font-medium text-sm text-slate-700 dark:text-slate-300">
                           {metal.info}
+                        </span>
+                        {/* Binding Site Classification Badge */}
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          metal.bindingSiteType === 'functional'
+                            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+                            : metal.bindingSiteType === 'crystal_artifact'
+                            ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                            : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
+                        }`} title={metal.bindingSiteReason}>
+                          {metal.bindingSiteType === 'functional' ? '✓ Functional' :
+                           metal.bindingSiteType === 'crystal_artifact' ? (
+                             <><AlertTriangle className="w-3 h-3" /> Crystal Artifact</>
+                           ) : (
+                             <><AlertTriangle className="w-3 h-3" /> Uncertain</>
+                           )}
                         </span>
                       </div>
                       <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -3287,6 +3626,215 @@ export default function ProteinViewer() {
         </div>
       )}
 
+      {/* Ligand Binding Analysis Panel - Persistent section below viewer */}
+      {showLigandAnalysis && ligandData && (
+        <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-300 dark:border-purple-700 shadow-lg overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800">
+            <div className="flex items-center gap-3">
+              <Pill className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              <h3 className="font-semibold text-purple-800 dark:text-purple-200">
+                Ligand Binding Analysis
+              </h3>
+              {/* Radius Adjuster */}
+              <div className="flex items-center gap-2 relative">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Radius:</span>
+                <input
+                  type="range"
+                  min="2.5"
+                  max="6"
+                  step="0.1"
+                  value={ligandRadius}
+                  onChange={(e) => {
+                    const newRadius = parseFloat(e.target.value);
+                    setLigandRadius(newRadius);
+                    if (structureRef.current) {
+                      analyzeLigands(structureRef.current);
+                    }
+                  }}
+                  className="w-16 h-1.5 accent-purple-600"
+                />
+                <span className="text-xs font-mono text-purple-600 dark:text-purple-400 w-10">
+                  {ligandRadius.toFixed(1)}Å
+                </span>
+                {/* Help tooltip */}
+                <div className="relative group">
+                  <HelpCircle className="w-3.5 h-3.5 text-slate-400 hover:text-purple-500 cursor-help" />
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-white dark:bg-slate-800 rounded shadow-lg border border-slate-200 dark:border-slate-700 text-xs z-50">
+                    <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Typical contact distances:</p>
+                    <ul className="space-y-0.5 text-slate-600 dark:text-slate-400">
+                      <li>• H-bonds: 2.5-3.5 Å</li>
+                      <li>• Salt bridges: 2.8-4.0 Å</li>
+                      <li>• Hydrophobic: 3.5-4.5 Å</li>
+                      <li>• π-stacking: 3.3-4.0 Å</li>
+                    </ul>
+                    <p className="text-slate-500 dark:text-slate-500 mt-1 text-[10px] italic">
+                      Default 4.0Å captures most interactions
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {ligandData.totalLigands} ligand{ligandData.totalLigands !== 1 ? 's' : ''} found
+              </span>
+              <button
+                onClick={toggleLigandAnalysis}
+                className="p-1 rounded text-purple-600 hover:bg-purple-100 dark:text-purple-400 dark:hover:bg-purple-900/30"
+                title="Close ligand analysis"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Ligand List */}
+          <div className="max-h-64 overflow-y-auto">
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {ligandData.ligands.map((ligand, idx) => (
+                <div key={idx} className="p-3">
+                  {/* Ligand Header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-purple-700 dark:text-purple-300">
+                        {ligand.name}
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        {ligand.info}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                        {ligand.atoms} atoms
+                      </span>
+                    </div>
+                    {/* Binding Site Classification Badge */}
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      ligand.bindingSiteType === 'functional'
+                        ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+                        : ligand.bindingSiteType === 'crystal_artifact'
+                        ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                        : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
+                    }`} title={ligand.bindingSiteReason}>
+                      {ligand.bindingSiteType === 'functional' ? '✓ Functional' :
+                       ligand.bindingSiteType === 'crystal_artifact' ? (
+                         <><AlertTriangle className="w-3 h-3" /> Crystal Artifact</>
+                       ) : (
+                         <><AlertTriangle className="w-3 h-3" /> Uncertain</>
+                       )}
+                    </span>
+                  </div>
+
+                  {/* Contact Summary */}
+                  <div className="flex items-center gap-3 mb-2 text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                      {ligand.proteinContactCount} protein contacts
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400">
+                      {ligand.waterContactCount} water contacts
+                    </span>
+                    {/* Interaction type summary */}
+                    {ligand.contacts.length > 0 && (
+                      <>
+                        <span className="px-1.5 py-0.5 rounded bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400">
+                          {ligand.contacts.filter(c => c.interactionType === 'hydrogen_bond').length} H-bonds
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400">
+                          {ligand.contacts.filter(c => c.interactionType === 'salt_bridge').length} salt bridges
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Binding Site Reason */}
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 italic mb-2">
+                    {ligand.bindingSiteReason}
+                  </p>
+
+                  {/* Contacts Table */}
+                  {ligand.contacts.length > 0 ? (
+                    <details className="group">
+                      <summary className="text-xs text-purple-600 dark:text-purple-400 cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 mb-1">
+                        Show {ligand.contacts.length} contact{ligand.contacts.length !== 1 ? 's' : ''}
+                      </summary>
+                      <div className="overflow-x-auto mt-1">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+                              <th className="px-2 py-1 text-left font-medium">Residue</th>
+                              <th className="px-2 py-1 text-left font-medium">Chain</th>
+                              <th className="px-2 py-1 text-left font-medium">Atom</th>
+                              <th className="px-2 py-1 text-right font-medium">Dist (Å)</th>
+                              <th className="px-2 py-1 text-center font-medium">Type</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ligand.contacts.slice(0, 10).map((contact, contactIdx) => (
+                              <tr
+                                key={contactIdx}
+                                className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30"
+                              >
+                                <td className="px-2 py-1 text-slate-700 dark:text-slate-300">
+                                  {contact.residue}
+                                </td>
+                                <td className="px-2 py-1 text-slate-500 dark:text-slate-400">
+                                  {contact.chain}
+                                </td>
+                                <td className="px-2 py-1 font-mono text-slate-700 dark:text-slate-300">
+                                  {contact.atom}
+                                </td>
+                                <td className="px-2 py-1 text-right font-mono text-slate-700 dark:text-slate-300">
+                                  {contact.distance.toFixed(2)}
+                                </td>
+                                <td className="px-2 py-1 text-center">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] ${
+                                    contact.interactionType === 'hydrogen_bond'
+                                      ? 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300'
+                                      : contact.interactionType === 'salt_bridge'
+                                      ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+                                      : contact.interactionType === 'hydrophobic'
+                                      ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                      : contact.interactionType === 'pi_stacking'
+                                      ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                                  }`}>
+                                    {contact.interactionType === 'hydrogen_bond' ? 'H-bond' :
+                                     contact.interactionType === 'salt_bridge' ? 'Salt' :
+                                     contact.interactionType === 'hydrophobic' ? 'Hydro' :
+                                     contact.interactionType === 'pi_stacking' ? 'π-stack' : 'Other'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {ligand.contacts.length > 10 && (
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 px-2">
+                            ... and {ligand.contacts.length - 10} more contacts
+                          </p>
+                        )}
+                      </div>
+                    </details>
+                  ) : (
+                    <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+                      No protein contacts within {ligandRadius}Å
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              💡 Click the <Pill className="w-3 h-3 inline text-purple-600" /> button to hide this panel •
+              <span className="text-green-600 dark:text-green-400"> ✓ Functional</span> = likely biological binding site,
+              <span className="text-red-600 dark:text-red-400"> ⚠ Crystal Artifact</span> = likely crystallization additive
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Help Modal */}
       {showHelpModal && (
         <div
@@ -3330,6 +3878,7 @@ export default function ProteinViewer() {
                     <li>• <strong><Atom className="w-3 h-3 inline" /></strong> Ions/Metals</li>
                     <li>• <strong><Droplet className="w-3 h-3 inline" /></strong> Waters</li>
                     <li>• <strong><Target className="w-3 h-3 inline text-amber-600" /></strong> Metal Analysis</li>
+                    <li>• <strong><Pill className="w-3 h-3 inline text-purple-600" /></strong> Ligand Analysis</li>
                   </ul>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
@@ -3359,12 +3908,27 @@ export default function ProteinViewer() {
                     Metal Coordination Analysis
                   </h4>
                   <ul className="space-y-1 text-sm text-amber-600 dark:text-amber-400">
-                    <li>• Uses CShM (Continuous Shape Measures) for accurate geometry classification</li>
+                    <li>• Uses CShM (Continuous Shape Measures) for geometry classification</li>
                     <li>• Supports CN 2-12 including lanthanide geometries</li>
-                    <li>• Adjustable search radius (2-5Å) in analysis panel</li>
-                    <li>• Shows coordinating residues and waters</li>
+                    <li>• Distinguishes functional sites vs crystal artifacts</li>
+                    <li>• Adjustable radius (2-5Å)</li>
                   </ul>
                 </div>
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                  <h4 className="font-semibold text-purple-700 dark:text-purple-300 mb-2 flex items-center gap-2">
+                    <Pill className="w-4 h-4" />
+                    Ligand Binding Analysis
+                  </h4>
+                  <ul className="space-y-1 text-sm text-purple-600 dark:text-purple-400">
+                    <li>• Detects H-bonds, salt bridges, hydrophobic contacts, π-stacking</li>
+                    <li>• Classifies binding sites: functional vs crystal artifact</li>
+                    <li>• Identifies common crystallization additives (SO4, PEG, GOL...)</li>
+                    <li>• Adjustable contact radius (2.5-6Å)</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
                   <h4 className="font-semibold text-primary-700 dark:text-primary-300 mb-2 flex items-center gap-2">
                     <Ruler className="w-4 h-4" />
@@ -3375,6 +3939,17 @@ export default function ProteinViewer() {
                     <li>• Select first atom (labeled "1"), then second atom (labeled "2")</li>
                     <li>• Distance line and label appear automatically</li>
                     <li>• Continue clicking to measure multiple distances from atom 1</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                  <h4 className="font-semibold text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Crystal Artifact Detection
+                  </h4>
+                  <ul className="space-y-1 text-sm text-green-600 dark:text-green-400">
+                    <li>• <span className="text-green-600">✓ Functional</span>: Many protein contacts, specific pocket</li>
+                    <li>• <span className="text-red-600">⚠ Crystal Artifact</span>: Known additives, surface/water-only</li>
+                    <li>• <span className="text-yellow-600">? Uncertain</span>: Ambiguous binding pattern</li>
                   </ul>
                 </div>
               </div>
