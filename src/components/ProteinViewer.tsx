@@ -4303,7 +4303,7 @@ export default function ProteinViewer() {
                                   </svg>
                                 )}
                                 {/* Default/unknown geometry */}
-                                {!['linear', 'trigonal planar', 'tetrahedral', 'square planar', 'trigonal bipyramidal', 'square pyramidal', 'octahedral', 'pentagonal bipyramidal'].some(g => metal.geometry.geometryType.toLowerCase().includes(g)) && (
+                                {metal.geometry && !['linear', 'trigonal planar', 'tetrahedral', 'square planar', 'trigonal bipyramidal', 'square pyramidal', 'octahedral', 'pentagonal bipyramidal'].some(g => metal.geometry!.geometryType.toLowerCase().includes(g)) && (
                                   <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
                                     <circle cx="40" cy="40" r="10" fill="currentColor" />
                                     <text x="40" y="45" textAnchor="middle" className="fill-white text-[10px] font-bold">
@@ -4311,7 +4311,7 @@ export default function ProteinViewer() {
                                     </text>
                                     {/* Show coordination number as distributed dots */}
                                     {Array.from({ length: Math.min(metal.geometry.coordinationNumber, 8) }).map((_, i) => {
-                                      const angle = (2 * Math.PI * i) / Math.min(metal.geometry.coordinationNumber, 8) - Math.PI / 2;
+                                      const angle = (2 * Math.PI * i) / Math.min(metal.geometry!.coordinationNumber, 8) - Math.PI / 2;
                                       const x = 40 + 28 * Math.cos(angle);
                                       const y = 40 + 28 * Math.sin(angle);
                                       return (
