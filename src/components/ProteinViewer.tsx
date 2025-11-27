@@ -8,7 +8,7 @@ import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
   Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle,
-  Highlighter, Zap, Layers, Activity, Shield, Lightbulb
+  Highlighter, Zap, Layers, Shield, Lightbulb
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -4001,18 +4001,20 @@ export default function ProteinViewer() {
         )}
       </div>
 
-      {/* Metal Coordination Analysis Panel - Persistent section below viewer */}
+      {/* Metal Coordination Analysis Panel - Redesigned with clean card layout */}
       {showCoordinationHighlight && coordinationData && (
-        <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-amber-300 dark:border-amber-700 shadow-lg overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+        <div className="mt-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden">
+          {/* Clean Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-3">
-              <Target className="w-5 h-5 text-amber-600" />
+              <div className="p-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                <Target className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+              </div>
               <h3 className="font-semibold text-slate-900 dark:text-slate-100">
                 Metal Coordination Analysis
               </h3>
               {/* Radius Adjuster */}
-              <div className="flex items-center gap-2 relative">
+              <div className="flex items-center gap-2 ml-4 px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
                 <span className="text-xs text-slate-500 dark:text-slate-400">Radius:</span>
                 <input
                   type="range"
@@ -4021,10 +4023,10 @@ export default function ProteinViewer() {
                   step="0.1"
                   value={coordinationRadius}
                   onChange={(e) => handleRadiusChange(parseFloat(e.target.value))}
-                  className="w-20 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                  className="w-20 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
                   title={`Coordination radius: ${coordinationRadius}Å`}
                 />
-                <span className="text-sm font-mono text-amber-700 dark:text-amber-300 min-w-[3rem]">
+                <span className="text-sm font-mono text-slate-700 dark:text-slate-300 min-w-[3rem]">
                   {coordinationRadius.toFixed(1)}Å
                 </span>
                 {/* Help tooltip for coordination radius */}
@@ -4072,23 +4074,23 @@ export default function ProteinViewer() {
               </div>
             </div>
             {/* Summary badges */}
-            <div className="flex gap-4 text-sm">
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-100 dark:bg-amber-900/40 rounded">
-                <Atom className="w-3.5 h-3.5 text-amber-600" />
-                <span className="font-medium text-amber-700 dark:text-amber-300">
+            <div className="flex gap-2 text-sm">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                <Atom className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">
                   {coordinationData.metals.length} Metal{coordinationData.metals.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 bg-blue-100 dark:bg-blue-900/40 rounded">
-                <Hexagon className="w-3.5 h-3.5 text-blue-600" />
-                <span className="font-medium text-blue-700 dark:text-blue-300">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                <Hexagon className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">
                   {coordinationData.totalResidues} Residue{coordinationData.totalResidues !== 1 ? 's' : ''}
                 </span>
               </div>
               {coordinationData.totalWaters > 0 && (
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-cyan-100 dark:bg-cyan-900/40 rounded">
-                  <Droplet className="w-3.5 h-3.5 text-cyan-600" />
-                  <span className="font-medium text-cyan-700 dark:text-cyan-300">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                  <Droplet className="w-3.5 h-3.5 text-cyan-500" />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
                     {coordinationData.totalWaters} Water{coordinationData.totalWaters !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -4097,424 +4099,426 @@ export default function ProteinViewer() {
           </div>
 
           {/* Content - Scrollable with max height */}
-          <div className="max-h-[400px] overflow-y-auto">
-            <div className="p-3 space-y-3">
+          <div className="max-h-[500px] overflow-y-auto">
+            <div className="p-4 space-y-4">
               {coordinationData.metals.map((metal, metalIdx) => (
-                <div key={metalIdx} className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden">
-                  {/* Metal Header with Geometry Info */}
-                  <div className={`px-3 py-2 ${
+                <div key={metalIdx} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  {/* Metal Header - Clean design */}
+                  <div className={`px-4 py-3 border-b ${
                     metal.bindingSiteType === 'crystal_artifact'
-                      ? 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400'
+                      ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
                       : metal.bindingSiteType === 'uncertain'
-                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400'
-                      : 'bg-amber-100 dark:bg-amber-900/30'
+                      ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800'
+                      : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-700'
                   }`}>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-xs">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 dark:from-slate-500 dark:to-slate-700 text-white font-bold text-sm shadow-sm">
                           {metal.element}
                         </span>
-                        <span className="font-medium text-sm text-slate-700 dark:text-slate-300">
-                          {metal.info}
-                        </span>
-                        {/* Binding Site Classification Badge */}
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          metal.bindingSiteType === 'functional'
-                            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
-                            : metal.bindingSiteType === 'crystal_artifact'
-                            ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
-                            : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
-                        }`} title={metal.bindingSiteReason}>
-                          {metal.bindingSiteType === 'functional' ? '✓ Functional' :
-                           metal.bindingSiteType === 'crystal_artifact' ? (
-                             <><AlertTriangle className="w-3 h-3" /> Crystal Artifact</>
-                           ) : (
-                             <><AlertTriangle className="w-3 h-3" /> Uncertain</>
-                           )}
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {metal.coordinating.length} atom{metal.coordinating.length !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-
-                    {/* Geometry Analysis Section */}
-                    {metal.geometry && (
-                      <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {/* Coordination Number */}
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/40 rounded text-purple-700 dark:text-purple-300 font-medium">
-                            CN: {metal.geometry.coordinationNumber}
+                        <div>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {metal.info}
                           </span>
-
-                          {/* Geometry Type */}
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 dark:bg-indigo-900/40 rounded text-indigo-700 dark:text-indigo-300 font-medium">
-                            {metal.geometry.geometryType}
-                          </span>
-
-                          {/* Distortion Level */}
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded font-medium ${
-                            metal.geometry.distortion === 'ideal' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
-                            metal.geometry.distortion === 'low' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
-                            metal.geometry.distortion === 'moderate' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300' :
-                            metal.geometry.distortion === 'high' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' :
-                            'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
-                          }`}>
-                            {metal.geometry.distortion === 'ideal' ? '✓ Ideal' :
-                             metal.geometry.distortion === 'low' ? '○ Low distortion' :
-                             metal.geometry.distortion === 'moderate' ? '△ Moderate' :
-                             metal.geometry.distortion === 'high' ? '▲ High distortion' :
-                             '⚠ Severe distortion'}
-                          </span>
-
-                          {/* CShM (Continuous Shape Measure) */}
-                          {metal.geometry.rmsd > 0 && (
-                            <span className="text-slate-500 dark:text-slate-400">
-                              CShM: {metal.geometry.rmsd.toFixed(2)}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {/* Binding Site Classification Badge */}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                              metal.bindingSiteType === 'functional'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                : metal.bindingSiteType === 'crystal_artifact'
+                                ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                            }`} title={metal.bindingSiteReason}>
+                              {metal.bindingSiteType === 'functional' ? '✓ Functional' :
+                               metal.bindingSiteType === 'crystal_artifact' ? (
+                                 <><AlertTriangle className="w-3 h-3" /> Crystal Artifact</>
+                               ) : (
+                                 <><AlertTriangle className="w-3 h-3" /> Uncertain</>
+                               )}
                             </span>
-                          )}
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {metal.coordinating.length} coordinating atom{metal.coordinating.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Three Column Grid Layout */}
+                  <div className="p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                      {/* Column 1: Geometry & Status Card */}
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Hexagon className="w-4 h-4 text-indigo-500" />
+                          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Geometry</h4>
                         </div>
 
-                        {/* L-M-L Angles (expandable) */}
-                        {metal.geometry.angles.length > 0 && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">
-                              View L-M-L angles ({metal.geometry.angles.length})
-                            </summary>
-                            <div className="mt-1 p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-600 max-h-32 overflow-y-auto">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-[10px]">
-                                {metal.geometry.angles.map((angle, angleIdx) => (
-                                  <div key={angleIdx} className="flex justify-between gap-1 px-1 py-0.5 bg-slate-50 dark:bg-slate-700/50 rounded">
-                                    <span className="text-slate-600 dark:text-slate-400 truncate" title={`${angle.atom1} - M - ${angle.atom2}`}>
-                                      {angle.atom1.split('(')[0]}-M-{angle.atom2.split('(')[0]}
-                                    </span>
-                                    <span className="font-mono text-slate-800 dark:text-slate-200">
-                                      {angle.angle.toFixed(1)}°
-                                    </span>
+                        {metal.geometry ? (
+                          <div className="space-y-3">
+                            {/* Coordination Number - Large Display */}
+                            <div className="text-center pb-3 border-b border-slate-200 dark:border-slate-600">
+                              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                                {metal.geometry.coordinationNumber}
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Coord. Number</div>
+                            </div>
+
+                            {/* Geometry Type */}
+                            <div className="text-center">
+                              <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                {metal.geometry.geometryType}
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400">Geometry Type</div>
+                            </div>
+
+                            {/* Distortion Gauge */}
+                            <div className="pt-2">
+                              <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                                <span>Distortion</span>
+                                <span className="font-mono">CShM: {metal.geometry.rmsd.toFixed(1)}</span>
+                              </div>
+                              {/* Visual Gauge Bar */}
+                              <div className="relative h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div
+                                  className={`absolute left-0 top-0 h-full rounded-full transition-all ${
+                                    metal.geometry.distortion === 'ideal' ? 'bg-emerald-500 w-[10%]' :
+                                    metal.geometry.distortion === 'low' ? 'bg-green-500 w-[30%]' :
+                                    metal.geometry.distortion === 'moderate' ? 'bg-yellow-500 w-[50%]' :
+                                    metal.geometry.distortion === 'high' ? 'bg-orange-500 w-[75%]' :
+                                    'bg-red-500 w-full'
+                                  }`}
+                                />
+                              </div>
+                              {/* Gauge Labels */}
+                              <div className="flex justify-between text-[9px] mt-1">
+                                <span className="text-emerald-600 dark:text-emerald-400">Ideal</span>
+                                <span className="text-red-600 dark:text-red-400">Severe</span>
+                              </div>
+                              {/* Status Badge */}
+                              <div className="mt-2 text-center">
+                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${
+                                  metal.geometry.distortion === 'ideal' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
+                                  metal.geometry.distortion === 'low' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
+                                  metal.geometry.distortion === 'moderate' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300' :
+                                  metal.geometry.distortion === 'high' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300' :
+                                  'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                }`}>
+                                  {metal.geometry.distortion === 'ideal' ? '✓ Ideal Geometry' :
+                                   metal.geometry.distortion === 'low' ? 'Low Distortion' :
+                                   metal.geometry.distortion === 'moderate' ? 'Moderate Distortion' :
+                                   metal.geometry.distortion === 'high' ? 'High Distortion' :
+                                   '⚠ Severe Distortion'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* L-M-L Angles - Collapsible */}
+                            {metal.geometry.angles.length > 0 && (
+                              <details className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-600">
+                                <summary className="cursor-pointer text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1">
+                                  <ChevronDown className="w-3 h-3" />
+                                  View {metal.geometry.angles.length} L-M-L angles
+                                </summary>
+                                <div className="mt-2 max-h-28 overflow-y-auto">
+                                  <div className="grid grid-cols-2 gap-1 text-[9px]">
+                                    {metal.geometry.angles.map((angle, angleIdx) => (
+                                      <div key={angleIdx} className="flex justify-between gap-1 px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded">
+                                        <span className="text-slate-500 dark:text-slate-400 truncate">
+                                          {angle.atom1.split('(')[0]}-M-{angle.atom2.split('(')[0]}
+                                        </span>
+                                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                                          {angle.angle.toFixed(1)}°
+                                        </span>
+                                      </div>
+                                    ))}
                                   </div>
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-400 dark:text-slate-500 italic text-center py-4">
+                            Geometry analysis unavailable
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Column 2: Environment Card */}
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Layers className="w-4 h-4 text-purple-500" />
+                          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Environment</h4>
+                        </div>
+
+                        {/* Hydration Visual */}
+                        {metal.hydrationAnalysis && (
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Hydration</span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                metal.hydrationAnalysis.hydrationState === 'fully_hydrated'
+                                  ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
+                                  : metal.hydrationAnalysis.hydrationState === 'dehydrated'
+                                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                                  : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300'
+                              }`}>
+                                {metal.hydrationAnalysis.hydrationState === 'fully_hydrated' ? 'Hydrated' :
+                                 metal.hydrationAnalysis.hydrationState === 'dehydrated' ? 'Dehydrated' : 'Partial'}
+                              </span>
+                            </div>
+
+                            {/* Visual Icon Grid - Shows coordination slots */}
+                            <div className="flex justify-center gap-1 mb-2">
+                              {Array.from({ length: metal.hydrationAnalysis.expectedHydration }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                                    i < metal.hydrationAnalysis.waterCount
+                                      ? 'bg-cyan-400 dark:bg-cyan-500'
+                                      : i < metal.hydrationAnalysis.waterCount + metal.hydrationAnalysis.proteinLigandCount
+                                      ? 'bg-purple-400 dark:bg-purple-500'
+                                      : 'bg-slate-200 dark:bg-slate-600'
+                                  }`}
+                                  title={
+                                    i < metal.hydrationAnalysis.waterCount
+                                      ? 'Water ligand'
+                                      : i < metal.hydrationAnalysis.waterCount + metal.hydrationAnalysis.proteinLigandCount
+                                      ? 'Protein ligand'
+                                      : 'Empty slot'
+                                  }
+                                >
+                                  {i < metal.hydrationAnalysis.waterCount && (
+                                    <Droplet className="w-3 h-3 text-white" />
+                                  )}
+                                  {i >= metal.hydrationAnalysis.waterCount && i < metal.hydrationAnalysis.waterCount + metal.hydrationAnalysis.proteinLigandCount && (
+                                    <Hexagon className="w-3 h-3 text-white" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Legend */}
+                            <div className="flex justify-center gap-3 text-[9px] text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-cyan-400"></span> Water ({metal.hydrationAnalysis.waterCount})
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-purple-400"></span> Protein ({metal.hydrationAnalysis.proteinLigandCount})
+                              </span>
+                            </div>
+
+                            {/* Displacement bar */}
+                            {metal.hydrationAnalysis.waterDisplacement > 0 && (
+                              <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-600">
+                                <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                                  <span>Water Displacement</span>
+                                  <span className="font-medium text-emerald-600 dark:text-emerald-400">{metal.hydrationAnalysis.waterDisplacement}%</span>
+                                </div>
+                                <div className="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full"
+                                    style={{ width: `${metal.hydrationAnalysis.waterDisplacement}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Shell Analysis Summary */}
+                        {metal.shellAnalysis && (
+                          <div className="pt-3 border-t border-slate-200 dark:border-slate-600">
+                            {/* Primary Shell */}
+                            <div className="mb-3">
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <Target className="w-3 h-3 text-blue-500" />
+                                <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">1st Shell Ligands</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {metal.shellAnalysis.primaryShell.ligandTypes.map((lt, ltIdx) => (
+                                  <span
+                                    key={ltIdx}
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                      lt.type === 'Water'
+                                        ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
+                                        : lt.type.includes('Carboxylate')
+                                        ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                        : lt.type.includes('Imidazole')
+                                        ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                                        : lt.type.includes('Thiolate')
+                                        ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
+                                        : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300'
+                                    }`}
+                                    title={lt.residues.join(', ')}
+                                  >
+                                    {lt.type.split(' ')[0]}: {lt.count}
+                                  </span>
                                 ))}
                               </div>
                             </div>
-                          </details>
+
+                            {/* Secondary Shell */}
+                            {metal.shellAnalysis.secondaryShell.totalResidues > 0 && (
+                              <div className="mb-3">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <Shield className="w-3 h-3 text-green-500" />
+                                  <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">2nd Shell Support</span>
+                                </div>
+                                <div className="flex gap-2 text-[10px]">
+                                  <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
+                                    {metal.shellAnalysis.secondaryShell.totalResidues} res
+                                  </span>
+                                  <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 rounded text-amber-700 dark:text-amber-300">
+                                    {metal.shellAnalysis.secondaryShell.hBondNetwork} H-bonds
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Site Characteristics - Compact */}
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200 dark:border-slate-600">
+                              <div className="text-center p-2 bg-white dark:bg-slate-800 rounded">
+                                <div className={`text-lg font-bold ${
+                                  metal.shellAnalysis.siteCharacteristics.netCharge > 0
+                                    ? 'text-blue-600 dark:text-blue-400'
+                                    : metal.shellAnalysis.siteCharacteristics.netCharge < 0
+                                    ? 'text-red-600 dark:text-red-400'
+                                    : 'text-slate-500'
+                                }`}>
+                                  {metal.shellAnalysis.siteCharacteristics.netCharge > 0 ? '+' : ''}{metal.shellAnalysis.siteCharacteristics.netCharge}
+                                </div>
+                                <div className="text-[9px] text-slate-500">Net Charge</div>
+                              </div>
+                              <div className="text-center p-2 bg-white dark:bg-slate-800 rounded">
+                                <div className={`text-lg font-bold ${
+                                  metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 80
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 50
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {metal.shellAnalysis.siteCharacteristics.shellCompleteness}%
+                                </div>
+                                <div className="text-[9px] text-slate-500">Complete</div>
+                              </div>
+                            </div>
+
+                            {/* Stability & Burial */}
+                            <div className="flex gap-2 mt-2">
+                              <span className={`flex-1 text-center px-2 py-1 rounded text-[10px] font-medium ${
+                                metal.shellAnalysis.siteCharacteristics.stabilityScore === 'very_strong'
+                                  ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                  : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'strong'
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                  : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'moderate'
+                                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                  : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                              }`}>
+                                {metal.shellAnalysis.siteCharacteristics.stabilityScore.replace('_', ' ')}
+                              </span>
+                              <span className={`flex-1 text-center px-2 py-1 rounded text-[10px] font-medium ${
+                                metal.shellAnalysis.siteCharacteristics.burialDepth === 'deep'
+                                  ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                  : metal.shellAnalysis.siteCharacteristics.burialDepth === 'buried'
+                                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                                  : 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300'
+                              }`}>
+                                {metal.shellAnalysis.siteCharacteristics.burialDepth}
+                              </span>
+                            </div>
+                          </div>
                         )}
                       </div>
-                    )}
 
-                    {/* Hydration Analysis Section */}
-                    {metal.hydrationAnalysis && (
-                      <div className="mt-2 pt-2 border-t border-cyan-200 dark:border-cyan-800">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Droplet className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                          <span className="text-xs font-medium text-cyan-700 dark:text-cyan-300">Hydration Analysis</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {/* Hydration State Badge */}
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded font-medium ${
-                            metal.hydrationAnalysis.hydrationState === 'fully_hydrated'
-                              ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
-                              : metal.hydrationAnalysis.hydrationState === 'dehydrated'
-                              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
-                              : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300'
-                          }`}>
-                            {metal.hydrationAnalysis.hydrationState === 'fully_hydrated' ? (
-                              <><Droplet className="w-3 h-3" /> Fully Hydrated</>
-                            ) : metal.hydrationAnalysis.hydrationState === 'dehydrated' ? (
-                              <>○ Dehydrated</>
-                            ) : (
-                              <><Droplet className="w-3 h-3" /> Partial</>
-                            )}
-                          </span>
-
-                          {/* Water Count */}
-                          <span className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-300">
-                            {metal.hydrationAnalysis.waterCount} H₂O
-                          </span>
-
-                          {/* Protein Ligands */}
-                          <span className="px-2 py-1 bg-purple-50 dark:bg-purple-900/30 rounded text-purple-700 dark:text-purple-300">
-                            {metal.hydrationAnalysis.proteinLigandCount} protein
-                          </span>
-
-                          {/* Water Displacement */}
-                          {metal.hydrationAnalysis.waterDisplacement > 0 && (
-                            <span className="px-2 py-1 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
-                              {metal.hydrationAnalysis.waterDisplacement}% displaced
-                            </span>
-                          )}
-
-                          {/* Expected vs Actual */}
-                          <span className="text-slate-500 dark:text-slate-400 text-[10px]">
-                            (expected CN: {metal.hydrationAnalysis.expectedHydration})
-                          </span>
+                      {/* Column 3: Ligand Details Card */}
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Ruler className="w-4 h-4 text-teal-500" />
+                          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Ligand Details</h4>
                         </div>
 
-                        {/* Hydration Note */}
-                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 italic">
-                          {metal.hydrationAnalysis.hydrationNote}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Shell Analysis Section */}
-                    {metal.shellAnalysis && (
-                      <div className="mt-2 pt-2 border-t border-purple-200 dark:border-purple-800">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                          <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Shell Analysis</span>
-                        </div>
-
-                        {/* Primary Shell (1st Coordination Sphere) */}
-                        <div className="mb-3">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Target className="w-3 h-3 text-blue-500" />
-                            <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300">Primary Shell (1st Sphere)</span>
-                            <span className="text-[10px] text-slate-500">— Direct ligands</span>
-                          </div>
-
-                          {/* Ligand Types */}
-                          <div className="flex flex-wrap gap-1.5 mb-1">
-                            {metal.shellAnalysis.primaryShell.ligandTypes.map((lt, ltIdx) => (
-                              <span
-                                key={ltIdx}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
-                                  lt.type === 'Water'
-                                    ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
-                                    : lt.type.includes('Carboxylate')
-                                    ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
-                                    : lt.type.includes('Imidazole')
-                                    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
-                                    : lt.type.includes('Thiolate')
-                                    ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
-                                    : lt.type.includes('Amide') || lt.type.includes('Backbone')
-                                    ? 'bg-slate-100 dark:bg-slate-700/40 text-slate-700 dark:text-slate-300'
-                                    : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+                        {/* Coordinating Atoms - Compact List */}
+                        {metal.coordinating.length > 0 ? (
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {metal.coordinating.map((coord, coordIdx) => (
+                              <div
+                                key={coordIdx}
+                                className={`flex items-center justify-between px-2 py-1.5 rounded ${
+                                  coord.isWater
+                                    ? 'bg-cyan-50 dark:bg-cyan-900/20'
+                                    : 'bg-white dark:bg-slate-800'
                                 }`}
-                                title={lt.residues.join(', ')}
                               >
-                                {lt.type}: {lt.count}
-                              </span>
+                                <div className="flex items-center gap-2">
+                                  {coord.isWater ? (
+                                    <Droplet className="w-3 h-3 text-cyan-500" />
+                                  ) : (
+                                    <Hexagon className="w-3 h-3 text-purple-500" />
+                                  )}
+                                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                    {coord.residue}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                    {coord.atom}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                                    :{coord.chain}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                                  {coord.distance.toFixed(2)}Å
+                                </span>
+                              </div>
                             ))}
                           </div>
-
-                          {/* Primary Shell Stats */}
-                          <div className="flex flex-wrap gap-2 text-[10px]">
-                            <span className="text-slate-600 dark:text-slate-400">
-                              Total: <span className="font-medium text-slate-700 dark:text-slate-300">{metal.shellAnalysis.primaryShell.totalLigands}</span>
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-400">
-                              Protein: <span className="font-medium text-purple-600 dark:text-purple-400">{metal.shellAnalysis.primaryShell.proteinLigands}</span>
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-400">
-                              Water: <span className="font-medium text-cyan-600 dark:text-cyan-400">{metal.shellAnalysis.primaryShell.waterLigands}</span>
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-400">
-                              Avg dist: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{metal.shellAnalysis.primaryShell.avgDistance.toFixed(2)}Å</span>
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Secondary Shell (2nd Coordination Sphere) */}
-                        {metal.shellAnalysis.secondaryShell.residues.length > 0 && (
-                          <div className="mb-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Shield className="w-3 h-3 text-green-500" />
-                              <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">Secondary Shell (2nd Sphere)</span>
-                              <span className="text-[10px] text-slate-500">— H-bond network</span>
-                            </div>
-
-                            {/* Secondary Shell Summary */}
-                            <div className="flex flex-wrap gap-2 text-[10px] mb-1">
-                              <span className="px-2 py-0.5 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
-                                {metal.shellAnalysis.secondaryShell.totalResidues} residues
-                              </span>
-                              {metal.shellAnalysis.secondaryShell.chargedResidues > 0 && (
-                                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-300">
-                                  {metal.shellAnalysis.secondaryShell.chargedResidues} charged
-                                </span>
-                              )}
-                              <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 rounded text-amber-700 dark:text-amber-300">
-                                {metal.shellAnalysis.secondaryShell.hBondNetwork} H-bonds
-                              </span>
-                              {metal.shellAnalysis.secondaryShell.waterBridges > 0 && (
-                                <span className="px-2 py-0.5 bg-cyan-50 dark:bg-cyan-900/30 rounded text-cyan-700 dark:text-cyan-300">
-                                  {metal.shellAnalysis.secondaryShell.waterBridges} water bridges
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Secondary Shell Residues Table */}
-                            <div className="max-h-24 overflow-y-auto">
-                              <div className="flex flex-wrap gap-1">
-                                {metal.shellAnalysis.secondaryShell.residues.slice(0, 8).map((res, resIdx) => (
-                                  <span
-                                    key={resIdx}
-                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] ${
-                                      res.role.includes('charge')
-                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                                        : res.role.includes('polar')
-                                        ? 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300'
-                                        : 'bg-slate-100 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400'
-                                    }`}
-                                    title={`${res.role} | ${res.hBondCount} H-bonds | ${res.distance.toFixed(1)}Å from metal`}
-                                  >
-                                    {res.residue}:{res.chain}
-                                  </span>
-                                ))}
-                                {metal.shellAnalysis.secondaryShell.residues.length > 8 && (
-                                  <span className="text-[9px] text-slate-500 dark:text-slate-400 px-1.5 py-0.5">
-                                    +{metal.shellAnalysis.secondaryShell.residues.length - 8} more
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                        ) : (
+                          <div className="text-xs text-slate-400 dark:text-slate-500 italic text-center py-4">
+                            No coordinating atoms found
                           </div>
                         )}
 
-                        {/* Site Characteristics */}
-                        <div className="mb-2">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Activity className="w-3 h-3 text-orange-500" />
-                            <span className="text-[10px] font-semibold text-orange-700 dark:text-orange-300">Site Characteristics</span>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 text-[10px]">
-                            {/* Net Charge */}
-                            <span className={`px-2 py-0.5 rounded font-medium ${
-                              metal.shellAnalysis.siteCharacteristics.netCharge > 0
-                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                                : metal.shellAnalysis.siteCharacteristics.netCharge < 0
-                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                                : 'bg-slate-100 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400'
-                            }`}>
-                              Charge: {metal.shellAnalysis.siteCharacteristics.netCharge > 0 ? '+' : ''}{metal.shellAnalysis.siteCharacteristics.netCharge}
+                        {/* Average Distance */}
+                        {metal.coordinating.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 text-center">
+                            <span className="text-[10px] text-slate-500">Avg. distance: </span>
+                            <span className="text-sm font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              {(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å
                             </span>
-
-                            {/* Burial Depth */}
-                            <span className={`px-2 py-0.5 rounded font-medium ${
-                              metal.shellAnalysis.siteCharacteristics.burialDepth === 'deep'
-                                ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
-                                : metal.shellAnalysis.siteCharacteristics.burialDepth === 'buried'
-                                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                                : metal.shellAnalysis.siteCharacteristics.burialDepth === 'shallow'
-                                ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                                : 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300'
-                            }`}>
-                              {metal.shellAnalysis.siteCharacteristics.burialDepth.charAt(0).toUpperCase() + metal.shellAnalysis.siteCharacteristics.burialDepth.slice(1)}
-                            </span>
-
-                            {/* Shell Completeness */}
-                            <span className={`px-2 py-0.5 rounded font-medium ${
-                              metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 80
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                                : metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 50
-                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
-                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                            }`}>
-                              {metal.shellAnalysis.siteCharacteristics.shellCompleteness}% complete
-                            </span>
-
-                            {/* Stability Score */}
-                            <span className={`px-2 py-0.5 rounded font-medium ${
-                              metal.shellAnalysis.siteCharacteristics.stabilityScore === 'very_strong'
-                                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                                : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'strong'
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                                : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'moderate'
-                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
-                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                            }`}>
-                              {metal.shellAnalysis.siteCharacteristics.stabilityScore.replace('_', ' ')} stability
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Engineering Notes */}
-                        {metal.shellAnalysis.engineeringNotes.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-purple-100 dark:border-purple-800/50">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Lightbulb className="w-3 h-3 text-yellow-500" />
-                              <span className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-300">Engineering Insights</span>
-                            </div>
-                            <ul className="space-y-0.5">
-                              {metal.shellAnalysis.engineeringNotes.map((note, noteIdx) => (
-                                <li key={noteIdx} className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
-                                  {note}
-                                </li>
-                              ))}
-                            </ul>
                           </div>
                         )}
+                      </div>
+                    </div>
+
+                    {/* Engineering Insights - Yellow highlighted card (only when notes exist) */}
+                    {metal.shellAnalysis?.engineeringNotes && metal.shellAnalysis.engineeringNotes.length > 0 && (
+                      <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Lightbulb className="w-4 h-4 text-amber-500" />
+                          <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Engineering Insights</h4>
+                        </div>
+                        <ul className="space-y-1">
+                          {metal.shellAnalysis.engineeringNotes.map((note, noteIdx) => (
+                            <li key={noteIdx} className="text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed flex items-start gap-2">
+                              <span className="text-amber-400 mt-0.5">•</span>
+                              {note}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
-
-                  {/* Coordinating Atoms Table - Compact */}
-                  {metal.coordinating.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
-                            <th className="px-3 py-1.5 text-left font-medium">Atom</th>
-                            <th className="px-3 py-1.5 text-left font-medium">Residue</th>
-                            <th className="px-3 py-1.5 text-left font-medium">Chain</th>
-                            <th className="px-3 py-1.5 text-right font-medium">Distance (Å)</th>
-                            <th className="px-3 py-1.5 text-center font-medium">Type</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {metal.coordinating.map((coord, coordIdx) => (
-                            <tr
-                              key={coordIdx}
-                              className={`border-t border-slate-100 dark:border-slate-700 ${
-                                coord.isWater
-                                  ? 'bg-cyan-50 dark:bg-cyan-900/10'
-                                  : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
-                              }`}
-                            >
-                              <td className="px-3 py-1.5 font-mono text-slate-700 dark:text-slate-300">
-                                {coord.atom}
-                              </td>
-                              <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">
-                                {coord.residue}
-                              </td>
-                              <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">
-                                {coord.chain}
-                              </td>
-                              <td className="px-3 py-1.5 text-right font-mono text-slate-700 dark:text-slate-300">
-                                {coord.distance.toFixed(2)}
-                              </td>
-                              <td className="px-3 py-1.5 text-center">
-                                {coord.isWater ? (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 text-[10px]">
-                                    <Droplet className="w-2.5 h-2.5" />
-                                    H₂O
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px]">
-                                    <Hexagon className="w-2.5 h-2.5" />
-                                    Res
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs italic">
-                      No coordinating atoms found within {coordinationRadius}Å
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           </div>
 
           {/* Footer */}
-          <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+          <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              💡 Click the <Target className="w-3 h-3 inline text-amber-600" /> button to hide this panel • Typical metal-ligand bonds: 1.8-2.8Å
+              Click the <Target className="w-3 h-3 inline text-slate-500" /> button to hide this panel • Typical metal-ligand bonds: 1.8-2.8Å
             </span>
           </div>
         </div>
