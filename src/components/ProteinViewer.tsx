@@ -4152,204 +4152,122 @@ export default function ProteinViewer() {
                       <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
                         <div className="flex items-center gap-2 mb-3">
                           <Hexagon className="w-4 h-4 text-indigo-500" />
-                          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Geometry</h4>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Geometry</h4>
                         </div>
 
                         {metal.geometry ? (
                           <div className="space-y-3">
-                            {/* Geometry Diagram */}
+                            {/* Real 3D Geometry Diagram - Based on actual coordinates */}
                             <div className="flex justify-center pb-3 border-b border-slate-200 dark:border-slate-600">
                               <div className="relative">
-                                {/* SVG Geometry Diagrams */}
-                                {metal.geometry.geometryType.toLowerCase().includes('linear') && (
-                                  <svg width="80" height="60" viewBox="0 0 80 60" className="text-indigo-500">
-                                    <circle cx="40" cy="30" r="8" fill="currentColor" />
-                                    <circle cx="12" cy="30" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="68" cy="30" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="17" y1="30" x2="32" y2="30" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="48" y1="30" x2="63" y2="30" stroke="currentColor" strokeWidth="2" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('trigonal planar') && (
-                                  <svg width="80" height="70" viewBox="0 0 80 70" className="text-indigo-500">
-                                    <circle cx="40" cy="35" r="8" fill="currentColor" />
-                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="12" cy="55" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="68" cy="55" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="40" y1="27" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="34" y1="41" x2="17" y2="52" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="46" y1="41" x2="63" y2="52" stroke="currentColor" strokeWidth="2" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('tetrahedral') && (
-                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
-                                    <circle cx="40" cy="40" r="8" fill="currentColor" />
-                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="12" cy="65" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="68" cy="65" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="65" cy="25" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="40" y1="32" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="34" y1="46" x2="17" y2="62" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="46" y1="46" x2="63" y2="62" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="46" y1="36" x2="60" y2="28" stroke="currentColor" strokeWidth="2" strokeDasharray="3,2" />
-                                    {/* Tetrahedron edges */}
-                                    <line x1="40" y1="13" x2="17" y2="62" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="40" y1="13" x2="63" y2="62" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="17" y1="62" x2="63" y2="62" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('square planar') && (
-                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
-                                    <circle cx="40" cy="40" r="8" fill="currentColor" />
-                                    <circle cx="10" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="70" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="40" cy="10" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="40" cy="70" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="15" y1="40" x2="32" y2="40" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="48" y1="40" x2="65" y2="40" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="40" y1="15" x2="40" y2="32" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="40" y1="48" x2="40" y2="65" stroke="currentColor" strokeWidth="2" />
-                                    {/* Square outline */}
-                                    <line x1="15" y1="10" x2="65" y2="10" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="15" y1="70" x2="65" y2="70" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="10" y1="15" x2="10" y2="65" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="70" y1="15" x2="70" y2="65" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('trigonal bipyramidal') && (
-                                  <svg width="80" height="90" viewBox="0 0 80 90" className="text-indigo-500">
-                                    <circle cx="40" cy="45" r="8" fill="currentColor" />
-                                    {/* Axial ligands */}
-                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="40" cy="82" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    {/* Equatorial ligands */}
-                                    <circle cx="10" cy="45" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="60" cy="28" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="60" cy="62" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="40" y1="37" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="40" y1="53" x2="40" y2="77" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="32" y1="45" x2="15" y2="45" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="46" y1="40" x2="56" y2="31" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="46" y1="50" x2="56" y2="59" stroke="currentColor" strokeWidth="2" />
-                                    {/* Wireframe */}
-                                    <line x1="15" y1="45" x2="56" y2="31" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="15" y1="45" x2="56" y2="59" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="56" y1="31" x2="56" y2="59" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('square pyramidal') && (
-                                  <svg width="80" height="85" viewBox="0 0 80 85" className="text-indigo-500">
-                                    <circle cx="40" cy="50" r="8" fill="currentColor" />
-                                    {/* Apical ligand */}
-                                    <circle cx="40" cy="10" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    {/* Basal ligands */}
-                                    <circle cx="12" cy="50" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="68" cy="50" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="25" cy="75" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="55" cy="75" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="40" y1="42" x2="40" y2="15" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="32" y1="50" x2="17" y2="50" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="48" y1="50" x2="63" y2="50" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="36" y1="56" x2="28" y2="72" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="44" y1="56" x2="52" y2="72" stroke="currentColor" strokeWidth="2" />
-                                    {/* Square base */}
-                                    <line x1="17" y1="50" x2="28" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="63" y1="50" x2="52" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="28" y1="72" x2="52" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('octahedral') && (
-                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
-                                    <circle cx="40" cy="40" r="8" fill="currentColor" />
-                                    {/* 6 ligands */}
-                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="40" cy="72" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="8" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="72" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="62" cy="18" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="18" cy="62" r="5" className="fill-slate-400 dark:fill-slate-500" />
-                                    {/* Bonds */}
-                                    <line x1="40" y1="32" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="40" y1="48" x2="40" y2="67" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="32" y1="40" x2="13" y2="40" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="48" y1="40" x2="67" y2="40" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="46" y1="34" x2="58" y2="22" stroke="currentColor" strokeWidth="2" strokeDasharray="3,2" />
-                                    <line x1="34" y1="46" x2="22" y2="58" stroke="currentColor" strokeWidth="2" strokeDasharray="3,2" />
-                                    {/* Octahedron wireframe */}
-                                    <line x1="40" y1="13" x2="67" y2="40" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="67" y1="40" x2="40" y2="67" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="40" y1="67" x2="13" y2="40" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                    <line x1="13" y1="40" x2="40" y2="13" stroke="currentColor" strokeWidth="1" opacity="0.3" />
-                                  </svg>
-                                )}
-                                {metal.geometry.geometryType.toLowerCase().includes('pentagonal bipyramidal') && (
-                                  <svg width="80" height="90" viewBox="0 0 80 90" className="text-indigo-500">
-                                    <circle cx="40" cy="45" r="7" fill="currentColor" />
-                                    {/* Axial */}
-                                    <circle cx="40" cy="8" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="40" cy="82" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    {/* Pentagon */}
-                                    <circle cx="10" cy="45" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="70" cy="45" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="22" cy="25" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="58" cy="25" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    <circle cx="40" cy="70" r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                    <line x1="40" y1="38" x2="40" y2="12" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="40" y1="52" x2="40" y2="66" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="33" y1="45" x2="14" y2="45" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="47" y1="45" x2="66" y2="45" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="35" y1="40" x2="25" y2="28" stroke="currentColor" strokeWidth="2" />
-                                    <line x1="45" y1="40" x2="55" y2="28" stroke="currentColor" strokeWidth="2" />
-                                  </svg>
-                                )}
-                                {/* Default/unknown geometry */}
-                                {metal.geometry && !['linear', 'trigonal planar', 'tetrahedral', 'square planar', 'trigonal bipyramidal', 'square pyramidal', 'octahedral', 'pentagonal bipyramidal'].some(g => metal.geometry!.geometryType.toLowerCase().includes(g)) && (
-                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
-                                    <circle cx="40" cy="40" r="10" fill="currentColor" />
-                                    <text x="40" y="45" textAnchor="middle" className="fill-white text-[10px] font-bold">
-                                      {metal.geometry.coordinationNumber}
-                                    </text>
-                                    {/* Show coordination number as distributed dots */}
-                                    {Array.from({ length: Math.min(metal.geometry.coordinationNumber, 8) }).map((_, i) => {
-                                      const angle = (2 * Math.PI * i) / Math.min(metal.geometry!.coordinationNumber, 8) - Math.PI / 2;
-                                      const x = 40 + 28 * Math.cos(angle);
-                                      const y = 40 + 28 * Math.sin(angle);
-                                      return (
-                                        <g key={i}>
-                                          <circle cx={x} cy={y} r="4" className="fill-slate-400 dark:fill-slate-500" />
-                                          <line x1={40 + 12 * Math.cos(angle)} y1={40 + 12 * Math.sin(angle)} x2={x - 4 * Math.cos(angle)} y2={y - 4 * Math.sin(angle)} stroke="currentColor" strokeWidth="1.5" />
-                                        </g>
-                                      );
-                                    })}
-                                  </svg>
-                                )}
+                                {/* Dynamic SVG based on actual coordinating atom positions */}
+                                {(() => {
+                                  // Calculate 2D projection from 3D coordinates
+                                  const coords = metal.coordinating;
+                                  if (coords.length === 0) return null;
+
+                                  // Calculate centroid (metal position approximation)
+                                  const centroid = {
+                                    x: coords.reduce((sum, c) => sum + (c.position?.[0] || 0), 0) / coords.length,
+                                    y: coords.reduce((sum, c) => sum + (c.position?.[1] || 0), 0) / coords.length,
+                                    z: coords.reduce((sum, c) => sum + (c.position?.[2] || 0), 0) / coords.length
+                                  };
+
+                                  // Get relative positions and project to 2D (isometric-like projection)
+                                  const projected = coords.map((c, idx) => {
+                                    const rx = (c.position?.[0] || 0) - centroid.x;
+                                    const ry = (c.position?.[1] || 0) - centroid.y;
+                                    const rz = (c.position?.[2] || 0) - centroid.z;
+                                    // Isometric projection: x' = x - z*0.5, y' = y + (x + z)*0.25
+                                    const px = rx - rz * 0.5;
+                                    const py = ry + (rx + rz) * 0.25;
+                                    return { px, py, isWater: c.isWater, atom: c.atom, idx, rz };
+                                  });
+
+                                  // Find bounds and scale
+                                  const margin = 12;
+                                  const size = 100;
+                                  const maxDist = Math.max(...projected.map(p => Math.max(Math.abs(p.px), Math.abs(p.py))), 1);
+                                  const scale = (size / 2 - margin) / maxDist;
+
+                                  // Sort by depth (rz) for proper layering - back to front
+                                  const sortedByDepth = [...projected].sort((a, b) => a.rz - b.rz);
+
+                                  return (
+                                    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="text-indigo-500">
+                                      {/* Draw bonds first (behind atoms) */}
+                                      {sortedByDepth.map((p) => {
+                                        const x = size / 2 + p.px * scale;
+                                        const y = size / 2 + p.py * scale;
+                                        // Depth-based opacity for 3D effect
+                                        const depthFactor = 0.4 + 0.6 * ((p.rz - Math.min(...projected.map(pp => pp.rz))) / (Math.max(...projected.map(pp => pp.rz)) - Math.min(...projected.map(pp => pp.rz)) + 0.1));
+                                        return (
+                                          <line
+                                            key={`bond-${p.idx}`}
+                                            x1={size / 2}
+                                            y1={size / 2}
+                                            x2={x}
+                                            y2={y}
+                                            stroke="currentColor"
+                                            strokeWidth={p.rz > 0 ? "2" : "1.5"}
+                                            strokeDasharray={p.rz < 0 ? "3,2" : undefined}
+                                            opacity={depthFactor}
+                                          />
+                                        );
+                                      })}
+                                      {/* Metal center */}
+                                      <circle cx={size / 2} cy={size / 2} r="10" fill="currentColor" />
+                                      <text x={size / 2} y={size / 2 + 4} textAnchor="middle" className="fill-white text-[10px] font-bold">
+                                        {metal.element}
+                                      </text>
+                                      {/* Draw ligand atoms */}
+                                      {sortedByDepth.map((p) => {
+                                        const x = size / 2 + p.px * scale;
+                                        const y = size / 2 + p.py * scale;
+                                        // Size varies with depth for 3D effect
+                                        const depthSize = 4 + 2 * ((p.rz - Math.min(...projected.map(pp => pp.rz))) / (Math.max(...projected.map(pp => pp.rz)) - Math.min(...projected.map(pp => pp.rz)) + 0.1));
+                                        return (
+                                          <g key={`atom-${p.idx}`}>
+                                            <circle
+                                              cx={x}
+                                              cy={y}
+                                              r={depthSize}
+                                              className={p.isWater ? "fill-cyan-400" : "fill-purple-400"}
+                                            />
+                                            <title>{p.atom}</title>
+                                          </g>
+                                        );
+                                      })}
+                                    </svg>
+                                  );
+                                })()}
                               </div>
                             </div>
 
                             {/* Geometry Type & CN - Compact */}
                             <div className="flex items-center justify-between text-center">
                               <div>
-                                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                <div className="text-base font-semibold text-slate-700 dark:text-slate-300">
                                   {metal.geometry.geometryType}
                                 </div>
-                                <div className="text-[10px] text-slate-500 dark:text-slate-400">Geometry</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">Geometry</div>
                               </div>
-                              <div className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                                <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                              <div className="px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                                <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
                                   {metal.geometry.coordinationNumber}
                                 </div>
-                                <div className="text-[9px] text-indigo-500 dark:text-indigo-400">CN</div>
+                                <div className="text-[10px] text-indigo-500 dark:text-indigo-400">CN</div>
                               </div>
                             </div>
 
                             {/* Distortion Gauge */}
                             <div className="pt-2">
-                              <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                              <div className="flex justify-between text-xs text-slate-500 mb-1">
                                 <span>Distortion</span>
                                 <span className="font-mono">CShM: {metal.geometry.rmsd.toFixed(1)}</span>
                               </div>
                               {/* Visual Gauge Bar */}
-                              <div className="relative h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                              <div className="relative h-2.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
                                 <div
                                   className={`absolute left-0 top-0 h-full rounded-full transition-all ${
                                     metal.geometry.distortion === 'ideal' ? 'bg-emerald-500 w-[10%]' :
@@ -4361,13 +4279,13 @@ export default function ProteinViewer() {
                                 />
                               </div>
                               {/* Gauge Labels */}
-                              <div className="flex justify-between text-[9px] mt-1">
+                              <div className="flex justify-between text-[10px] mt-1">
                                 <span className="text-emerald-600 dark:text-emerald-400">Ideal</span>
                                 <span className="text-red-600 dark:text-red-400">Severe</span>
                               </div>
                               {/* Status Badge */}
                               <div className="mt-2 text-center">
-                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
                                   metal.geometry.distortion === 'ideal' ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' :
                                   metal.geometry.distortion === 'low' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' :
                                   metal.geometry.distortion === 'moderate' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300' :
@@ -4386,14 +4304,14 @@ export default function ProteinViewer() {
                             {/* L-M-L Angles - Collapsible */}
                             {metal.geometry.angles.length > 0 && (
                               <details className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-600">
-                                <summary className="cursor-pointer text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1">
-                                  <ChevronDown className="w-3 h-3" />
+                                <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1">
+                                  <ChevronDown className="w-3.5 h-3.5" />
                                   View {metal.geometry.angles.length} L-M-L angles
                                 </summary>
-                                <div className="mt-2 max-h-28 overflow-y-auto">
-                                  <div className="grid grid-cols-2 gap-1 text-[9px]">
+                                <div className="mt-2 max-h-32 overflow-y-auto">
+                                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                                     {metal.geometry.angles.map((angle, angleIdx) => (
-                                      <div key={angleIdx} className="flex justify-between gap-1 px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded">
+                                      <div key={angleIdx} className="flex justify-between gap-1 px-2 py-1 bg-white dark:bg-slate-800 rounded">
                                         <span className="text-slate-500 dark:text-slate-400 truncate">
                                           {angle.atom1.split('(')[0]}-M-{angle.atom2.split('(')[0]}
                                         </span>
@@ -4418,15 +4336,15 @@ export default function ProteinViewer() {
                       <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
                         <div className="flex items-center gap-2 mb-3">
                           <Layers className="w-4 h-4 text-purple-500" />
-                          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Environment</h4>
+                          <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Environment</h4>
                         </div>
 
                         {/* Hydration Visual */}
                         {metal.hydrationAnalysis && (
                           <div className="mb-4">
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Hydration</span>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                              <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Hydration</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                 metal.hydrationAnalysis.hydrationState === 'fully_hydrated'
                                   ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
                                   : metal.hydrationAnalysis.hydrationState === 'dehydrated'
@@ -4439,11 +4357,11 @@ export default function ProteinViewer() {
                             </div>
 
                             {/* Visual Icon Grid - Shows coordination slots */}
-                            <div className="flex justify-center gap-1 mb-2">
+                            <div className="flex justify-center gap-1.5 mb-2">
                               {Array.from({ length: metal.hydrationAnalysis.expectedHydration }).map((_, i) => (
                                 <div
                                   key={i}
-                                  className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
                                     i < metal.hydrationAnalysis.waterCount
                                       ? 'bg-cyan-400 dark:bg-cyan-500'
                                       : i < metal.hydrationAnalysis.waterCount + metal.hydrationAnalysis.proteinLigandCount
@@ -4459,33 +4377,33 @@ export default function ProteinViewer() {
                                   }
                                 >
                                   {i < metal.hydrationAnalysis.waterCount && (
-                                    <Droplet className="w-3 h-3 text-white" />
+                                    <Droplet className="w-3.5 h-3.5 text-white" />
                                   )}
                                   {i >= metal.hydrationAnalysis.waterCount && i < metal.hydrationAnalysis.waterCount + metal.hydrationAnalysis.proteinLigandCount && (
-                                    <Hexagon className="w-3 h-3 text-white" />
+                                    <Hexagon className="w-3.5 h-3.5 text-white" />
                                   )}
                                 </div>
                               ))}
                             </div>
 
                             {/* Legend */}
-                            <div className="flex justify-center gap-3 text-[9px] text-slate-500">
-                              <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-cyan-400"></span> Water ({metal.hydrationAnalysis.waterCount})
+                            <div className="flex justify-center gap-4 text-[10px] text-slate-500">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> Water ({metal.hydrationAnalysis.waterCount})
                               </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-purple-400"></span> Protein ({metal.hydrationAnalysis.proteinLigandCount})
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-full bg-purple-400"></span> Protein ({metal.hydrationAnalysis.proteinLigandCount})
                               </span>
                             </div>
 
                             {/* Displacement bar */}
                             {metal.hydrationAnalysis.waterDisplacement > 0 && (
                               <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-600">
-                                <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                                <div className="flex justify-between text-xs text-slate-500 mb-1">
                                   <span>Water Displacement</span>
                                   <span className="font-medium text-emerald-600 dark:text-emerald-400">{metal.hydrationAnalysis.waterDisplacement}%</span>
                                 </div>
-                                <div className="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full"
                                     style={{ width: `${metal.hydrationAnalysis.waterDisplacement}%` }}
@@ -4502,14 +4420,14 @@ export default function ProteinViewer() {
                             {/* Primary Shell */}
                             <div className="mb-3">
                               <div className="flex items-center gap-1.5 mb-2">
-                                <Target className="w-3 h-3 text-blue-500" />
-                                <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">1st Shell Ligands</span>
+                                <Target className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">1st Shell Ligands</span>
                               </div>
-                              <div className="flex flex-wrap gap-1">
+                              <div className="flex flex-wrap gap-1.5">
                                 {metal.shellAnalysis.primaryShell.ligandTypes.map((lt, ltIdx) => (
                                   <span
                                     key={ltIdx}
-                                    className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                    className={`px-2 py-0.5 rounded text-[10px] font-medium ${
                                       lt.type === 'Water'
                                         ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
                                         : lt.type.includes('Carboxylate')
@@ -4532,14 +4450,14 @@ export default function ProteinViewer() {
                             {metal.shellAnalysis.secondaryShell.totalResidues > 0 && (
                               <div className="mb-3">
                                 <div className="flex items-center gap-1.5 mb-2">
-                                  <Shield className="w-3 h-3 text-green-500" />
-                                  <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">2nd Shell Support</span>
+                                  <Shield className="w-3.5 h-3.5 text-green-500" />
+                                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">2nd Shell Support</span>
                                 </div>
-                                <div className="flex gap-2 text-[10px]">
-                                  <span className="px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
+                                <div className="flex gap-2 text-xs">
+                                  <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
                                     {metal.shellAnalysis.secondaryShell.totalResidues} res
                                   </span>
-                                  <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 rounded text-amber-700 dark:text-amber-300">
+                                  <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 rounded text-amber-700 dark:text-amber-300">
                                     {metal.shellAnalysis.secondaryShell.hBondNetwork} H-bonds
                                   </span>
                                 </div>
@@ -4549,7 +4467,7 @@ export default function ProteinViewer() {
                             {/* Site Characteristics - Compact */}
                             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200 dark:border-slate-600">
                               <div className="text-center p-2 bg-white dark:bg-slate-800 rounded">
-                                <div className={`text-lg font-bold ${
+                                <div className={`text-xl font-bold ${
                                   metal.shellAnalysis.siteCharacteristics.netCharge > 0
                                     ? 'text-blue-600 dark:text-blue-400'
                                     : metal.shellAnalysis.siteCharacteristics.netCharge < 0
@@ -4558,10 +4476,10 @@ export default function ProteinViewer() {
                                 }`}>
                                   {metal.shellAnalysis.siteCharacteristics.netCharge > 0 ? '+' : ''}{metal.shellAnalysis.siteCharacteristics.netCharge}
                                 </div>
-                                <div className="text-[9px] text-slate-500">Net Charge</div>
+                                <div className="text-[10px] text-slate-500">Net Charge</div>
                               </div>
                               <div className="text-center p-2 bg-white dark:bg-slate-800 rounded">
-                                <div className={`text-lg font-bold ${
+                                <div className={`text-xl font-bold ${
                                   metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 80
                                     ? 'text-emerald-600 dark:text-emerald-400'
                                     : metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 50
@@ -4570,13 +4488,13 @@ export default function ProteinViewer() {
                                 }`}>
                                   {metal.shellAnalysis.siteCharacteristics.shellCompleteness}%
                                 </div>
-                                <div className="text-[9px] text-slate-500">Complete</div>
+                                <div className="text-[10px] text-slate-500">Complete</div>
                               </div>
                             </div>
 
                             {/* Stability & Burial */}
                             <div className="flex gap-2 mt-2">
-                              <span className={`flex-1 text-center px-2 py-1 rounded text-[10px] font-medium ${
+                              <span className={`flex-1 text-center px-2 py-1.5 rounded text-xs font-medium ${
                                 metal.shellAnalysis.siteCharacteristics.stabilityScore === 'very_strong'
                                   ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                                   : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'strong'
@@ -4587,7 +4505,7 @@ export default function ProteinViewer() {
                               }`}>
                                 {metal.shellAnalysis.siteCharacteristics.stabilityScore.replace('_', ' ')}
                               </span>
-                              <span className={`flex-1 text-center px-2 py-1 rounded text-[10px] font-medium ${
+                              <span className={`flex-1 text-center px-2 py-1.5 rounded text-xs font-medium ${
                                 metal.shellAnalysis.siteCharacteristics.burialDepth === 'deep'
                                   ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
                                   : metal.shellAnalysis.siteCharacteristics.burialDepth === 'buried'
@@ -4606,23 +4524,24 @@ export default function ProteinViewer() {
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <Ruler className="w-4 h-4 text-teal-500" />
-                            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Ligand Details</h4>
+                            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Ligand Details</h4>
                           </div>
-                          {/* Average Distance - Compact inline */}
+                          {/* Average Distance - More prominent */}
                           {metal.coordinating.length > 0 && (
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                              Avg: <span className="font-mono font-medium">{(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å</span>
-                            </span>
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+                              <span className="text-xs text-teal-600 dark:text-teal-400">Avg:</span>
+                              <span className="text-sm font-mono font-bold text-teal-700 dark:text-teal-300">{(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å</span>
+                            </div>
                           )}
                         </div>
 
                         {/* Coordinating Atoms - Extended List */}
                         {metal.coordinating.length > 0 ? (
-                          <div className="space-y-1 flex-1">
+                          <div className="space-y-1.5 flex-1">
                             {metal.coordinating.map((coord, coordIdx) => (
                               <div
                                 key={coordIdx}
-                                className={`flex items-center justify-between px-2 py-1.5 rounded ${
+                                className={`flex items-center justify-between px-2.5 py-2 rounded ${
                                   coord.isWater
                                     ? 'bg-cyan-50 dark:bg-cyan-900/20'
                                     : 'bg-white dark:bg-slate-800'
@@ -4630,28 +4549,28 @@ export default function ProteinViewer() {
                               >
                                 <div className="flex items-center gap-2">
                                   {coord.isWater ? (
-                                    <Droplet className="w-3 h-3 text-cyan-500" />
+                                    <Droplet className="w-3.5 h-3.5 text-cyan-500" />
                                   ) : (
-                                    <Hexagon className="w-3 h-3 text-purple-500" />
+                                    <Hexagon className="w-3.5 h-3.5 text-purple-500" />
                                   )}
-                                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                                     {coord.residue}
                                   </span>
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                                     {coord.atom}
                                   </span>
-                                  <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
                                     :{coord.chain}
                                   </span>
                                 </div>
-                                <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                                <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-400">
                                   {coord.distance.toFixed(2)}Å
                                 </span>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <div className="text-xs text-slate-400 dark:text-slate-500 italic text-center py-4">
+                          <div className="text-sm text-slate-400 dark:text-slate-500 italic text-center py-4">
                             No coordinating atoms found
                           </div>
                         )}
@@ -4663,11 +4582,11 @@ export default function ProteinViewer() {
                       <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
                         <div className="flex items-center gap-2 mb-2">
                           <Lightbulb className="w-4 h-4 text-amber-500" />
-                          <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Engineering Insights</h4>
+                          <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Engineering Insights</h4>
                         </div>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1.5">
                           {metal.shellAnalysis.engineeringNotes.map((note, noteIdx) => (
-                            <li key={noteIdx} className="text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed flex items-start gap-2">
+                            <li key={noteIdx} className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed flex items-start gap-2">
                               <span className="text-amber-400 mt-0.5">•</span>
                               {note}
                             </li>
