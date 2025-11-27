@@ -100,8 +100,16 @@ export default function ProteinViewer() {
         rmsd: number;
         distortion: 'ideal' | 'low' | 'moderate' | 'high' | 'severe';
       } | null;
-      bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain'; // Classification
-      bindingSiteReason: string; // Explanation for classification
+      bindingSiteType: 'functional' | 'crystal_artifact' | 'uncertain';
+      bindingSiteReason: string;
+      hydrationAnalysis: {
+        waterCount: number;
+        proteinLigandCount: number;
+        hydrationState: 'fully_hydrated' | 'partially_hydrated' | 'dehydrated';
+        expectedHydration: number; // Typical hydration number for this metal
+        waterDisplacement: number; // Percentage of expected waters displaced
+        hydrationNote: string; // Interpretation
+      };
     }[];
     totalResidues: number;
     totalWaters: number;
@@ -138,30 +146,37 @@ export default function ProteinViewer() {
   // Custom residue highlighting
   const [showResidueHighlight, setShowResidueHighlight] = useState(false);
   const [selectedResidueTypes, setSelectedResidueTypes] = useState<string[]>([]);
-  const [highlightColor, setHighlightColor] = useState('#FF6B6B'); // Default highlight color
+  const [highlightColor, setHighlightColor] = useState('#FF6B6B'); // Default highlight color (used when "Use custom color" is enabled)
+  const [useCustomColor, setUseCustomColor] = useState(false); // Toggle between category colors and custom color
 
-  // All standard amino acids for selection
+  // All standard amino acids for selection - each with unique color within category
   const AMINO_ACIDS = [
-    { code: 'ALA', name: 'Alanine', short: 'A', category: 'hydrophobic' },
-    { code: 'ARG', name: 'Arginine', short: 'R', category: 'positive' },
-    { code: 'ASN', name: 'Asparagine', short: 'N', category: 'polar' },
-    { code: 'ASP', name: 'Aspartate', short: 'D', category: 'negative' },
-    { code: 'CYS', name: 'Cysteine', short: 'C', category: 'polar' },
-    { code: 'GLN', name: 'Glutamine', short: 'Q', category: 'polar' },
-    { code: 'GLU', name: 'Glutamate', short: 'E', category: 'negative' },
-    { code: 'GLY', name: 'Glycine', short: 'G', category: 'special' },
-    { code: 'HIS', name: 'Histidine', short: 'H', category: 'positive' },
-    { code: 'ILE', name: 'Isoleucine', short: 'I', category: 'hydrophobic' },
-    { code: 'LEU', name: 'Leucine', short: 'L', category: 'hydrophobic' },
-    { code: 'LYS', name: 'Lysine', short: 'K', category: 'positive' },
-    { code: 'MET', name: 'Methionine', short: 'M', category: 'hydrophobic' },
-    { code: 'PHE', name: 'Phenylalanine', short: 'F', category: 'aromatic' },
-    { code: 'PRO', name: 'Proline', short: 'P', category: 'special' },
-    { code: 'SER', name: 'Serine', short: 'S', category: 'polar' },
-    { code: 'THR', name: 'Threonine', short: 'T', category: 'polar' },
-    { code: 'TRP', name: 'Tryptophan', short: 'W', category: 'aromatic' },
-    { code: 'TYR', name: 'Tyrosine', short: 'Y', category: 'aromatic' },
-    { code: 'VAL', name: 'Valine', short: 'V', category: 'hydrophobic' },
+    // Positive (Blues) - different shades of blue
+    { code: 'ARG', name: 'Arginine', short: 'R', category: 'positive', color: '#2E86AB' },
+    { code: 'LYS', name: 'Lysine', short: 'K', category: 'positive', color: '#4A90D9' },
+    { code: 'HIS', name: 'Histidine', short: 'H', category: 'positive', color: '#6BAED6' },
+    // Negative (Reds) - different shades of red
+    { code: 'ASP', name: 'Aspartate', short: 'D', category: 'negative', color: '#C0392B' },
+    { code: 'GLU', name: 'Glutamate', short: 'E', category: 'negative', color: '#E74C3C' },
+    // Polar (Greens) - different shades of green
+    { code: 'SER', name: 'Serine', short: 'S', category: 'polar', color: '#27AE60' },
+    { code: 'THR', name: 'Threonine', short: 'T', category: 'polar', color: '#2ECC71' },
+    { code: 'ASN', name: 'Asparagine', short: 'N', category: 'polar', color: '#58D68D' },
+    { code: 'GLN', name: 'Glutamine', short: 'Q', category: 'polar', color: '#82E0AA' },
+    { code: 'CYS', name: 'Cysteine', short: 'C', category: 'polar', color: '#F4D03F' }, // Yellow-ish for sulfur
+    // Hydrophobic (Oranges/Browns) - different shades
+    { code: 'ALA', name: 'Alanine', short: 'A', category: 'hydrophobic', color: '#E67E22' },
+    { code: 'VAL', name: 'Valine', short: 'V', category: 'hydrophobic', color: '#F39C12' },
+    { code: 'LEU', name: 'Leucine', short: 'L', category: 'hydrophobic', color: '#D35400' },
+    { code: 'ILE', name: 'Isoleucine', short: 'I', category: 'hydrophobic', color: '#CA6F1E' },
+    { code: 'MET', name: 'Methionine', short: 'M', category: 'hydrophobic', color: '#B9770E' },
+    // Aromatic (Purples) - different shades of purple
+    { code: 'PHE', name: 'Phenylalanine', short: 'F', category: 'aromatic', color: '#8E44AD' },
+    { code: 'TYR', name: 'Tyrosine', short: 'Y', category: 'aromatic', color: '#9B59B6' },
+    { code: 'TRP', name: 'Tryptophan', short: 'W', category: 'aromatic', color: '#A569BD' },
+    // Special (Grays)
+    { code: 'GLY', name: 'Glycine', short: 'G', category: 'special', color: '#7F8C8D' },
+    { code: 'PRO', name: 'Proline', short: 'P', category: 'special', color: '#95A5A6' },
   ];
 
   // Quick select categories
@@ -837,7 +852,8 @@ export default function ProteinViewer() {
           coordinating: m.coordinating,
           geometry: m.geometry,
           bindingSiteType: m.bindingSiteType,
-          bindingSiteReason: m.bindingSiteReason
+          bindingSiteReason: m.bindingSiteReason,
+          hydrationAnalysis: m.hydrationAnalysis
         })),
         totalResidues: metalCoordination.coordinatingResidues.size,
         totalWaters: metalCoordination.coordinatingWaters.size
@@ -1556,13 +1572,68 @@ export default function ProteinViewer() {
         bindingSiteReason = `${proteinContacts} protein, ${waterContacts} water contacts`;
       }
 
-      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}, Type=${bindingSiteType}`);
+      // Hydration analysis
+      // Expected hydration numbers based on metal type (from literature)
+      const expectedHydrationByMetal: Record<string, number> = {
+        // Alkali metals - high hydration
+        'NA': 6, 'K': 6, 'LI': 4, 'RB': 8, 'CS': 8,
+        // Alkaline earth - variable
+        'MG': 6, 'CA': 7, 'SR': 8, 'BA': 8,
+        // Common transition metals
+        'ZN': 4, 'CU': 4, 'FE': 6, 'MN': 6, 'CO': 6, 'NI': 6,
+        // Lanthanides - high coordination
+        'LA': 9, 'CE': 9, 'PR': 9, 'ND': 9, 'EU': 9, 'GD': 9, 'TB': 9, 'DY': 9,
+        // Default
+        'DEFAULT': 6
+      };
+
+      const expectedHydration = expectedHydrationByMetal[metal.element] || expectedHydrationByMetal['DEFAULT'];
+      const waterDisplacement = expectedHydration > 0
+        ? Math.round(((expectedHydration - waterContacts) / expectedHydration) * 100)
+        : 0;
+
+      // Determine hydration state
+      let hydrationState: 'fully_hydrated' | 'partially_hydrated' | 'dehydrated';
+      let hydrationNote: string;
+
+      if (proteinContacts === 0 && waterContacts > 0) {
+        hydrationState = 'fully_hydrated';
+        hydrationNote = `All ${waterContacts} coordination sites occupied by water - metal is solvated, not protein-bound`;
+      } else if (waterContacts === 0 && proteinContacts > 0) {
+        hydrationState = 'dehydrated';
+        hydrationNote = `Complete water displacement by ${proteinContacts} protein ligands - mature binding site`;
+      } else if (proteinContacts > 0 && waterContacts > 0) {
+        hydrationState = 'partially_hydrated';
+        const ratio = proteinContacts / (proteinContacts + waterContacts);
+        if (ratio >= 0.7) {
+          hydrationNote = `High protein occupancy (${Math.round(ratio * 100)}%) - ${waterDisplacement}% water displaced`;
+        } else if (ratio >= 0.4) {
+          hydrationNote = `Mixed coordination (${proteinContacts} protein, ${waterContacts} water) - binding site may be incomplete`;
+        } else {
+          hydrationNote = `Low protein occupancy (${Math.round(ratio * 100)}%) - mostly hydrated, weak binding`;
+        }
+      } else {
+        hydrationState = 'dehydrated';
+        hydrationNote = 'No coordination detected';
+      }
+
+      const hydrationAnalysis = {
+        waterCount: waterContacts,
+        proteinLigandCount: proteinContacts,
+        hydrationState,
+        expectedHydration,
+        waterDisplacement: Math.max(0, waterDisplacement),
+        hydrationNote
+      };
+
+      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}, Type=${bindingSiteType}, Hydration=${hydrationState}`);
 
       return {
         ...metal,
         geometry,
         bindingSiteType,
-        bindingSiteReason
+        bindingSiteReason,
+        hydrationAnalysis
       };
     });
 
@@ -1923,7 +1994,7 @@ export default function ProteinViewer() {
   };
 
   // Apply custom residue highlighting
-  const applyResidueHighlighting = async (structureRefToUse: StateObjectRef<any>, residueTypes: string[], color: string) => {
+  const applyResidueHighlighting = async (structureRefToUse: StateObjectRef<any>, residueTypes: string[], customColor: string, useCustom: boolean) => {
     if (!pluginRef.current || residueTypes.length === 0) return;
 
     const plugin = pluginRef.current;
@@ -1932,42 +2003,73 @@ export default function ProteinViewer() {
       // First remove any existing custom highlights
       await removeCustomHighlights();
 
-      // Create a component for selected residue types
-      const highlightComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
-        structureRefToUse,
-        MS.struct.modifier.union([
-          MS.struct.generator.atomGroups({
-            'residue-test': MS.core.set.has([MS.set(...residueTypes), MS.ammp('label_comp_id')])
-          })
-        ]),
-        'custom-residue-highlight',
-        { label: `Highlighted: ${residueTypes.join(', ')}` }
-      );
+      if (useCustom) {
+        // Use single custom color for all selected residues
+        const highlightComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+          structureRefToUse,
+          MS.struct.modifier.union([
+            MS.struct.generator.atomGroups({
+              'residue-test': MS.core.set.has([MS.set(...residueTypes), MS.ammp('label_comp_id')])
+            })
+          ]),
+          'custom-residue-highlight',
+          { label: `Highlighted: ${residueTypes.join(', ')}` }
+        );
 
-      if (highlightComponent) {
-        // Convert hex color to Molstar Color
-        const hexColor = color.replace('#', '');
-        const colorValue = Color(parseInt(hexColor, 16));
+        if (highlightComponent) {
+          const hexColor = customColor.replace('#', '');
+          const colorValue = Color(parseInt(hexColor, 16));
 
-        await plugin.builders.structure.representation.addRepresentation(highlightComponent, {
-          type: 'ball-and-stick',
-          color: 'uniform' as any,
-          colorParams: { value: colorValue },
-          typeParams: {
-            sizeFactor: 0.4,
-            sizeAspectRatio: 0.73,
-          },
-        }, { tag: 'custom-residue-highlight' });
+          await plugin.builders.structure.representation.addRepresentation(highlightComponent, {
+            type: 'ball-and-stick',
+            color: 'uniform' as any,
+            colorParams: { value: colorValue },
+            typeParams: { sizeFactor: 0.4, sizeAspectRatio: 0.73 },
+          }, { tag: 'custom-residue-highlight' });
 
-        // Also add a semi-transparent surface for better visibility
-        await plugin.builders.structure.representation.addRepresentation(highlightComponent, {
-          type: 'molecular-surface',
-          color: 'uniform' as any,
-          colorParams: { value: colorValue },
-          typeParams: {
-            alpha: 0.35,
-          },
-        }, { tag: 'custom-residue-highlight-surface' });
+          await plugin.builders.structure.representation.addRepresentation(highlightComponent, {
+            type: 'molecular-surface',
+            color: 'uniform' as any,
+            colorParams: { value: colorValue },
+            typeParams: { alpha: 0.35 },
+          }, { tag: 'custom-residue-highlight-surface' });
+        }
+      } else {
+        // Use individual category colors for each residue type
+        for (const resType of residueTypes) {
+          const aaInfo = AMINO_ACIDS.find(aa => aa.code === resType);
+          const resColor = aaInfo?.color || '#FF6B6B';
+
+          const component = await plugin.builders.structure.tryCreateComponentFromExpression(
+            structureRefToUse,
+            MS.struct.modifier.union([
+              MS.struct.generator.atomGroups({
+                'residue-test': MS.core.rel.eq([MS.ammp('label_comp_id'), resType])
+              })
+            ]),
+            `custom-residue-highlight-${resType}`,
+            { label: `${resType}` }
+          );
+
+          if (component) {
+            const hexColor = resColor.replace('#', '');
+            const colorValue = Color(parseInt(hexColor, 16));
+
+            await plugin.builders.structure.representation.addRepresentation(component, {
+              type: 'ball-and-stick',
+              color: 'uniform' as any,
+              colorParams: { value: colorValue },
+              typeParams: { sizeFactor: 0.4, sizeAspectRatio: 0.73 },
+            }, { tag: 'custom-residue-highlight' });
+
+            await plugin.builders.structure.representation.addRepresentation(component, {
+              type: 'molecular-surface',
+              color: 'uniform' as any,
+              colorParams: { value: colorValue },
+              typeParams: { alpha: 0.35 },
+            }, { tag: 'custom-residue-highlight-surface' });
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to apply residue highlighting:', error);
@@ -2040,11 +2142,11 @@ export default function ProteinViewer() {
   // Apply highlighting when selection changes
   useEffect(() => {
     if (showResidueHighlight && structureRef.current && selectedResidueTypes.length > 0) {
-      applyResidueHighlighting(structureRef.current, selectedResidueTypes, highlightColor);
+      applyResidueHighlighting(structureRef.current, selectedResidueTypes, highlightColor, useCustomColor);
     } else if (showResidueHighlight && selectedResidueTypes.length === 0) {
       removeCustomHighlights();
     }
-  }, [selectedResidueTypes, highlightColor, showResidueHighlight]);
+  }, [selectedResidueTypes, highlightColor, useCustomColor, showResidueHighlight]);
 
   // Create a StructureElement.Loci for coordinating atoms
   const createCoordinatingLoci = (structure: Structure, atomIndices: Map<number, Set<number>>): StructureElement.Loci | null => {
@@ -3848,6 +3950,61 @@ export default function ProteinViewer() {
                         )}
                       </div>
                     )}
+
+                    {/* Hydration Analysis Section */}
+                    {metal.hydrationAnalysis && (
+                      <div className="mt-2 pt-2 border-t border-cyan-200 dark:border-cyan-800">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Droplet className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                          <span className="text-xs font-medium text-cyan-700 dark:text-cyan-300">Hydration Analysis</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {/* Hydration State Badge */}
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded font-medium ${
+                            metal.hydrationAnalysis.hydrationState === 'fully_hydrated'
+                              ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
+                              : metal.hydrationAnalysis.hydrationState === 'dehydrated'
+                              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                              : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300'
+                          }`}>
+                            {metal.hydrationAnalysis.hydrationState === 'fully_hydrated' ? (
+                              <><Droplet className="w-3 h-3" /> Fully Hydrated</>
+                            ) : metal.hydrationAnalysis.hydrationState === 'dehydrated' ? (
+                              <>○ Dehydrated</>
+                            ) : (
+                              <><Droplet className="w-3 h-3" /> Partial</>
+                            )}
+                          </span>
+
+                          {/* Water Count */}
+                          <span className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-300">
+                            {metal.hydrationAnalysis.waterCount} H₂O
+                          </span>
+
+                          {/* Protein Ligands */}
+                          <span className="px-2 py-1 bg-purple-50 dark:bg-purple-900/30 rounded text-purple-700 dark:text-purple-300">
+                            {metal.hydrationAnalysis.proteinLigandCount} protein
+                          </span>
+
+                          {/* Water Displacement */}
+                          {metal.hydrationAnalysis.waterDisplacement > 0 && (
+                            <span className="px-2 py-1 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
+                              {metal.hydrationAnalysis.waterDisplacement}% displaced
+                            </span>
+                          )}
+
+                          {/* Expected vs Actual */}
+                          <span className="text-slate-500 dark:text-slate-400 text-[10px]">
+                            (expected CN: {metal.hydrationAnalysis.expectedHydration})
+                          </span>
+                        </div>
+
+                        {/* Hydration Note */}
+                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 italic">
+                          {metal.hydrationAnalysis.hydrationNote}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Coordinating Atoms Table - Compact */}
@@ -4139,18 +4296,42 @@ export default function ProteinViewer() {
             <div className="flex items-center gap-3">
               <Highlighter className="w-5 h-5 text-pink-600 dark:text-pink-400" />
               <h3 className="font-semibold text-pink-800 dark:text-pink-200">
-                Custom Residue Highlighting
+                Residue Highlighting
               </h3>
-              {/* Color Picker */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Color:</span>
-                <input
-                  type="color"
-                  value={highlightColor}
-                  onChange={(e) => setHighlightColor(e.target.value)}
-                  className="w-6 h-6 rounded cursor-pointer border border-slate-300 dark:border-slate-600"
-                  title="Select highlight color"
-                />
+              {/* Color Mode Toggle */}
+              <div className="flex items-center gap-2 ml-2">
+                <button
+                  onClick={() => setUseCustomColor(false)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    !useCustomColor
+                      ? 'bg-pink-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
+                  title="Use category-based colors (different shades for each amino acid)"
+                >
+                  Category Colors
+                </button>
+                <button
+                  onClick={() => setUseCustomColor(true)}
+                  className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
+                    useCustomColor
+                      ? 'bg-pink-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
+                  title="Use single custom color for all selected residues"
+                >
+                  Custom
+                  {useCustomColor && (
+                    <input
+                      type="color"
+                      value={highlightColor}
+                      onChange={(e) => { e.stopPropagation(); setHighlightColor(e.target.value); }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 rounded cursor-pointer border-0"
+                      title="Pick custom color"
+                    />
+                  )}
+                </button>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -4208,19 +4389,22 @@ export default function ProteinViewer() {
             <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
               {AMINO_ACIDS.map(aa => {
                 const isSelected = selectedResidueTypes.includes(aa.code);
-                const category = RESIDUE_CATEGORIES.find(c => c.residues.includes(aa.code));
+                // Use individual amino acid color or custom color based on mode
+                const displayColor = useCustomColor ? highlightColor : aa.color;
                 return (
                   <button
                     key={aa.code}
                     onClick={() => handleResidueTypeToggle(aa.code)}
                     className={`p-2 text-xs rounded transition-all ${
                       isSelected
-                        ? 'ring-2 ring-pink-500 shadow-md transform scale-105'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                        ? 'ring-2 shadow-md transform scale-105'
+                        : 'hover:opacity-80'
                     }`}
                     style={{
-                      backgroundColor: isSelected ? highlightColor : (category ? `${category.color}20` : 'transparent'),
-                      color: isSelected ? 'white' : undefined,
+                      backgroundColor: isSelected ? displayColor : `${aa.color}30`,
+                      color: isSelected ? 'white' : aa.color,
+                      borderColor: aa.color,
+                      // Ring color is controlled via Tailwind classes
                     }}
                     title={`${aa.name} (${aa.short}) - ${aa.category}`}
                   >
