@@ -4703,11 +4703,11 @@ export default function ProteinViewer() {
                                       const angle = (2 * Math.PI * idx) / coords.length - Math.PI / 2;
                                       const boxX = centerX + (ligandRadius + 30) * Math.cos(angle);
                                       const boxY = centerY + (ligandRadius + 30) * Math.sin(angle);
-                                      const color = getDistanceColor(coord.distance);
+                                      const distColor = getDistanceColor(coord.distance);
 
                                       return (
                                         <g key={`residue-${idx}`} transform={`translate(${boxX}, ${boxY})`}>
-                                          {/* Residue box */}
+                                          {/* Residue box - border color indicates distance quality */}
                                           <rect
                                             x={-residueBoxWidth / 2}
                                             y={-residueBoxHeight / 2}
@@ -4716,8 +4716,8 @@ export default function ProteinViewer() {
                                             rx="4"
                                             fill={coord.isWater ? '#ecfeff' : '#faf5ff'}
                                             className={coord.isWater ? 'dark:fill-cyan-900/40' : 'dark:fill-purple-900/40'}
-                                            stroke={coord.isWater ? '#22d3ee' : '#a855f7'}
-                                            strokeWidth="1.5"
+                                            stroke={distColor}
+                                            strokeWidth="2"
                                           />
                                           {/* Residue name */}
                                           <text
