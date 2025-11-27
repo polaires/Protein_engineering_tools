@@ -1594,6 +1594,24 @@ export default function ProteinViewer() {
     const positiveResidues = new Set(['ARG', 'LYS', 'HIS']);
     const negativeResidues = new Set(['ASP', 'GLU']);
 
+    // Metal elements to exclude from ligand analysis (metals are handled by metal coordination analysis)
+    const metalElements = new Set([
+      // Alkali metals
+      'LI', 'NA', 'K', 'RB', 'CS', 'FR',
+      // Alkaline earth metals
+      'BE', 'MG', 'CA', 'SR', 'BA', 'RA',
+      // Transition metals (3d, 4d, 5d)
+      'SC', 'TI', 'V', 'CR', 'MN', 'FE', 'CO', 'NI', 'CU', 'ZN',
+      'Y', 'ZR', 'NB', 'MO', 'TC', 'RU', 'RH', 'PD', 'AG', 'CD',
+      'HF', 'TA', 'W', 'RE', 'OS', 'IR', 'PT', 'AU', 'HG',
+      // Post-transition metals
+      'AL', 'GA', 'IN', 'SN', 'TL', 'PB', 'BI', 'PO',
+      // Lanthanides (rare earths)
+      'LA', 'CE', 'PR', 'ND', 'PM', 'SM', 'EU', 'GD', 'TB', 'DY', 'HO', 'ER', 'TM', 'YB', 'LU',
+      // Actinides
+      'AC', 'TH', 'PA', 'U', 'NP', 'PU', 'AM', 'CM', 'BK', 'CF', 'ES', 'FM', 'MD', 'NO', 'LR'
+    ]);
+
     const ligandDetails: {
       name: string;
       info: string;
@@ -1627,8 +1645,10 @@ export default function ProteinViewer() {
         const entityType = SP.entity.type(l);
         const resName = SP.atom.label_comp_id(l);
 
-        // Check if this is a ligand (non-polymer, non-water, non-ion)
-        if (entityType === 'non-polymer' && resName !== 'HOH' && resName !== 'WAT') {
+        // Check if this is a ligand (non-polymer, non-water, non-metal)
+        // Metal ions are handled by metal coordination analysis
+        const isMetal = metalElements.has(resName) || metalElements.has(resName.toUpperCase());
+        if (entityType === 'non-polymer' && resName !== 'HOH' && resName !== 'WAT' && !isMetal) {
           const chainId = SP.chain.label_asym_id(l);
           const resSeq = SP.residue.label_seq_id(l);
           const key = `${chainId}:${resSeq}:${resName}`;
@@ -1787,6 +1807,12 @@ export default function ProteinViewer() {
     if (pluginRef.current && structureRef.current && newState) {
       await analyzeLigands(structureRef.current);
     } else if (!newState) {
+      // Clear selection highlighting when turning off
+      if (pluginRef.current) {
+        pluginRef.current.managers.structure.selection.clear();
+        // Re-apply normal visualization to clear the highlighting colors
+        await updateVisualization(selectedRepresentation, selectedColorScheme);
+      }
       setLigandData(null);
     }
   };
@@ -3930,7 +3956,7 @@ export default function ProteinViewer() {
                 {/* Help tooltip */}
                 <div className="relative group">
                   <HelpCircle className="w-3.5 h-3.5 text-slate-400 hover:text-purple-500 cursor-help" />
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-white dark:bg-slate-800 rounded shadow-lg border border-slate-200 dark:border-slate-700 text-xs z-50">
+                  <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-2 bg-white dark:bg-slate-800 rounded shadow-lg border border-slate-200 dark:border-slate-700 text-xs z-50">
                     <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">Typical contact distances:</p>
                     <ul className="space-y-0.5 text-slate-600 dark:text-slate-400">
                       <li>• H-bonds: 2.5-3.5 Å</li>
