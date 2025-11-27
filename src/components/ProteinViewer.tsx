@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
-  Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle
+  Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle,
+  Highlighter, Zap
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -134,6 +135,45 @@ export default function ProteinViewer() {
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState(false);
 
+  // Custom residue highlighting
+  const [showResidueHighlight, setShowResidueHighlight] = useState(false);
+  const [selectedResidueTypes, setSelectedResidueTypes] = useState<string[]>([]);
+  const [highlightColor, setHighlightColor] = useState('#FF6B6B'); // Default highlight color
+
+  // All standard amino acids for selection
+  const AMINO_ACIDS = [
+    { code: 'ALA', name: 'Alanine', short: 'A', category: 'hydrophobic' },
+    { code: 'ARG', name: 'Arginine', short: 'R', category: 'positive' },
+    { code: 'ASN', name: 'Asparagine', short: 'N', category: 'polar' },
+    { code: 'ASP', name: 'Aspartate', short: 'D', category: 'negative' },
+    { code: 'CYS', name: 'Cysteine', short: 'C', category: 'polar' },
+    { code: 'GLN', name: 'Glutamine', short: 'Q', category: 'polar' },
+    { code: 'GLU', name: 'Glutamate', short: 'E', category: 'negative' },
+    { code: 'GLY', name: 'Glycine', short: 'G', category: 'special' },
+    { code: 'HIS', name: 'Histidine', short: 'H', category: 'positive' },
+    { code: 'ILE', name: 'Isoleucine', short: 'I', category: 'hydrophobic' },
+    { code: 'LEU', name: 'Leucine', short: 'L', category: 'hydrophobic' },
+    { code: 'LYS', name: 'Lysine', short: 'K', category: 'positive' },
+    { code: 'MET', name: 'Methionine', short: 'M', category: 'hydrophobic' },
+    { code: 'PHE', name: 'Phenylalanine', short: 'F', category: 'aromatic' },
+    { code: 'PRO', name: 'Proline', short: 'P', category: 'special' },
+    { code: 'SER', name: 'Serine', short: 'S', category: 'polar' },
+    { code: 'THR', name: 'Threonine', short: 'T', category: 'polar' },
+    { code: 'TRP', name: 'Tryptophan', short: 'W', category: 'aromatic' },
+    { code: 'TYR', name: 'Tyrosine', short: 'Y', category: 'aromatic' },
+    { code: 'VAL', name: 'Valine', short: 'V', category: 'hydrophobic' },
+  ];
+
+  // Quick select categories
+  const RESIDUE_CATEGORIES = [
+    { id: 'positive', name: 'Positive (+)', residues: ['ARG', 'LYS', 'HIS'], color: '#4A90D9' },
+    { id: 'negative', name: 'Negative (-)', residues: ['ASP', 'GLU'], color: '#D94A4A' },
+    { id: 'polar', name: 'Polar', residues: ['SER', 'THR', 'ASN', 'GLN', 'CYS'], color: '#6BD94A' },
+    { id: 'hydrophobic', name: 'Hydrophobic', residues: ['ALA', 'VAL', 'LEU', 'ILE', 'MET'], color: '#FFB347' },
+    { id: 'aromatic', name: 'Aromatic', residues: ['PHE', 'TYR', 'TRP'], color: '#9B59B6' },
+    { id: 'special', name: 'Special', residues: ['GLY', 'PRO'], color: '#7F8C8D' },
+  ];
+
   // Track when component visibility changes to update visualization
   const [componentsNeedUpdate, setComponentsNeedUpdate] = useState(false);
 
@@ -147,6 +187,7 @@ export default function ProteinViewer() {
     { id: 'residue-name', name: 'By Residue Type', description: 'Color by amino acid type (Jmol colors)' },
     { id: 'secondary-structure', name: 'Secondary Structure', description: 'Helix, sheet, coil' },
     { id: 'hydrophobicity', name: 'Hydrophobicity', description: 'Hydrophobic (red) to hydrophilic (green)' },
+    { id: 'electrostatic', name: 'Electrostatic', description: 'Charge: Blue (+), Red (-), White (neutral)' },
   ];
 
   // Representation styles
@@ -656,7 +697,11 @@ export default function ProteinViewer() {
       const water = await plugin.builders.structure.tryCreateComponentStatic(structureRefToUse, 'water', { label: 'Water' });
 
       // Add main polymer representation
-      if (polymer) {
+      // For electrostatic coloring, we use a special approach with separate components
+      if (colorScheme === 'electrostatic') {
+        // Apply electrostatic coloring using separate components for +/-/neutral
+        await applyElectrostaticColoring(structureRefToUse);
+      } else if (polymer) {
         switch (representation) {
           case 'cartoon':
             await plugin.builders.structure.representation.addRepresentation(polymer, {
@@ -1770,6 +1815,211 @@ export default function ProteinViewer() {
     }
   };
 
+  // Apply electrostatic coloring (charge-based: Blue +, Red -, White neutral)
+  const applyElectrostaticColoring = async (structureRefToUse: StateObjectRef<any>) => {
+    if (!pluginRef.current) return;
+
+    const plugin = pluginRef.current;
+
+    try {
+      // Positive residues (Lys, Arg, His) - Blue
+      const positiveResidues = ['LYS', 'ARG', 'HIS'];
+      const positiveComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureRefToUse,
+        MS.struct.modifier.union([
+          MS.struct.generator.atomGroups({
+            'residue-test': MS.core.set.has([MS.set(...positiveResidues), MS.ammp('label_comp_id')])
+          })
+        ]),
+        'electrostatic-positive',
+        { label: 'Positive Residues (+)' }
+      );
+      if (positiveComponent) {
+        await plugin.builders.structure.representation.addRepresentation(positiveComponent, {
+          type: selectedRepresentation === 'surface' ? 'molecular-surface' :
+                selectedRepresentation === 'gaussian-surface' ? 'gaussian-surface' :
+                selectedRepresentation === 'spacefill' ? 'spacefill' :
+                selectedRepresentation === 'ball-and-stick' ? 'ball-and-stick' : 'cartoon',
+          color: 'uniform' as any,
+          colorParams: { value: Color(0x4A90D9) }, // Blue
+        }, { tag: 'electrostatic-positive' });
+      }
+
+      // Negative residues (Asp, Glu) - Red
+      const negativeResidues = ['ASP', 'GLU'];
+      const negativeComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureRefToUse,
+        MS.struct.modifier.union([
+          MS.struct.generator.atomGroups({
+            'residue-test': MS.core.set.has([MS.set(...negativeResidues), MS.ammp('label_comp_id')])
+          })
+        ]),
+        'electrostatic-negative',
+        { label: 'Negative Residues (-)' }
+      );
+      if (negativeComponent) {
+        await plugin.builders.structure.representation.addRepresentation(negativeComponent, {
+          type: selectedRepresentation === 'surface' ? 'molecular-surface' :
+                selectedRepresentation === 'gaussian-surface' ? 'gaussian-surface' :
+                selectedRepresentation === 'spacefill' ? 'spacefill' :
+                selectedRepresentation === 'ball-and-stick' ? 'ball-and-stick' : 'cartoon',
+          color: 'uniform' as any,
+          colorParams: { value: Color(0xD94A4A) }, // Red
+        }, { tag: 'electrostatic-negative' });
+      }
+
+      // Neutral residues - White/Light gray
+      const neutralResidues = ['ALA', 'VAL', 'LEU', 'ILE', 'MET', 'PHE', 'TRP', 'TYR',
+                               'SER', 'THR', 'CYS', 'ASN', 'GLN', 'GLY', 'PRO'];
+      const neutralComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureRefToUse,
+        MS.struct.modifier.union([
+          MS.struct.generator.atomGroups({
+            'residue-test': MS.core.set.has([MS.set(...neutralResidues), MS.ammp('label_comp_id')])
+          })
+        ]),
+        'electrostatic-neutral',
+        { label: 'Neutral Residues' }
+      );
+      if (neutralComponent) {
+        await plugin.builders.structure.representation.addRepresentation(neutralComponent, {
+          type: selectedRepresentation === 'surface' ? 'molecular-surface' :
+                selectedRepresentation === 'gaussian-surface' ? 'gaussian-surface' :
+                selectedRepresentation === 'spacefill' ? 'spacefill' :
+                selectedRepresentation === 'ball-and-stick' ? 'ball-and-stick' : 'cartoon',
+          color: 'uniform' as any,
+          colorParams: { value: Color(0xF5F5F5) }, // White/Light gray
+        }, { tag: 'electrostatic-neutral' });
+      }
+    } catch (error) {
+      console.error('Failed to apply electrostatic coloring:', error);
+    }
+  };
+
+  // Apply custom residue highlighting
+  const applyResidueHighlighting = async (structureRefToUse: StateObjectRef<any>, residueTypes: string[], color: string) => {
+    if (!pluginRef.current || residueTypes.length === 0) return;
+
+    const plugin = pluginRef.current;
+
+    try {
+      // First remove any existing custom highlights
+      await removeCustomHighlights();
+
+      // Create a component for selected residue types
+      const highlightComponent = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureRefToUse,
+        MS.struct.modifier.union([
+          MS.struct.generator.atomGroups({
+            'residue-test': MS.core.set.has([MS.set(...residueTypes), MS.ammp('label_comp_id')])
+          })
+        ]),
+        'custom-residue-highlight',
+        { label: `Highlighted: ${residueTypes.join(', ')}` }
+      );
+
+      if (highlightComponent) {
+        // Convert hex color to Molstar Color
+        const hexColor = color.replace('#', '');
+        const colorValue = Color(parseInt(hexColor, 16));
+
+        await plugin.builders.structure.representation.addRepresentation(highlightComponent, {
+          type: 'ball-and-stick',
+          color: 'uniform' as any,
+          colorParams: { value: colorValue },
+          typeParams: {
+            sizeFactor: 0.4,
+            sizeAspectRatio: 0.73,
+          },
+        }, { tag: 'custom-residue-highlight' });
+
+        // Also add a semi-transparent surface for better visibility
+        await plugin.builders.structure.representation.addRepresentation(highlightComponent, {
+          type: 'molecular-surface',
+          color: 'uniform' as any,
+          colorParams: { value: colorValue },
+          typeParams: {
+            alpha: 0.35,
+          },
+        }, { tag: 'custom-residue-highlight-surface' });
+      }
+    } catch (error) {
+      console.error('Failed to apply residue highlighting:', error);
+    }
+  };
+
+  // Remove custom highlights
+  const removeCustomHighlights = async () => {
+    if (!pluginRef.current) return;
+
+    const plugin = pluginRef.current;
+    const state = plugin.state.data;
+
+    // Find and remove custom highlight components
+    const toRemove: string[] = [];
+    state.cells.forEach((cell: any, ref: string) => {
+      if (cell?.obj?.tags?.includes('custom-residue-highlight') ||
+          cell?.obj?.tags?.includes('custom-residue-highlight-surface')) {
+        toRemove.push(ref);
+      }
+    });
+
+    if (toRemove.length > 0) {
+      const update = state.build();
+      for (const ref of toRemove) {
+        update.delete(ref);
+      }
+      await update.commit();
+    }
+  };
+
+  // Toggle residue highlight panel
+  const toggleResidueHighlight = () => {
+    const newState = !showResidueHighlight;
+    setShowResidueHighlight(newState);
+
+    if (!newState) {
+      // Clear highlights when closing panel
+      removeCustomHighlights();
+      setSelectedResidueTypes([]);
+    }
+  };
+
+  // Handle residue type selection
+  const handleResidueTypeToggle = (residueCode: string) => {
+    setSelectedResidueTypes(prev => {
+      if (prev.includes(residueCode)) {
+        return prev.filter(r => r !== residueCode);
+      } else {
+        return [...prev, residueCode];
+      }
+    });
+  };
+
+  // Handle category quick select
+  const handleCategorySelect = (categoryResidues: string[]) => {
+    setSelectedResidueTypes(prev => {
+      const allSelected = categoryResidues.every(r => prev.includes(r));
+      if (allSelected) {
+        // Deselect all in category
+        return prev.filter(r => !categoryResidues.includes(r));
+      } else {
+        // Select all in category
+        const newSelection = new Set([...prev, ...categoryResidues]);
+        return Array.from(newSelection);
+      }
+    });
+  };
+
+  // Apply highlighting when selection changes
+  useEffect(() => {
+    if (showResidueHighlight && structureRef.current && selectedResidueTypes.length > 0) {
+      applyResidueHighlighting(structureRef.current, selectedResidueTypes, highlightColor);
+    } else if (showResidueHighlight && selectedResidueTypes.length === 0) {
+      removeCustomHighlights();
+    }
+  }, [selectedResidueTypes, highlightColor, showResidueHighlight]);
+
   // Create a StructureElement.Loci for coordinating atoms
   const createCoordinatingLoci = (structure: Structure, atomIndices: Map<number, Set<number>>): StructureElement.Loci | null => {
     if (atomIndices.size === 0) return null;
@@ -2358,6 +2608,13 @@ export default function ProteinViewer() {
           { label: 'Neutral', color: Color.toHexStyle(Color(0xffffbf)) }, // Yellow
           { label: 'Hydrophilic', color: Color.toHexStyle(Color(0x006837)) }, // Green
         ];
+      case 'electrostatic':
+        // Electrostatic coloring by charge
+        return [
+          { label: 'Positive (+)', color: '#4A90D9', description: 'Lys, Arg, His' },
+          { label: 'Negative (-)', color: '#D94A4A', description: 'Asp, Glu' },
+          { label: 'Neutral', color: '#F5F5F5', description: 'All others' },
+        ];
       default:
         return null;
     }
@@ -2851,6 +3108,19 @@ export default function ProteinViewer() {
                     title={`Ligand Binding Analysis (within ${ligandRadius}Å)`}
                   >
                     <Pill className="w-4 h-4" />
+                  </button>
+
+                  {/* Custom Residue Highlighting Toggle */}
+                  <button
+                    onClick={toggleResidueHighlight}
+                    className={`p-2 rounded transition-colors ${
+                      showResidueHighlight
+                        ? 'bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300 ring-2 ring-pink-400'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
+                    }`}
+                    title="Custom Residue Highlighting"
+                  >
+                    <Highlighter className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -3835,6 +4105,123 @@ export default function ProteinViewer() {
         </div>
       )}
 
+      {/* Custom Residue Highlighting Panel */}
+      {showResidueHighlight && (
+        <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-pink-300 dark:border-pink-700 shadow-lg overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-pink-50 dark:bg-pink-900/20 border-b border-pink-200 dark:border-pink-800">
+            <div className="flex items-center gap-3">
+              <Highlighter className="w-5 h-5 text-pink-600 dark:text-pink-400" />
+              <h3 className="font-semibold text-pink-800 dark:text-pink-200">
+                Custom Residue Highlighting
+              </h3>
+              {/* Color Picker */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Color:</span>
+                <input
+                  type="color"
+                  value={highlightColor}
+                  onChange={(e) => setHighlightColor(e.target.value)}
+                  className="w-6 h-6 rounded cursor-pointer border border-slate-300 dark:border-slate-600"
+                  title="Select highlight color"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {selectedResidueTypes.length} selected
+              </span>
+              <button
+                onClick={() => setSelectedResidueTypes([])}
+                className="px-2 py-1 text-xs rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600"
+                title="Clear selection"
+              >
+                Clear
+              </button>
+              <button
+                onClick={toggleResidueHighlight}
+                className="p-1 rounded text-pink-600 hover:bg-pink-100 dark:text-pink-400 dark:hover:bg-pink-900/30"
+                title="Close panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Category Selection */}
+          <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Quick Select:</span>
+              {RESIDUE_CATEGORIES.map(category => {
+                const allSelected = category.residues.every(r => selectedResidueTypes.includes(r));
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => handleCategorySelect(category.residues)}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      allSelected
+                        ? 'ring-2 ring-offset-1 dark:ring-offset-slate-800'
+                        : 'hover:opacity-80'
+                    }`}
+                    style={{
+                      backgroundColor: allSelected ? category.color : `${category.color}40`,
+                      color: allSelected ? 'white' : category.color,
+                      borderColor: category.color,
+                    }}
+                    title={`${category.residues.join(', ')}`}
+                  >
+                    {category.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Individual Amino Acid Selection */}
+          <div className="p-4">
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
+              {AMINO_ACIDS.map(aa => {
+                const isSelected = selectedResidueTypes.includes(aa.code);
+                const category = RESIDUE_CATEGORIES.find(c => c.residues.includes(aa.code));
+                return (
+                  <button
+                    key={aa.code}
+                    onClick={() => handleResidueTypeToggle(aa.code)}
+                    className={`p-2 text-xs rounded transition-all ${
+                      isSelected
+                        ? 'ring-2 ring-pink-500 shadow-md transform scale-105'
+                        : 'hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                    style={{
+                      backgroundColor: isSelected ? highlightColor : (category ? `${category.color}20` : 'transparent'),
+                      color: isSelected ? 'white' : undefined,
+                    }}
+                    title={`${aa.name} (${aa.short}) - ${aa.category}`}
+                  >
+                    <div className="font-bold">{aa.short}</div>
+                    <div className="text-[9px] opacity-70">{aa.code}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Footer with selection info */}
+          <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                💡 Click amino acids to highlight • Use quick select buttons for categories
+              </span>
+              {selectedResidueTypes.length > 0 && (
+                <span className="text-xs text-pink-600 dark:text-pink-400 font-medium">
+                  Showing: {selectedResidueTypes.join(', ')}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Help Modal */}
       {showHelpModal && (
         <div
@@ -3879,6 +4266,7 @@ export default function ProteinViewer() {
                     <li>• <strong><Droplet className="w-3 h-3 inline" /></strong> Waters</li>
                     <li>• <strong><Target className="w-3 h-3 inline text-amber-600" /></strong> Metal Analysis</li>
                     <li>• <strong><Pill className="w-3 h-3 inline text-purple-600" /></strong> Ligand Analysis</li>
+                    <li>• <strong><Highlighter className="w-3 h-3 inline text-pink-600" /></strong> Residue Highlight</li>
                   </ul>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
@@ -3939,6 +4327,33 @@ export default function ProteinViewer() {
                     <li>• Select first atom (labeled "1"), then second atom (labeled "2")</li>
                     <li>• Distance line and label appear automatically</li>
                     <li>• Continue clicking to measure multiple distances from atom 1</li>
+                  </ul>
+                </div>
+                <div className="p-3 bg-pink-50 dark:bg-pink-900/20 rounded-lg border border-pink-200 dark:border-pink-700">
+                  <h4 className="font-semibold text-pink-700 dark:text-pink-300 mb-2 flex items-center gap-2">
+                    <Highlighter className="w-4 h-4" />
+                    Custom Residue Highlighting
+                  </h4>
+                  <ul className="space-y-1 text-sm text-pink-600 dark:text-pink-400">
+                    <li>• Click <Highlighter className="w-3 h-3 inline" /> to open highlight panel</li>
+                    <li>• Quick select by category (positive, negative, polar, etc.)</li>
+                    <li>• Click individual amino acids to toggle</li>
+                    <li>• Custom color picker for highlight color</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                  <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    Electrostatic Coloring
+                  </h4>
+                  <ul className="space-y-1 text-sm text-blue-600 dark:text-blue-400">
+                    <li>• Select "Electrostatic" from color dropdown</li>
+                    <li>• <span className="text-blue-600">Blue (+)</span>: Lys, Arg, His</li>
+                    <li>• <span className="text-red-600">Red (-)</span>: Asp, Glu</li>
+                    <li>• <span className="text-slate-400">White (neutral)</span>: All others</li>
                   </ul>
                 </div>
                 <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
