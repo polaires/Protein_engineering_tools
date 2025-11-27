@@ -1434,6 +1434,575 @@ export default function ProteinViewer() {
     };
   };
 
+  // ============================================================================
+  // LigPlot-Style 2D Interaction Map Algorithm
+  // Based on Wallace et al. "LIGPLOT: a program to generate schematic diagrams"
+  // Implements: PCA projection, ring flattening, overlap minimization, smart labels
+  // ============================================================================
+
+  interface Atom2D {
+    id: string;
+    x: number;
+    y: number;
+    originalAngle: number;
+    type: 'metal' | 'coordinating' | 'residue';
+    element: string;
+    label: string;
+    residue: string;
+    chain: string;
+    distance: number;
+    isWater: boolean;
+  }
+
+  interface Bond2D {
+    from: string;
+    to: string;
+    type: 'coordination' | 'covalent';
+    distance: number;
+  }
+
+  interface Label2D {
+    id: string;
+    x: number;
+    y: number;
+    text: string;
+    anchor: string;
+  }
+
+  // Principal Component Analysis for optimal 2D projection
+  const projectTo2DPCA = (
+    metalPos: number[],
+    coordAtoms: { atom: string; residue: string; chain: string; distance: number; isWater: boolean; position: number[] }[]
+  ): { projected: { coord: typeof coordAtoms[0]; x: number; y: number; angle: number }[]; rotation: number[][] } => {
+    if (coordAtoms.length === 0) return { projected: [], rotation: [[1,0,0],[0,1,0],[0,0,1]] };
+
+    // Calculate vectors from metal center to each ligand
+    const vectors = coordAtoms.map(coord => [
+      coord.position[0] - metalPos[0],
+      coord.position[1] - metalPos[1],
+      coord.position[2] - metalPos[2]
+    ]);
+
+    // Compute covariance matrix for PCA
+    const n = vectors.length;
+    const cov = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (const v of vectors) {
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          cov[i][j] += v[i] * v[j];
+        }
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        cov[i][j] /= n;
+      }
+    }
+
+    // Power iteration to find principal components
+    const powerIteration = (matrix: number[][], exclude?: number[][]): number[] => {
+      let vec = [1, 1, 1];
+      // Orthogonalize against excluded vectors
+      if (exclude) {
+        for (const ex of exclude) {
+          const dot = vec[0] * ex[0] + vec[1] * ex[1] + vec[2] * ex[2];
+          vec = [vec[0] - dot * ex[0], vec[1] - dot * ex[1], vec[2] - dot * ex[2]];
+        }
+      }
+      // Normalize
+      let norm = Math.sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
+      if (norm > 0) vec = [vec[0] / norm, vec[1] / norm, vec[2] / norm];
+
+      for (let iter = 0; iter < 30; iter++) {
+        // Multiply by matrix
+        const newVec = [
+          matrix[0][0] * vec[0] + matrix[0][1] * vec[1] + matrix[0][2] * vec[2],
+          matrix[1][0] * vec[0] + matrix[1][1] * vec[1] + matrix[1][2] * vec[2],
+          matrix[2][0] * vec[0] + matrix[2][1] * vec[1] + matrix[2][2] * vec[2]
+        ];
+        // Orthogonalize
+        if (exclude) {
+          for (const ex of exclude) {
+            const dot = newVec[0] * ex[0] + newVec[1] * ex[1] + newVec[2] * ex[2];
+            newVec[0] -= dot * ex[0];
+            newVec[1] -= dot * ex[1];
+            newVec[2] -= dot * ex[2];
+          }
+        }
+        // Normalize
+        norm = Math.sqrt(newVec[0] * newVec[0] + newVec[1] * newVec[1] + newVec[2] * newVec[2]);
+        if (norm > 1e-10) {
+          vec = [newVec[0] / norm, newVec[1] / norm, newVec[2] / norm];
+        }
+      }
+      return vec;
+    };
+
+    // Get first two principal components (the plane of maximum variance)
+    const pc1 = powerIteration(cov);
+    const pc2 = powerIteration(cov, [pc1]);
+
+    // Ensure orthogonality
+    let dot = pc1[0] * pc2[0] + pc1[1] * pc2[1] + pc1[2] * pc2[2];
+    const pc2Orth = [pc2[0] - dot * pc1[0], pc2[1] - dot * pc1[1], pc2[2] - dot * pc1[2]];
+    let norm = Math.sqrt(pc2Orth[0] * pc2Orth[0] + pc2Orth[1] * pc2Orth[1] + pc2Orth[2] * pc2Orth[2]);
+    if (norm > 1e-10) {
+      pc2Orth[0] /= norm;
+      pc2Orth[1] /= norm;
+      pc2Orth[2] /= norm;
+    }
+
+    // Project each vector onto the PC1-PC2 plane
+    const projected = coordAtoms.map((coord, idx) => {
+      const v = vectors[idx];
+      const x = v[0] * pc1[0] + v[1] * pc1[1] + v[2] * pc1[2];
+      const y = v[0] * pc2Orth[0] + v[1] * pc2Orth[1] + v[2] * pc2Orth[2];
+      const angle = Math.atan2(y, x);
+      return { coord, x, y, angle };
+    });
+
+    return { projected, rotation: [pc1, pc2Orth, [0, 0, 1]] };
+  };
+
+  // Detect and handle ring structures for better flattening
+  interface RingGroup {
+    residue: string;
+    atoms: string[];
+    isAromatic: boolean;
+  }
+
+  // Detect ring-containing residues for future enhanced flattening
+  // Currently kept for future improvements to handle aromatic ring systems
+  const detectRingResidues = (residue: string): RingGroup | null => {
+    // Common ring-containing residues
+    const ringResidues: Record<string, { atoms: string[]; aromatic: boolean }> = {
+      'HIS': { atoms: ['CG', 'ND1', 'CD2', 'CE1', 'NE2'], aromatic: true },
+      'PHE': { atoms: ['CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ'], aromatic: true },
+      'TYR': { atoms: ['CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ'], aromatic: true },
+      'TRP': { atoms: ['CG', 'CD1', 'CD2', 'NE1', 'CE2', 'CE3', 'CZ2', 'CZ3', 'CH2'], aromatic: true },
+      'PRO': { atoms: ['N', 'CA', 'CB', 'CG', 'CD'], aromatic: false }
+    };
+
+    const res3 = residue.substring(0, 3).toUpperCase();
+    if (ringResidues[res3]) {
+      return {
+        residue,
+        atoms: ringResidues[res3].atoms,
+        isAromatic: ringResidues[res3].aromatic
+      };
+    }
+    return null;
+  };
+  // Mark as used for future enhancements
+  void detectRingResidues;
+
+  // Overlap energy calculation (LigPlot-style)
+  // E_total = E_atom + ω * E_bond
+  // E_atom = Σ(1/d²) for pairs closer than threshold
+  // E_bond = penalty for bond crossings
+  const calculateOverlapEnergy = (
+    atoms: Atom2D[],
+    bonds: Bond2D[],
+    atomClashThreshold: number = 25, // pixels
+    bondCrossPenalty: number = 10
+  ): number => {
+    let atomEnergy = 0;
+    let bondEnergy = 0;
+    const omega = 0.05;
+
+    // Atom clash energy
+    for (let i = 0; i < atoms.length; i++) {
+      for (let j = i + 1; j < atoms.length; j++) {
+        const dx = atoms[i].x - atoms[j].x;
+        const dy = atoms[i].y - atoms[j].y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < atomClashThreshold && d > 0.1) {
+          atomEnergy += 1 / (d * d);
+        }
+      }
+    }
+
+    // Bond crossing energy
+    const lineIntersects = (
+      x1: number, y1: number, x2: number, y2: number,
+      x3: number, y3: number, x4: number, y4: number
+    ): boolean => {
+      const denom = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+      if (Math.abs(denom) < 1e-10) return false;
+      const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denom;
+      const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denom;
+      return ua > 0.1 && ua < 0.9 && ub > 0.1 && ub < 0.9;
+    };
+
+    const atomMap = new Map(atoms.map(a => [a.id, a]));
+    for (let i = 0; i < bonds.length; i++) {
+      for (let j = i + 1; j < bonds.length; j++) {
+        const a1 = atomMap.get(bonds[i].from);
+        const a2 = atomMap.get(bonds[i].to);
+        const b1 = atomMap.get(bonds[j].from);
+        const b2 = atomMap.get(bonds[j].to);
+        if (a1 && a2 && b1 && b2) {
+          if (lineIntersects(a1.x, a1.y, a2.x, a2.y, b1.x, b1.y, b2.x, b2.y)) {
+            bondEnergy += bondCrossPenalty;
+          }
+        }
+      }
+    }
+
+    return atomEnergy + omega * bondEnergy;
+  };
+
+  // Optimize layout by flipping around bonds (LigPlot clean-up phase)
+  const optimizeLayout = (
+    atoms: Atom2D[],
+    bonds: Bond2D[],
+    centerX: number,
+    centerY: number,
+    maxIterations: number = 50
+  ): Atom2D[] => {
+    let optimizedAtoms = [...atoms.map(a => ({ ...a }))];
+    let currentEnergy = calculateOverlapEnergy(optimizedAtoms, bonds);
+
+    for (let iter = 0; iter < maxIterations; iter++) {
+      let improved = false;
+
+      // Try flipping each atom around the center (180° rotation)
+      for (let i = 0; i < optimizedAtoms.length; i++) {
+        if (optimizedAtoms[i].type === 'metal') continue;
+
+        const original = { ...optimizedAtoms[i] };
+        // Flip around center
+        optimizedAtoms[i].x = 2 * centerX - optimizedAtoms[i].x;
+        optimizedAtoms[i].y = 2 * centerY - optimizedAtoms[i].y;
+
+        const newEnergy = calculateOverlapEnergy(optimizedAtoms, bonds);
+        if (newEnergy < currentEnergy * 0.95) { // Must improve by at least 5%
+          currentEnergy = newEnergy;
+          improved = true;
+        } else {
+          // Revert
+          optimizedAtoms[i] = original;
+        }
+      }
+
+      // Try rotating pairs of adjacent atoms
+      for (let i = 0; i < optimizedAtoms.length; i++) {
+        if (optimizedAtoms[i].type !== 'coordinating') continue;
+
+        // Find the corresponding residue
+        const residueAtom = optimizedAtoms.find(
+          a => a.type === 'residue' && a.residue === optimizedAtoms[i].residue
+        );
+        if (!residueAtom) continue;
+
+        const originalCoord = { ...optimizedAtoms[i] };
+        const originalRes = { ...residueAtom };
+
+        // Try rotating the pair around the metal center
+        const angle = Math.PI / 6; // 30 degrees
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+
+        const rotateAroundCenter = (atom: Atom2D, cos: number, sin: number) => {
+          const dx = atom.x - centerX;
+          const dy = atom.y - centerY;
+          return {
+            ...atom,
+            x: centerX + dx * cos - dy * sin,
+            y: centerY + dx * sin + dy * cos
+          };
+        };
+
+        // Try clockwise
+        const coordIdx = optimizedAtoms.findIndex(a => a.id === originalCoord.id);
+        const resIdx = optimizedAtoms.findIndex(a => a.id === originalRes.id);
+
+        optimizedAtoms[coordIdx] = rotateAroundCenter(originalCoord, cosA, sinA);
+        optimizedAtoms[resIdx] = rotateAroundCenter(originalRes, cosA, sinA);
+
+        let newEnergy = calculateOverlapEnergy(optimizedAtoms, bonds);
+        if (newEnergy < currentEnergy * 0.95) {
+          currentEnergy = newEnergy;
+          improved = true;
+          continue;
+        }
+
+        // Try counter-clockwise
+        optimizedAtoms[coordIdx] = rotateAroundCenter(originalCoord, cosA, -sinA);
+        optimizedAtoms[resIdx] = rotateAroundCenter(originalRes, cosA, -sinA);
+
+        newEnergy = calculateOverlapEnergy(optimizedAtoms, bonds);
+        if (newEnergy < currentEnergy * 0.95) {
+          currentEnergy = newEnergy;
+          improved = true;
+          continue;
+        }
+
+        // Revert
+        optimizedAtoms[coordIdx] = originalCoord;
+        optimizedAtoms[resIdx] = originalRes;
+      }
+
+      if (!improved) break;
+    }
+
+    return optimizedAtoms;
+  };
+
+  // Angular separation optimization (prevent overlapping labels)
+  const optimizeAngularSeparation = (
+    angles: number[],
+    minSeparation: number = 0.35
+  ): number[] => {
+    if (angles.length <= 1) return angles;
+
+    const optimized = [...angles].sort((a, b) => a - b);
+    const n = optimized.length;
+
+    // Iteratively push apart angles that are too close
+    for (let iter = 0; iter < 20; iter++) {
+      let maxPush = 0;
+      for (let i = 0; i < n; i++) {
+        const next = (i + 1) % n;
+        let diff = optimized[next] - optimized[i];
+        if (diff < 0) diff += 2 * Math.PI; // Handle wrap-around
+
+        if (diff < minSeparation) {
+          const push = (minSeparation - diff) / 2;
+          optimized[i] -= push;
+          optimized[next] += push;
+          maxPush = Math.max(maxPush, push);
+        }
+      }
+
+      // Normalize angles to [-π, π]
+      for (let i = 0; i < n; i++) {
+        while (optimized[i] > Math.PI) optimized[i] -= 2 * Math.PI;
+        while (optimized[i] < -Math.PI) optimized[i] += 2 * Math.PI;
+      }
+
+      if (maxPush < 0.01) break;
+    }
+
+    return optimized;
+  };
+
+  // Smart label placement using grid search
+  const findOptimalLabelPosition = (
+    atomX: number,
+    atomY: number,
+    angle: number,
+    labelWidth: number,
+    labelHeight: number,
+    existingLabels: Label2D[],
+    existingAtoms: { x: number; y: number }[],
+    canvasSize: number
+  ): { x: number; y: number; anchor: string } => {
+    const margin = 5;
+    const candidatePositions: { x: number; y: number; anchor: string; score: number }[] = [];
+
+    // Generate candidate positions around the atom
+    const distances = [20, 30, 40];
+    const angleOffsets = [-0.3, -0.15, 0, 0.15, 0.3];
+
+    for (const dist of distances) {
+      for (const offset of angleOffsets) {
+        const testAngle = angle + offset;
+        const x = atomX + dist * Math.cos(testAngle);
+        const y = atomY + dist * Math.sin(testAngle);
+
+        // Skip if outside canvas
+        if (x - labelWidth / 2 < margin || x + labelWidth / 2 > canvasSize - margin ||
+            y - labelHeight / 2 < margin || y + labelHeight / 2 > canvasSize - margin) {
+          continue;
+        }
+
+        // Calculate score (lower is better)
+        let score = dist * 0.5; // Prefer closer positions
+
+        // Penalty for overlapping with existing labels
+        for (const label of existingLabels) {
+          const dx = Math.abs(x - label.x);
+          const dy = Math.abs(y - label.y);
+          if (dx < labelWidth && dy < labelHeight) {
+            score += 100; // Heavy penalty for overlap
+          }
+        }
+
+        // Penalty for being too close to atoms
+        for (const atom of existingAtoms) {
+          const d = Math.sqrt((x - atom.x) ** 2 + (y - atom.y) ** 2);
+          if (d < 15) {
+            score += 50 / d;
+          }
+        }
+
+        // Determine text anchor based on position
+        let anchor = 'middle';
+        if (Math.cos(testAngle) < -0.5) anchor = 'end';
+        else if (Math.cos(testAngle) > 0.5) anchor = 'start';
+
+        candidatePositions.push({ x, y, anchor, score });
+      }
+    }
+
+    // Sort by score and return best position
+    candidatePositions.sort((a, b) => a.score - b.score);
+    return candidatePositions.length > 0
+      ? candidatePositions[0]
+      : { x: atomX + 20 * Math.cos(angle), y: atomY + 20 * Math.sin(angle), anchor: 'middle' };
+  };
+
+  // Main function to generate the 2D interaction map layout
+  const generate2DInteractionMap = (
+    metalElement: string,
+    metalPos: number[],
+    coordAtoms: { atom: string; residue: string; chain: string; distance: number; isWater: boolean; position: number[] }[],
+    canvasSize: number = 280
+  ): { atoms: Atom2D[]; bonds: Bond2D[]; labels: Label2D[] } => {
+    if (coordAtoms.length === 0) {
+      return { atoms: [], bonds: [], labels: [] };
+    }
+
+    const centerX = canvasSize / 2;
+    const centerY = canvasSize / 2;
+    const metalRadius = 16;
+    const margin = 45;
+    const usableRadius = (canvasSize / 2) - margin;
+
+    // Step 1: Project 3D to 2D using PCA
+    const { projected } = projectTo2DPCA(metalPos, coordAtoms);
+
+    // Step 2: Calculate angles and optimize angular separation
+    const rawAngles = projected.map(p => p.angle);
+    const optimizedAngles = optimizeAngularSeparation(rawAngles);
+
+    // Map optimized angles back to projected data
+    const sortedIndices = rawAngles.map((_, i) => i).sort((a, b) => rawAngles[a] - rawAngles[b]);
+    const sortedOptimized = [...optimizedAngles].sort((a, b) => a - b);
+    const angleMap = new Map<number, number>();
+    sortedIndices.forEach((origIdx, sortedIdx) => {
+      angleMap.set(origIdx, sortedOptimized[sortedIdx]);
+    });
+
+    // Step 3: Generate atom positions
+    const atoms: Atom2D[] = [];
+    const bonds: Bond2D[] = [];
+
+    // Add metal center
+    atoms.push({
+      id: 'metal',
+      x: centerX,
+      y: centerY,
+      originalAngle: 0,
+      type: 'metal',
+      element: metalElement,
+      label: metalElement,
+      residue: '',
+      chain: '',
+      distance: 0,
+      isWater: false
+    });
+
+    // Calculate positions for coordinating atoms and residues
+    const atomDistance = metalRadius + 28; // Distance from center to atom circle
+    const residueDistance = usableRadius - 12; // Distance from center to residue
+
+    projected.forEach((p, idx) => {
+      const angle = angleMap.get(idx) || p.angle;
+      const coord = p.coord;
+
+      // Coordinating atom position
+      const atomX = centerX + atomDistance * Math.cos(angle);
+      const atomY = centerY + atomDistance * Math.sin(angle);
+
+      // Residue position
+      const resX = centerX + residueDistance * Math.cos(angle);
+      const resY = centerY + residueDistance * Math.sin(angle);
+
+      const atomId = `atom-${idx}`;
+      const resId = `res-${idx}`;
+
+      // Add coordinating atom
+      atoms.push({
+        id: atomId,
+        x: atomX,
+        y: atomY,
+        originalAngle: angle,
+        type: 'coordinating',
+        element: coord.atom.charAt(0),
+        label: coord.atom,
+        residue: coord.residue,
+        chain: coord.chain,
+        distance: coord.distance,
+        isWater: coord.isWater
+      });
+
+      // Add residue
+      atoms.push({
+        id: resId,
+        x: resX,
+        y: resY,
+        originalAngle: angle,
+        type: 'residue',
+        element: '',
+        label: coord.isWater ? 'HOH' : coord.residue.substring(0, 3),
+        residue: coord.residue,
+        chain: coord.chain,
+        distance: coord.distance,
+        isWater: coord.isWater
+      });
+
+      // Add coordination bond (metal to atom)
+      bonds.push({
+        from: 'metal',
+        to: atomId,
+        type: 'coordination',
+        distance: coord.distance
+      });
+
+      // Add covalent bond (atom to residue)
+      bonds.push({
+        from: atomId,
+        to: resId,
+        type: 'covalent',
+        distance: 0
+      });
+    });
+
+    // Step 4: Optimize layout to minimize overlaps
+    const optimizedAtoms = optimizeLayout(atoms, bonds, centerX, centerY);
+
+    // Step 5: Generate optimized labels
+    const labels: Label2D[] = [];
+    const atomPositions = optimizedAtoms.filter(a => a.type !== 'residue').map(a => ({ x: a.x, y: a.y }));
+
+    for (const atom of optimizedAtoms) {
+      if (atom.type === 'residue') {
+        // Use smart label placement for residues
+        const labelPos = findOptimalLabelPosition(
+          atom.x,
+          atom.y,
+          atom.originalAngle,
+          40, // label width
+          20, // label height
+          labels,
+          atomPositions,
+          canvasSize
+        );
+        labels.push({
+          id: atom.id,
+          x: labelPos.x,
+          y: labelPos.y,
+          text: atom.label,
+          anchor: labelPos.anchor
+        });
+      }
+    }
+
+    return { atoms: optimizedAtoms, bonds, labels };
+  };
+
   // Find metal ions and their coordinating atoms within the given radius
   const findMetalCoordination = (structure: Structure, radius: number) => {
     // Comprehensive list of ALL metal elements (alkali, alkaline earth, transition, post-transition, lanthanides, actinides)
@@ -4614,114 +5183,41 @@ export default function ProteinViewer() {
                           </>
                         )}
 
-                        {/* 2D Interaction Map View (Authentic LigPlot style with 3D projection) */}
+                        {/* 2D Interaction Map View (LigPlot-style with PCA projection & overlap optimization) */}
                         {metalLigandViewMode[metalIdx] === '2dmap' && metal.coordinating.length > 0 && (
                           <div className="flex-1 flex flex-col">
-                            {/* LigPlot-style SVG with authentic 3D-to-2D projection */}
+                            {/* LigPlot-style SVG with advanced 3D-to-2D projection */}
                             <div className="flex justify-center bg-white dark:bg-slate-900 rounded-lg p-2">
                               {(() => {
-                                const coords = metal.coordinating;
                                 const size = 280;
-                                const centerX = size / 2;
-                                const centerY = size / 2;
                                 const metalRadius = 16;
-                                const margin = 45; // Margin for residue labels
-                                const usableRadius = (size / 2) - margin;
+                                const atomCircleRadius = 10;
+                                const residueCircleRadius = 14;
 
-                                // Extract residue number from info string
+                                // Extract residue number from residue string
                                 const getResNum = (residue: string) => {
                                   const match = residue.match(/\d+/);
                                   return match ? match[0] : '';
                                 };
 
-                                // Project 3D coordinates to 2D using PCA-like approach
-                                // This preserves the spatial relationships from the 3D structure
-                                const metalPos = metal.pos;
-
-                                // Calculate 3D vectors from metal to each coordinating atom
-                                const vectors3D = coords.map(coord => ({
-                                  coord,
-                                  dx: coord.position[0] - metalPos[0],
-                                  dy: coord.position[1] - metalPos[1],
-                                  dz: coord.position[2] - metalPos[2]
-                                }));
-
-                                // Find the best 2D projection plane using simplified PCA
-                                // We want to find the plane that maximizes the spread of points
-                                // Simple approach: try XY, XZ, YZ planes and pick the one with most variance
-                                const varianceXY = vectors3D.reduce((sum, v) => sum + v.dx * v.dx + v.dy * v.dy, 0);
-                                const varianceXZ = vectors3D.reduce((sum, v) => sum + v.dx * v.dx + v.dz * v.dz, 0);
-                                const varianceYZ = vectors3D.reduce((sum, v) => sum + v.dy * v.dy + v.dz * v.dz, 0);
-
-                                // Project onto the plane with maximum variance
-                                let projected2D: { coord: typeof coords[0]; x: number; y: number }[];
-                                if (varianceXY >= varianceXZ && varianceXY >= varianceYZ) {
-                                  projected2D = vectors3D.map(v => ({ coord: v.coord, x: v.dx, y: v.dy }));
-                                } else if (varianceXZ >= varianceYZ) {
-                                  projected2D = vectors3D.map(v => ({ coord: v.coord, x: v.dx, y: v.dz }));
-                                } else {
-                                  projected2D = vectors3D.map(v => ({ coord: v.coord, x: v.dy, y: v.dz }));
-                                }
-
-                                // Calculate positions with atom circles between metal and residue
-                                const atomCircleRadius = 10;
-                                const residueCircleRadius = 14;
-                                const atomDistance = metalRadius + 25; // Distance from center to atom circle
-                                const residueDistance = usableRadius - residueCircleRadius - 5; // Distance from center to residue
-
-                                // Calculate final positions for each coordinating atom
-                                const positions = projected2D.map(p => {
-                                  const angle = Math.atan2(p.y, p.x);
-
-                                  // Atom circle position (between metal and residue)
-                                  const atomX = centerX + atomDistance * Math.cos(angle);
-                                  const atomY = centerY + atomDistance * Math.sin(angle);
-
-                                  // Residue position (outer)
-                                  const resX = centerX + residueDistance * Math.cos(angle);
-                                  const resY = centerY + residueDistance * Math.sin(angle);
-
-                                  return {
-                                    coord: p.coord,
-                                    angle,
-                                    atomX, atomY,
-                                    resX, resY
-                                  };
-                                });
-
-                                // Sort by angle to help with overlap detection
-                                positions.sort((a, b) => a.angle - b.angle);
-
-                                // Adjust positions to reduce overlaps (simple repulsion)
-                                const minAngleSep = 0.4; // Minimum angular separation in radians
-                                for (let iter = 0; iter < 3; iter++) {
-                                  for (let i = 0; i < positions.length; i++) {
-                                    const next = (i + 1) % positions.length;
-                                    let angleDiff = positions[next].angle - positions[i].angle;
-                                    if (angleDiff < 0) angleDiff += 2 * Math.PI;
-
-                                    if (angleDiff < minAngleSep && angleDiff > 0) {
-                                      const adjust = (minAngleSep - angleDiff) / 2;
-                                      positions[i].angle -= adjust;
-                                      positions[next].angle += adjust;
-
-                                      // Recalculate positions
-                                      positions[i].atomX = centerX + atomDistance * Math.cos(positions[i].angle);
-                                      positions[i].atomY = centerY + atomDistance * Math.sin(positions[i].angle);
-                                      positions[i].resX = centerX + residueDistance * Math.cos(positions[i].angle);
-                                      positions[i].resY = centerY + residueDistance * Math.sin(positions[i].angle);
-
-                                      positions[next].atomX = centerX + atomDistance * Math.cos(positions[next].angle);
-                                      positions[next].atomY = centerY + atomDistance * Math.sin(positions[next].angle);
-                                      positions[next].resX = centerX + residueDistance * Math.cos(positions[next].angle);
-                                      positions[next].resY = centerY + residueDistance * Math.sin(positions[next].angle);
-                                    }
-                                  }
-                                }
+                                // Generate optimized 2D layout using LigPlot algorithm
+                                const layout = generate2DInteractionMap(
+                                  metal.element,
+                                  [metal.pos[0], metal.pos[1], metal.pos[2]],
+                                  metal.coordinating.map(c => ({
+                                    atom: c.atom,
+                                    residue: c.residue,
+                                    chain: c.chain,
+                                    distance: c.distance,
+                                    isWater: c.isWater,
+                                    position: [c.position[0], c.position[1], c.position[2]]
+                                  })),
+                                  size
+                                );
 
                                 // LigPlot atom colors based on element
-                                const getAtomColor = (atomName: string) => {
-                                  const first = atomName.charAt(0).toUpperCase();
+                                const getAtomColor = (element: string) => {
+                                  const first = element.charAt(0).toUpperCase();
                                   switch (first) {
                                     case 'N': return { fill: '#3b82f6', stroke: '#1d4ed8', text: '#fff' }; // Blue for nitrogen
                                     case 'O': return { fill: '#ef4444', stroke: '#b91c1c', text: '#fff' }; // Red for oxygen
@@ -4731,189 +5227,205 @@ export default function ProteinViewer() {
                                   }
                                 };
 
+                                // Create atom lookup map
+                                const atomMap = new Map(layout.atoms.map(a => [a.id, a]));
+
                                 return (
                                   <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ fontFamily: 'Arial, sans-serif' }}>
                                     {/* White background */}
                                     <rect x="0" y="0" width={size} height={size} fill="white" className="dark:fill-slate-900" />
 
-                                    {/* Draw coordination bonds first (behind everything) */}
-                                    {positions.map((pos, idx) => {
-                                      // Bond from metal edge to atom circle
-                                      const bondStartX = centerX + metalRadius * Math.cos(pos.angle);
-                                      const bondStartY = centerY + metalRadius * Math.sin(pos.angle);
-                                      const bondEndX = pos.atomX - atomCircleRadius * Math.cos(pos.angle);
-                                      const bondEndY = pos.atomY - atomCircleRadius * Math.sin(pos.angle);
+                                    {/* Draw bonds first (behind everything) */}
+                                    {layout.bonds.map((bond, idx) => {
+                                      const fromAtom = atomMap.get(bond.from);
+                                      const toAtom = atomMap.get(bond.to);
+                                      if (!fromAtom || !toAtom) return null;
 
-                                      // Line from atom to residue (solid line representing the bond within the residue)
-                                      const atomToResStartX = pos.atomX + atomCircleRadius * Math.cos(pos.angle);
-                                      const atomToResStartY = pos.atomY + atomCircleRadius * Math.sin(pos.angle);
-                                      const atomToResEndX = pos.resX - residueCircleRadius * Math.cos(pos.angle);
-                                      const atomToResEndY = pos.resY - residueCircleRadius * Math.sin(pos.angle);
+                                      // Calculate bond start/end points (edge of circles)
+                                      const dx = toAtom.x - fromAtom.x;
+                                      const dy = toAtom.y - fromAtom.y;
+                                      const dist = Math.sqrt(dx * dx + dy * dy);
+                                      if (dist < 1) return null;
 
-                                      // Distance label midpoint on the dashed bond
-                                      const distLabelX = (bondStartX + bondEndX) / 2;
-                                      const distLabelY = (bondStartY + bondEndY) / 2;
+                                      const nx = dx / dist;
+                                      const ny = dy / dist;
 
-                                      // Offset distance label perpendicular to bond to avoid overlap
-                                      const perpAngle = pos.angle + Math.PI / 2;
-                                      const labelOffsetX = 10 * Math.cos(perpAngle);
-                                      const labelOffsetY = 10 * Math.sin(perpAngle);
+                                      const fromRadius = fromAtom.type === 'metal' ? metalRadius :
+                                                         fromAtom.type === 'coordinating' ? atomCircleRadius : residueCircleRadius;
+                                      const toRadius = toAtom.type === 'metal' ? metalRadius :
+                                                       toAtom.type === 'coordinating' ? atomCircleRadius : residueCircleRadius;
 
-                                      return (
-                                        <g key={`bond-${idx}`}>
-                                          {/* Dashed green coordination bond (metal to coordinating atom) */}
-                                          <line
-                                            x1={bondStartX}
-                                            y1={bondStartY}
-                                            x2={bondEndX}
-                                            y2={bondEndY}
-                                            stroke="#22c55e"
-                                            strokeWidth="2"
-                                            strokeDasharray="4,2"
-                                          />
-                                          {/* Solid line from atom to residue (represents covalent bond within residue) */}
-                                          <line
-                                            x1={atomToResStartX}
-                                            y1={atomToResStartY}
-                                            x2={atomToResEndX}
-                                            y2={atomToResEndY}
-                                            stroke="#374151"
-                                            strokeWidth="1.5"
-                                          />
-                                          {/* Distance label with background */}
-                                          <rect
-                                            x={distLabelX + labelOffsetX - 12}
-                                            y={distLabelY + labelOffsetY - 6}
-                                            width="24"
-                                            height="12"
-                                            fill="white"
-                                            className="dark:fill-slate-900"
-                                            rx="2"
-                                          />
-                                          <text
-                                            x={distLabelX + labelOffsetX}
-                                            y={distLabelY + labelOffsetY + 3}
-                                            textAnchor="middle"
-                                            fontSize="8"
-                                            fill="#166534"
-                                            fontWeight="bold"
-                                          >
-                                            {pos.coord.distance.toFixed(2)}Å
-                                          </text>
-                                        </g>
-                                      );
-                                    })}
+                                      const x1 = fromAtom.x + nx * fromRadius;
+                                      const y1 = fromAtom.y + ny * fromRadius;
+                                      const x2 = toAtom.x - nx * toRadius;
+                                      const y2 = toAtom.y - ny * toRadius;
 
-                                    {/* Metal center - Purple/violet circle */}
-                                    <circle cx={centerX} cy={centerY} r={metalRadius} fill="#7c3aed" stroke="#5b21b6" strokeWidth="2" />
-                                    <text x={centerX} y={centerY + 4} textAnchor="middle" fontSize="12" fontWeight="bold" fill="white">
-                                      {metal.element}
-                                    </text>
+                                      if (bond.type === 'coordination') {
+                                        // Coordination bond - dashed green with distance label
+                                        const midX = (x1 + x2) / 2;
+                                        const midY = (y1 + y2) / 2;
+                                        const perpAngle = Math.atan2(ny, nx) + Math.PI / 2;
+                                        const labelOffsetX = 10 * Math.cos(perpAngle);
+                                        const labelOffsetY = 10 * Math.sin(perpAngle);
 
-                                    {/* Coordinating atoms (the actual atoms making the coordination bond) */}
-                                    {positions.map((pos, idx) => {
-                                      const atomColor = getAtomColor(pos.coord.atom);
-                                      return (
-                                        <g key={`atom-${idx}`}>
-                                          <circle
-                                            cx={pos.atomX}
-                                            cy={pos.atomY}
-                                            r={atomCircleRadius}
-                                            fill={atomColor.fill}
-                                            stroke={atomColor.stroke}
-                                            strokeWidth="1.5"
-                                          />
-                                          <text
-                                            x={pos.atomX}
-                                            y={pos.atomY + 3}
-                                            textAnchor="middle"
-                                            fontSize="8"
-                                            fontWeight="bold"
-                                            fill={atomColor.text}
-                                          >
-                                            {pos.coord.atom}
-                                          </text>
-                                        </g>
-                                      );
-                                    })}
-
-                                    {/* Residue labels/boxes */}
-                                    {positions.map((pos, idx) => {
-                                      const resNum = getResNum(pos.coord.residue);
-                                      const resName = pos.coord.residue.substring(0, 3);
-
-                                      if (pos.coord.isWater) {
-                                        // Water molecule - cyan circle with spokes
                                         return (
-                                          <g key={`residue-${idx}`}>
-                                            {/* Spoked arc pointing outward */}
-                                            {[...Array(5)].map((_, i) => {
-                                              const spokeAngle = pos.angle + (i - 2) * 0.15;
-                                              const spokeStartX = pos.resX + residueCircleRadius * Math.cos(spokeAngle);
-                                              const spokeStartY = pos.resY + residueCircleRadius * Math.sin(spokeAngle);
-                                              const spokeEndX = pos.resX + (residueCircleRadius + 6) * Math.cos(spokeAngle);
-                                              const spokeEndY = pos.resY + (residueCircleRadius + 6) * Math.sin(spokeAngle);
-                                              return (
-                                                <line
-                                                  key={`spoke-${idx}-${i}`}
-                                                  x1={spokeStartX}
-                                                  y1={spokeStartY}
-                                                  x2={spokeEndX}
-                                                  y2={spokeEndY}
-                                                  stroke="#0891b2"
-                                                  strokeWidth="1.5"
-                                                />
-                                              );
-                                            })}
-                                            <circle cx={pos.resX} cy={pos.resY} r={residueCircleRadius} fill="#ecfeff" stroke="#0891b2" strokeWidth="1.5" />
-                                            <text x={pos.resX} y={pos.resY - 1} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#0891b2">
-                                              HOH
-                                            </text>
-                                            <text x={pos.resX} y={pos.resY + 8} textAnchor="middle" fontSize="7" fill="#0891b2">
-                                              {resNum}
+                                          <g key={`bond-${idx}`}>
+                                            <line
+                                              x1={x1} y1={y1} x2={x2} y2={y2}
+                                              stroke="#22c55e"
+                                              strokeWidth="2"
+                                              strokeDasharray="4,2"
+                                            />
+                                            {/* Distance label */}
+                                            <rect
+                                              x={midX + labelOffsetX - 14}
+                                              y={midY + labelOffsetY - 6}
+                                              width="28"
+                                              height="12"
+                                              fill="white"
+                                              className="dark:fill-slate-900"
+                                              rx="2"
+                                            />
+                                            <text
+                                              x={midX + labelOffsetX}
+                                              y={midY + labelOffsetY + 3}
+                                              textAnchor="middle"
+                                              fontSize="8"
+                                              fill="#166534"
+                                              fontWeight="bold"
+                                            >
+                                              {bond.distance.toFixed(2)}Å
                                             </text>
                                           </g>
                                         );
                                       } else {
-                                        // Protein residue - circle with spoked arc
+                                        // Covalent bond - solid gray
                                         return (
-                                          <g key={`residue-${idx}`}>
-                                            {/* Spoked arc (eyelash) pointing outward */}
-                                            {[...Array(5)].map((_, i) => {
-                                              const spokeAngle = pos.angle + (i - 2) * 0.15;
-                                              const spokeStartX = pos.resX + residueCircleRadius * Math.cos(spokeAngle);
-                                              const spokeStartY = pos.resY + residueCircleRadius * Math.sin(spokeAngle);
-                                              const spokeEndX = pos.resX + (residueCircleRadius + 6) * Math.cos(spokeAngle);
-                                              const spokeEndY = pos.resY + (residueCircleRadius + 6) * Math.sin(spokeAngle);
-                                              return (
-                                                <line
-                                                  key={`spoke-${idx}-${i}`}
-                                                  x1={spokeStartX}
-                                                  y1={spokeStartY}
-                                                  x2={spokeEndX}
-                                                  y2={spokeEndY}
-                                                  stroke="#b91c1c"
-                                                  strokeWidth="1.5"
-                                                />
-                                              );
-                                            })}
-                                            {/* Arc connecting spokes */}
-                                            <path
-                                              d={`M ${pos.resX + residueCircleRadius * Math.cos(pos.angle - 0.3)} ${pos.resY + residueCircleRadius * Math.sin(pos.angle - 0.3)} A ${residueCircleRadius} ${residueCircleRadius} 0 0 1 ${pos.resX + residueCircleRadius * Math.cos(pos.angle + 0.3)} ${pos.resY + residueCircleRadius * Math.sin(pos.angle + 0.3)}`}
-                                              fill="none"
-                                              stroke="#b91c1c"
-                                              strokeWidth="1.5"
-                                            />
-                                            {/* Residue circle */}
-                                            <circle cx={pos.resX} cy={pos.resY} r={residueCircleRadius} fill="#fef3c7" stroke="#92400e" strokeWidth="1.5" />
-                                            <text x={pos.resX} y={pos.resY - 1} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#78350f">
-                                              {resName}
-                                            </text>
-                                            <text x={pos.resX} y={pos.resY + 8} textAnchor="middle" fontSize="7" fill="#92400e">
-                                              {resNum}
+                                          <line
+                                            key={`bond-${idx}`}
+                                            x1={x1} y1={y1} x2={x2} y2={y2}
+                                            stroke="#374151"
+                                            strokeWidth="1.5"
+                                          />
+                                        );
+                                      }
+                                    })}
+
+                                    {/* Draw atoms */}
+                                    {layout.atoms.map((atom, idx) => {
+                                      if (atom.type === 'metal') {
+                                        // Metal center - Purple/violet circle
+                                        return (
+                                          <g key={`atom-${idx}`}>
+                                            <circle cx={atom.x} cy={atom.y} r={metalRadius} fill="#7c3aed" stroke="#5b21b6" strokeWidth="2" />
+                                            <text x={atom.x} y={atom.y + 4} textAnchor="middle" fontSize="12" fontWeight="bold" fill="white">
+                                              {atom.label}
                                             </text>
                                           </g>
                                         );
+                                      } else if (atom.type === 'coordinating') {
+                                        // Coordinating atom
+                                        const atomColor = getAtomColor(atom.element);
+                                        return (
+                                          <g key={`atom-${idx}`}>
+                                            <circle
+                                              cx={atom.x}
+                                              cy={atom.y}
+                                              r={atomCircleRadius}
+                                              fill={atomColor.fill}
+                                              stroke={atomColor.stroke}
+                                              strokeWidth="1.5"
+                                            />
+                                            <text
+                                              x={atom.x}
+                                              y={atom.y + 3}
+                                              textAnchor="middle"
+                                              fontSize="8"
+                                              fontWeight="bold"
+                                              fill={atomColor.text}
+                                            >
+                                              {atom.label}
+                                            </text>
+                                          </g>
+                                        );
+                                      } else {
+                                        // Residue
+                                        const resNum = getResNum(atom.residue);
+                                        const angle = atom.originalAngle;
+
+                                        if (atom.isWater) {
+                                          // Water molecule - cyan circle with spokes
+                                          return (
+                                            <g key={`atom-${idx}`}>
+                                              {/* Spoked arc pointing outward */}
+                                              {[...Array(5)].map((_, i) => {
+                                                const spokeAngle = angle + (i - 2) * 0.15;
+                                                const spokeStartX = atom.x + residueCircleRadius * Math.cos(spokeAngle);
+                                                const spokeStartY = atom.y + residueCircleRadius * Math.sin(spokeAngle);
+                                                const spokeEndX = atom.x + (residueCircleRadius + 6) * Math.cos(spokeAngle);
+                                                const spokeEndY = atom.y + (residueCircleRadius + 6) * Math.sin(spokeAngle);
+                                                return (
+                                                  <line
+                                                    key={`spoke-${idx}-${i}`}
+                                                    x1={spokeStartX}
+                                                    y1={spokeStartY}
+                                                    x2={spokeEndX}
+                                                    y2={spokeEndY}
+                                                    stroke="#0891b2"
+                                                    strokeWidth="1.5"
+                                                  />
+                                                );
+                                              })}
+                                              <circle cx={atom.x} cy={atom.y} r={residueCircleRadius} fill="#ecfeff" stroke="#0891b2" strokeWidth="1.5" />
+                                              <text x={atom.x} y={atom.y - 1} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#0891b2">
+                                                HOH
+                                              </text>
+                                              <text x={atom.x} y={atom.y + 8} textAnchor="middle" fontSize="7" fill="#0891b2">
+                                                {resNum}
+                                              </text>
+                                            </g>
+                                          );
+                                        } else {
+                                          // Protein residue - circle with spoked arc
+                                          return (
+                                            <g key={`atom-${idx}`}>
+                                              {/* Spoked arc (eyelash) pointing outward */}
+                                              {[...Array(5)].map((_, i) => {
+                                                const spokeAngle = angle + (i - 2) * 0.15;
+                                                const spokeStartX = atom.x + residueCircleRadius * Math.cos(spokeAngle);
+                                                const spokeStartY = atom.y + residueCircleRadius * Math.sin(spokeAngle);
+                                                const spokeEndX = atom.x + (residueCircleRadius + 6) * Math.cos(spokeAngle);
+                                                const spokeEndY = atom.y + (residueCircleRadius + 6) * Math.sin(spokeAngle);
+                                                return (
+                                                  <line
+                                                    key={`spoke-${idx}-${i}`}
+                                                    x1={spokeStartX}
+                                                    y1={spokeStartY}
+                                                    x2={spokeEndX}
+                                                    y2={spokeEndY}
+                                                    stroke="#b91c1c"
+                                                    strokeWidth="1.5"
+                                                  />
+                                                );
+                                              })}
+                                              {/* Arc connecting spokes */}
+                                              <path
+                                                d={`M ${atom.x + residueCircleRadius * Math.cos(angle - 0.3)} ${atom.y + residueCircleRadius * Math.sin(angle - 0.3)} A ${residueCircleRadius} ${residueCircleRadius} 0 0 1 ${atom.x + residueCircleRadius * Math.cos(angle + 0.3)} ${atom.y + residueCircleRadius * Math.sin(angle + 0.3)}`}
+                                                fill="none"
+                                                stroke="#b91c1c"
+                                                strokeWidth="1.5"
+                                              />
+                                              {/* Residue circle */}
+                                              <circle cx={atom.x} cy={atom.y} r={residueCircleRadius} fill="#fef3c7" stroke="#92400e" strokeWidth="1.5" />
+                                              <text x={atom.x} y={atom.y - 1} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#78350f">
+                                                {atom.label}
+                                              </text>
+                                              <text x={atom.x} y={atom.y + 8} textAnchor="middle" fontSize="7" fill="#92400e">
+                                                {resNum}
+                                              </text>
+                                            </g>
+                                          );
+                                        }
                                       }
                                     })}
 
