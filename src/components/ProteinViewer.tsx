@@ -4627,7 +4627,7 @@ export default function ProteinViewer() {
                                 const residueDistance = 85;
 
                                 // Extract residue number from info string (e.g., "HOH 301" -> "301")
-                                const getResNum = (residue: string, chain: string) => {
+                                const getResNum = (residue: string) => {
                                   const match = residue.match(/\d+/);
                                   return match ? match[0] : '';
                                 };
@@ -4688,7 +4688,7 @@ export default function ProteinViewer() {
                                       const angle = (2 * Math.PI * idx) / coords.length - Math.PI / 2;
                                       const resX = centerX + residueDistance * Math.cos(angle);
                                       const resY = centerY + residueDistance * Math.sin(angle);
-                                      const resNum = getResNum(coord.residue, coord.chain);
+                                      const resNum = getResNum(coord.residue);
 
                                       if (coord.isWater) {
                                         // Water molecule - LigPlot style: cyan circle
