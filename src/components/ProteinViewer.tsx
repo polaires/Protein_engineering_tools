@@ -4098,9 +4098,8 @@ export default function ProteinViewer() {
             </div>
           </div>
 
-          {/* Content - Scrollable with max height */}
-          <div className="max-h-[500px] overflow-y-auto">
-            <div className="p-4 space-y-4">
+          {/* Content */}
+          <div className="p-4 space-y-4">
               {coordinationData.metals.map((metal, metalIdx) => (
                 <div key={metalIdx} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                   {/* Metal Header - Clean design */}
@@ -4158,20 +4157,189 @@ export default function ProteinViewer() {
 
                         {metal.geometry ? (
                           <div className="space-y-3">
-                            {/* Coordination Number - Large Display */}
-                            <div className="text-center pb-3 border-b border-slate-200 dark:border-slate-600">
-                              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                                {metal.geometry.coordinationNumber}
+                            {/* Geometry Diagram */}
+                            <div className="flex justify-center pb-3 border-b border-slate-200 dark:border-slate-600">
+                              <div className="relative">
+                                {/* SVG Geometry Diagrams */}
+                                {metal.geometry.geometryType.toLowerCase().includes('linear') && (
+                                  <svg width="80" height="60" viewBox="0 0 80 60" className="text-indigo-500">
+                                    <circle cx="40" cy="30" r="8" fill="currentColor" />
+                                    <circle cx="12" cy="30" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="68" cy="30" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="17" y1="30" x2="32" y2="30" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="48" y1="30" x2="63" y2="30" stroke="currentColor" strokeWidth="2" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('trigonal planar') && (
+                                  <svg width="80" height="70" viewBox="0 0 80 70" className="text-indigo-500">
+                                    <circle cx="40" cy="35" r="8" fill="currentColor" />
+                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="12" cy="55" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="68" cy="55" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="40" y1="27" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="34" y1="41" x2="17" y2="52" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="46" y1="41" x2="63" y2="52" stroke="currentColor" strokeWidth="2" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('tetrahedral') && (
+                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
+                                    <circle cx="40" cy="40" r="8" fill="currentColor" />
+                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="12" cy="65" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="68" cy="65" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="65" cy="25" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="40" y1="32" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="34" y1="46" x2="17" y2="62" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="46" y1="46" x2="63" y2="62" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="46" y1="36" x2="60" y2="28" stroke="currentColor" strokeWidth="2" strokeDasharray="3,2" />
+                                    {/* Tetrahedron edges */}
+                                    <line x1="40" y1="13" x2="17" y2="62" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="40" y1="13" x2="63" y2="62" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="17" y1="62" x2="63" y2="62" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('square planar') && (
+                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
+                                    <circle cx="40" cy="40" r="8" fill="currentColor" />
+                                    <circle cx="10" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="70" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="40" cy="10" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="40" cy="70" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="15" y1="40" x2="32" y2="40" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="48" y1="40" x2="65" y2="40" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="40" y1="15" x2="40" y2="32" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="40" y1="48" x2="40" y2="65" stroke="currentColor" strokeWidth="2" />
+                                    {/* Square outline */}
+                                    <line x1="15" y1="10" x2="65" y2="10" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="15" y1="70" x2="65" y2="70" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="10" y1="15" x2="10" y2="65" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="70" y1="15" x2="70" y2="65" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('trigonal bipyramidal') && (
+                                  <svg width="80" height="90" viewBox="0 0 80 90" className="text-indigo-500">
+                                    <circle cx="40" cy="45" r="8" fill="currentColor" />
+                                    {/* Axial ligands */}
+                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="40" cy="82" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    {/* Equatorial ligands */}
+                                    <circle cx="10" cy="45" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="60" cy="28" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="60" cy="62" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="40" y1="37" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="40" y1="53" x2="40" y2="77" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="32" y1="45" x2="15" y2="45" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="46" y1="40" x2="56" y2="31" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="46" y1="50" x2="56" y2="59" stroke="currentColor" strokeWidth="2" />
+                                    {/* Wireframe */}
+                                    <line x1="15" y1="45" x2="56" y2="31" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="15" y1="45" x2="56" y2="59" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="56" y1="31" x2="56" y2="59" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('square pyramidal') && (
+                                  <svg width="80" height="85" viewBox="0 0 80 85" className="text-indigo-500">
+                                    <circle cx="40" cy="50" r="8" fill="currentColor" />
+                                    {/* Apical ligand */}
+                                    <circle cx="40" cy="10" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    {/* Basal ligands */}
+                                    <circle cx="12" cy="50" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="68" cy="50" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="25" cy="75" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="55" cy="75" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="40" y1="42" x2="40" y2="15" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="32" y1="50" x2="17" y2="50" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="48" y1="50" x2="63" y2="50" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="36" y1="56" x2="28" y2="72" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="44" y1="56" x2="52" y2="72" stroke="currentColor" strokeWidth="2" />
+                                    {/* Square base */}
+                                    <line x1="17" y1="50" x2="28" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="63" y1="50" x2="52" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="28" y1="72" x2="52" y2="72" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('octahedral') && (
+                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
+                                    <circle cx="40" cy="40" r="8" fill="currentColor" />
+                                    {/* 6 ligands */}
+                                    <circle cx="40" cy="8" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="40" cy="72" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="8" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="72" cy="40" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="62" cy="18" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="18" cy="62" r="5" className="fill-slate-400 dark:fill-slate-500" />
+                                    {/* Bonds */}
+                                    <line x1="40" y1="32" x2="40" y2="13" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="40" y1="48" x2="40" y2="67" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="32" y1="40" x2="13" y2="40" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="48" y1="40" x2="67" y2="40" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="46" y1="34" x2="58" y2="22" stroke="currentColor" strokeWidth="2" strokeDasharray="3,2" />
+                                    <line x1="34" y1="46" x2="22" y2="58" stroke="currentColor" strokeWidth="2" strokeDasharray="3,2" />
+                                    {/* Octahedron wireframe */}
+                                    <line x1="40" y1="13" x2="67" y2="40" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="67" y1="40" x2="40" y2="67" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="40" y1="67" x2="13" y2="40" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                    <line x1="13" y1="40" x2="40" y2="13" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+                                  </svg>
+                                )}
+                                {metal.geometry.geometryType.toLowerCase().includes('pentagonal bipyramidal') && (
+                                  <svg width="80" height="90" viewBox="0 0 80 90" className="text-indigo-500">
+                                    <circle cx="40" cy="45" r="7" fill="currentColor" />
+                                    {/* Axial */}
+                                    <circle cx="40" cy="8" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="40" cy="82" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    {/* Pentagon */}
+                                    <circle cx="10" cy="45" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="70" cy="45" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="22" cy="25" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="58" cy="25" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    <circle cx="40" cy="70" r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                    <line x1="40" y1="38" x2="40" y2="12" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="40" y1="52" x2="40" y2="66" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="33" y1="45" x2="14" y2="45" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="47" y1="45" x2="66" y2="45" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="35" y1="40" x2="25" y2="28" stroke="currentColor" strokeWidth="2" />
+                                    <line x1="45" y1="40" x2="55" y2="28" stroke="currentColor" strokeWidth="2" />
+                                  </svg>
+                                )}
+                                {/* Default/unknown geometry */}
+                                {!['linear', 'trigonal planar', 'tetrahedral', 'square planar', 'trigonal bipyramidal', 'square pyramidal', 'octahedral', 'pentagonal bipyramidal'].some(g => metal.geometry.geometryType.toLowerCase().includes(g)) && (
+                                  <svg width="80" height="80" viewBox="0 0 80 80" className="text-indigo-500">
+                                    <circle cx="40" cy="40" r="10" fill="currentColor" />
+                                    <text x="40" y="45" textAnchor="middle" className="fill-white text-[10px] font-bold">
+                                      {metal.geometry.coordinationNumber}
+                                    </text>
+                                    {/* Show coordination number as distributed dots */}
+                                    {Array.from({ length: Math.min(metal.geometry.coordinationNumber, 8) }).map((_, i) => {
+                                      const angle = (2 * Math.PI * i) / Math.min(metal.geometry.coordinationNumber, 8) - Math.PI / 2;
+                                      const x = 40 + 28 * Math.cos(angle);
+                                      const y = 40 + 28 * Math.sin(angle);
+                                      return (
+                                        <g key={i}>
+                                          <circle cx={x} cy={y} r="4" className="fill-slate-400 dark:fill-slate-500" />
+                                          <line x1={40 + 12 * Math.cos(angle)} y1={40 + 12 * Math.sin(angle)} x2={x - 4 * Math.cos(angle)} y2={y - 4 * Math.sin(angle)} stroke="currentColor" strokeWidth="1.5" />
+                                        </g>
+                                      );
+                                    })}
+                                  </svg>
+                                )}
                               </div>
-                              <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Coord. Number</div>
                             </div>
 
-                            {/* Geometry Type */}
-                            <div className="text-center">
-                              <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                {metal.geometry.geometryType}
+                            {/* Geometry Type & CN - Compact */}
+                            <div className="flex items-center justify-between text-center">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                  {metal.geometry.geometryType}
+                                </div>
+                                <div className="text-[10px] text-slate-500 dark:text-slate-400">Geometry</div>
                               </div>
-                              <div className="text-[10px] text-slate-500 dark:text-slate-400">Geometry Type</div>
+                              <div className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                                <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                                  {metal.geometry.coordinationNumber}
+                                </div>
+                                <div className="text-[9px] text-indigo-500 dark:text-indigo-400">CN</div>
+                              </div>
                             </div>
 
                             {/* Distortion Gauge */}
@@ -4434,15 +4602,23 @@ export default function ProteinViewer() {
                       </div>
 
                       {/* Column 3: Ligand Details Card */}
-                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Ruler className="w-4 h-4 text-teal-500" />
-                          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Ligand Details</h4>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600 flex flex-col">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Ruler className="w-4 h-4 text-teal-500" />
+                            <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Ligand Details</h4>
+                          </div>
+                          {/* Average Distance - Compact inline */}
+                          {metal.coordinating.length > 0 && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              Avg: <span className="font-mono font-medium">{(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å</span>
+                            </span>
+                          )}
                         </div>
 
-                        {/* Coordinating Atoms - Compact List */}
+                        {/* Coordinating Atoms - Extended List */}
                         {metal.coordinating.length > 0 ? (
-                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                          <div className="space-y-1 flex-1">
                             {metal.coordinating.map((coord, coordIdx) => (
                               <div
                                 key={coordIdx}
@@ -4479,16 +4655,6 @@ export default function ProteinViewer() {
                             No coordinating atoms found
                           </div>
                         )}
-
-                        {/* Average Distance */}
-                        {metal.coordinating.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 text-center">
-                            <span className="text-[10px] text-slate-500">Avg. distance: </span>
-                            <span className="text-sm font-mono font-semibold text-slate-700 dark:text-slate-300">
-                              {(metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length).toFixed(2)}Å
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -4512,7 +4678,6 @@ export default function ProteinViewer() {
                   </div>
                 </div>
               ))}
-            </div>
           </div>
 
           {/* Footer */}
