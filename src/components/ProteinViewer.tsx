@@ -8,7 +8,7 @@ import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
   Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle,
-  Highlighter, Zap
+  Highlighter, Zap, Layers, Activity, Shield, Lightbulb
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -106,10 +106,37 @@ export default function ProteinViewer() {
         waterCount: number;
         proteinLigandCount: number;
         hydrationState: 'fully_hydrated' | 'partially_hydrated' | 'dehydrated';
-        expectedHydration: number; // Typical hydration number for this metal
-        waterDisplacement: number; // Percentage of expected waters displaced
-        hydrationNote: string; // Interpretation
+        expectedHydration: number;
+        waterDisplacement: number;
+        hydrationNote: string;
       };
+      // Shell analysis for protein engineering
+      shellAnalysis: {
+        // Primary shell (1st coordination sphere) - direct ligands
+        primaryShell: {
+          ligandTypes: { type: string; count: number; residues: string[] }[]; // e.g., carboxylate, imidazole, thiolate
+          totalLigands: number;
+          proteinLigands: number;
+          waterLigands: number;
+          avgDistance: number;
+        };
+        // Secondary shell (2nd coordination sphere) - H-bonding network
+        secondaryShell: {
+          residues: { residue: string; chain: string; role: string; hBondCount: number; distance: number }[];
+          totalResidues: number;
+          chargedResidues: number; // nearby Asp, Glu, Lys, Arg, His
+          hBondNetwork: number; // total H-bonds supporting primary shell
+          waterBridges: number; // waters bridging primary to secondary
+        };
+        // Engineering insights
+        siteCharacteristics: {
+          netCharge: number; // electrostatic environment
+          burialDepth: 'surface' | 'shallow' | 'buried' | 'deep';
+          shellCompleteness: number; // percentage of expected positions filled
+          stabilityScore: 'weak' | 'moderate' | 'strong' | 'very_strong';
+        };
+        engineeringNotes: string[]; // actionable insights for protein engineers
+      } | null;
     }[];
     totalResidues: number;
     totalWaters: number;
@@ -853,7 +880,8 @@ export default function ProteinViewer() {
           geometry: m.geometry,
           bindingSiteType: m.bindingSiteType,
           bindingSiteReason: m.bindingSiteReason,
-          hydrationAnalysis: m.hydrationAnalysis
+          hydrationAnalysis: m.hydrationAnalysis,
+          shellAnalysis: m.shellAnalysis
         })),
         totalResidues: metalCoordination.coordinatingResidues.size,
         totalWaters: metalCoordination.coordinatingWaters.size
@@ -1626,14 +1654,235 @@ export default function ProteinViewer() {
         hydrationNote
       };
 
-      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}, Type=${bindingSiteType}, Hydration=${hydrationState}`);
+      // ========== SHELL ANALYSIS ==========
+      // Analyze primary and secondary coordination shells for protein engineering insights
+
+      // Ligand type classification
+      const ligandTypeMap: Record<string, { residues: string[]; type: string }> = {};
+      const classifyLigand = (residue: string, atom: string): string => {
+        if (residue === 'HOH' || residue === 'WAT') return 'Water';
+        if (['ASP', 'GLU'].includes(residue) && ['OD1', 'OD2', 'OE1', 'OE2'].includes(atom)) return 'Carboxylate (O)';
+        if (residue === 'HIS' && ['ND1', 'NE2'].includes(atom)) return 'Imidazole (N)';
+        if (residue === 'CYS' && atom === 'SG') return 'Thiolate (S)';
+        if (residue === 'MET' && atom === 'SD') return 'Thioether (S)';
+        if (['SER', 'THR', 'TYR'].includes(residue) && ['OG', 'OG1', 'OH'].includes(atom)) return 'Hydroxyl (O)';
+        if (['ASN', 'GLN'].includes(residue) && ['OD1', 'OE1', 'ND2', 'NE2'].includes(atom)) return 'Amide (O/N)';
+        if (atom === 'O' || atom === 'OXT') return 'Backbone (O)';
+        if (atom === 'N') return 'Backbone (N)';
+        return 'Other';
+      };
+
+      // Analyze primary shell ligand types
+      for (const coord of metal.coordinating) {
+        const ligType = classifyLigand(coord.residue, coord.atom);
+        if (!ligandTypeMap[ligType]) {
+          ligandTypeMap[ligType] = { residues: [], type: ligType };
+        }
+        ligandTypeMap[ligType].residues.push(`${coord.residue}${coord.chain ? '-' + coord.chain : ''}`);
+      }
+
+      const ligandTypes = Object.values(ligandTypeMap).map(lt => ({
+        type: lt.type,
+        count: lt.residues.length,
+        residues: lt.residues
+      }));
+
+      const avgDistance = metal.coordinating.length > 0
+        ? metal.coordinating.reduce((sum, c) => sum + c.distance, 0) / metal.coordinating.length
+        : 0;
+
+      // Find secondary shell residues (within 6Å of metal, H-bonding to primary shell)
+      const secondaryShellResidues: { residue: string; chain: string; role: string; hBondCount: number; distance: number }[] = [];
+      const secondaryShellSet = new Set<string>();
+      const primaryResidueSet = new Set(metal.coordinating.map(c => `${c.chain}:${c.residue}`));
+      let totalHBonds = 0;
+      let waterBridges = 0;
+      let chargedInSecondary = 0;
+
+      // Scan for secondary shell (simplified - residues within 6Å not in primary shell)
+      const l2 = StructureElement.Location.create(structure);
+      const metalPos = metal.coordinating[0]?.position || Vec3.zero();
+
+      for (const unit of structure.units) {
+        if (!unit.model) continue;
+        for (let i = 0; i < unit.elements.length; i++) {
+          const elementIdx = unit.elements[i];
+          StructureElement.Location.set(l2, structure, unit, elementIdx);
+
+          const entityType = SP.entity.type(l2);
+          if (entityType !== 'polymer') continue;
+
+          const chainId = SP.chain.label_asym_id(l2);
+          const resName = SP.atom.label_comp_id(l2);
+          const resSeq = SP.residue.label_seq_id(l2);
+          const atomName = SP.atom.label_atom_id(l2);
+          const resKey = `${chainId}:${resName}${resSeq}`;
+
+          // Skip if already in primary shell or already counted
+          if (primaryResidueSet.has(`${chainId}:${resName}`) || secondaryShellSet.has(resKey)) continue;
+
+          // Only consider potential H-bond donors/acceptors
+          if (!['N', 'O', 'NE', 'NH1', 'NH2', 'ND1', 'ND2', 'NE2', 'OD1', 'OD2', 'OE1', 'OE2', 'OG', 'OG1', 'OH', 'NZ'].includes(atomName)) continue;
+
+          const atomPos = Vec3();
+          unit.conformation.position(elementIdx, atomPos);
+
+          // Check distance to metal (secondary shell: 4-7Å)
+          const distToMetal = Vec3.distance(atomPos, metalPos);
+          if (distToMetal < 4.0 || distToMetal > 7.0) continue;
+
+          // Check if H-bonding to any primary shell atom
+          let hBondCount = 0;
+          for (const primary of metal.coordinating) {
+            const distToPrimary = Vec3.distance(atomPos, primary.position);
+            if (distToPrimary >= 2.4 && distToPrimary <= 3.5) {
+              hBondCount++;
+              totalHBonds++;
+            }
+          }
+
+          if (hBondCount > 0) {
+            secondaryShellSet.add(resKey);
+
+            // Determine role
+            let role = 'H-bond support';
+            if (['ASP', 'GLU'].includes(resName)) {
+              role = 'Negative charge';
+              chargedInSecondary++;
+            } else if (['LYS', 'ARG'].includes(resName)) {
+              role = 'Positive charge';
+              chargedInSecondary++;
+            } else if (resName === 'HIS') {
+              role = 'His (pH-dependent)';
+              chargedInSecondary++;
+            } else if (['SER', 'THR', 'TYR'].includes(resName)) {
+              role = 'H-bond donor/acceptor';
+            } else if (['ASN', 'GLN'].includes(resName)) {
+              role = 'Polar contact';
+            }
+
+            secondaryShellResidues.push({
+              residue: `${resName}${resSeq}`,
+              chain: chainId,
+              role,
+              hBondCount,
+              distance: distToMetal
+            });
+          }
+        }
+      }
+
+      // Count water bridges (waters coordinating metal that also H-bond to secondary shell)
+      for (const coord of metal.coordinating) {
+        if (coord.isWater && secondaryShellResidues.length > 0) {
+          // Simplified check - waters coordinating metal can bridge to secondary shell
+          waterBridges++;
+        }
+      }
+
+      // Calculate site characteristics
+      const chargedPrimary = metal.coordinating.filter(c =>
+        ['ASP', 'GLU', 'LYS', 'ARG', 'HIS'].includes(c.residue)
+      ).length;
+
+      // Net charge estimation (simplified)
+      let netCharge = 0;
+      for (const coord of metal.coordinating) {
+        if (['ASP', 'GLU'].includes(coord.residue)) netCharge -= 1;
+        if (['LYS', 'ARG'].includes(coord.residue)) netCharge += 1;
+      }
+      for (const sec of secondaryShellResidues) {
+        if (sec.role === 'Negative charge') netCharge -= 1;
+        if (sec.role === 'Positive charge') netCharge += 1;
+      }
+
+      // Burial depth based on secondary shell size and water content
+      let burialDepth: 'surface' | 'shallow' | 'buried' | 'deep';
+      if (secondaryShellResidues.length >= 8 && waterContacts === 0) {
+        burialDepth = 'deep';
+      } else if (secondaryShellResidues.length >= 5 && waterContacts <= 1) {
+        burialDepth = 'buried';
+      } else if (secondaryShellResidues.length >= 2) {
+        burialDepth = 'shallow';
+      } else {
+        burialDepth = 'surface';
+      }
+
+      // Shell completeness (based on expected coordination number)
+      const shellCompleteness = Math.min(100, Math.round((totalContacts / expectedHydration) * 100));
+
+      // Stability score
+      let stabilityScore: 'weak' | 'moderate' | 'strong' | 'very_strong';
+      const stabilityPoints = proteinContacts * 2 + totalHBonds + (chargedPrimary * 1.5) + (secondaryShellResidues.length * 0.5);
+      if (stabilityPoints >= 12) stabilityScore = 'very_strong';
+      else if (stabilityPoints >= 8) stabilityScore = 'strong';
+      else if (stabilityPoints >= 4) stabilityScore = 'moderate';
+      else stabilityScore = 'weak';
+
+      // Generate engineering notes
+      const engineeringNotes: string[] = [];
+
+      if (waterContacts > proteinContacts) {
+        engineeringNotes.push('⚠️ High water content - consider mutations to increase protein contacts');
+      }
+      if (proteinContacts >= 3 && waterContacts === 0) {
+        engineeringNotes.push('✓ Mature binding site with complete water displacement');
+      }
+      if (chargedInSecondary === 0 && proteinContacts > 0) {
+        engineeringNotes.push('💡 No charged residues in secondary shell - adding Asp/Glu may increase affinity');
+      }
+      if (totalHBonds < 2 && proteinContacts > 0) {
+        engineeringNotes.push('💡 Weak H-bond network - secondary shell mutations could improve stability');
+      }
+      if (ligandTypes.some(lt => lt.type === 'Carboxylate (O)' && lt.count >= 2)) {
+        engineeringNotes.push('✓ Multiple carboxylate ligands - typical for Ca²⁺/Mg²⁺ sites');
+      }
+      if (ligandTypes.some(lt => lt.type === 'Thiolate (S)')) {
+        engineeringNotes.push('✓ Cysteine thiolate coordination - typical for Zn²⁺ structural sites');
+      }
+      if (ligandTypes.some(lt => lt.type === 'Imidazole (N)' && lt.count >= 2)) {
+        engineeringNotes.push('✓ Multiple His ligands - common in catalytic Zn²⁺ or Cu²⁺ sites');
+      }
+      if (burialDepth === 'surface' && proteinContacts > 0) {
+        engineeringNotes.push('⚠️ Surface-exposed site - may have lower metal affinity');
+      }
+      if (geometry && geometry.distortion === 'severe') {
+        engineeringNotes.push('⚠️ Highly distorted geometry - may indicate strain or incomplete site');
+      }
+
+      const shellAnalysis = {
+        primaryShell: {
+          ligandTypes,
+          totalLigands: totalContacts,
+          proteinLigands: proteinContacts,
+          waterLigands: waterContacts,
+          avgDistance: Math.round(avgDistance * 100) / 100
+        },
+        secondaryShell: {
+          residues: secondaryShellResidues.slice(0, 10), // Limit to top 10
+          totalResidues: secondaryShellResidues.length,
+          chargedResidues: chargedInSecondary,
+          hBondNetwork: totalHBonds,
+          waterBridges
+        },
+        siteCharacteristics: {
+          netCharge,
+          burialDepth,
+          shellCompleteness,
+          stabilityScore
+        },
+        engineeringNotes
+      };
+
+      console.log(`  ${metal.info}: CN=${geometry?.coordinationNumber}, Geometry=${geometry?.geometryType}, CShM=${geometry?.rmsd.toFixed(2)}, Type=${bindingSiteType}, Hydration=${hydrationState}, 2ndShell=${secondaryShellResidues.length}`);
 
       return {
         ...metal,
         geometry,
         bindingSiteType,
         bindingSiteReason,
-        hydrationAnalysis
+        hydrationAnalysis,
+        shellAnalysis
       };
     });
 
@@ -4003,6 +4252,198 @@ export default function ProteinViewer() {
                         <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 italic">
                           {metal.hydrationAnalysis.hydrationNote}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Shell Analysis Section */}
+                    {metal.shellAnalysis && (
+                      <div className="mt-2 pt-2 border-t border-purple-200 dark:border-purple-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Layers className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Shell Analysis</span>
+                        </div>
+
+                        {/* Primary Shell (1st Coordination Sphere) */}
+                        <div className="mb-3">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Target className="w-3 h-3 text-blue-500" />
+                            <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300">Primary Shell (1st Sphere)</span>
+                            <span className="text-[10px] text-slate-500">— Direct ligands</span>
+                          </div>
+
+                          {/* Ligand Types */}
+                          <div className="flex flex-wrap gap-1.5 mb-1">
+                            {metal.shellAnalysis.primaryShell.ligandTypes.map((lt, ltIdx) => (
+                              <span
+                                key={ltIdx}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
+                                  lt.type === 'Water'
+                                    ? 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300'
+                                    : lt.type.includes('Carboxylate')
+                                    ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                                    : lt.type.includes('Imidazole')
+                                    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                                    : lt.type.includes('Thiolate')
+                                    ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
+                                    : lt.type.includes('Amide') || lt.type.includes('Backbone')
+                                    ? 'bg-slate-100 dark:bg-slate-700/40 text-slate-700 dark:text-slate-300'
+                                    : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+                                }`}
+                                title={lt.residues.join(', ')}
+                              >
+                                {lt.type}: {lt.count}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Primary Shell Stats */}
+                          <div className="flex flex-wrap gap-2 text-[10px]">
+                            <span className="text-slate-600 dark:text-slate-400">
+                              Total: <span className="font-medium text-slate-700 dark:text-slate-300">{metal.shellAnalysis.primaryShell.totalLigands}</span>
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-400">
+                              Protein: <span className="font-medium text-purple-600 dark:text-purple-400">{metal.shellAnalysis.primaryShell.proteinLigands}</span>
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-400">
+                              Water: <span className="font-medium text-cyan-600 dark:text-cyan-400">{metal.shellAnalysis.primaryShell.waterLigands}</span>
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-400">
+                              Avg dist: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{metal.shellAnalysis.primaryShell.avgDistance.toFixed(2)}Å</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Secondary Shell (2nd Coordination Sphere) */}
+                        {metal.shellAnalysis.secondaryShell.residues.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Shield className="w-3 h-3 text-green-500" />
+                              <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">Secondary Shell (2nd Sphere)</span>
+                              <span className="text-[10px] text-slate-500">— H-bond network</span>
+                            </div>
+
+                            {/* Secondary Shell Summary */}
+                            <div className="flex flex-wrap gap-2 text-[10px] mb-1">
+                              <span className="px-2 py-0.5 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300">
+                                {metal.shellAnalysis.secondaryShell.totalResidues} residues
+                              </span>
+                              {metal.shellAnalysis.secondaryShell.chargedResidues > 0 && (
+                                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded text-blue-700 dark:text-blue-300">
+                                  {metal.shellAnalysis.secondaryShell.chargedResidues} charged
+                                </span>
+                              )}
+                              <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 rounded text-amber-700 dark:text-amber-300">
+                                {metal.shellAnalysis.secondaryShell.hBondNetwork} H-bonds
+                              </span>
+                              {metal.shellAnalysis.secondaryShell.waterBridges > 0 && (
+                                <span className="px-2 py-0.5 bg-cyan-50 dark:bg-cyan-900/30 rounded text-cyan-700 dark:text-cyan-300">
+                                  {metal.shellAnalysis.secondaryShell.waterBridges} water bridges
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Secondary Shell Residues Table */}
+                            <div className="max-h-24 overflow-y-auto">
+                              <div className="flex flex-wrap gap-1">
+                                {metal.shellAnalysis.secondaryShell.residues.slice(0, 8).map((res, resIdx) => (
+                                  <span
+                                    key={resIdx}
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] ${
+                                      res.role.includes('charge')
+                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                        : res.role.includes('polar')
+                                        ? 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300'
+                                        : 'bg-slate-100 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400'
+                                    }`}
+                                    title={`${res.role} | ${res.hBondCount} H-bonds | ${res.distance.toFixed(1)}Å from metal`}
+                                  >
+                                    {res.residue}:{res.chain}
+                                  </span>
+                                ))}
+                                {metal.shellAnalysis.secondaryShell.residues.length > 8 && (
+                                  <span className="text-[9px] text-slate-500 dark:text-slate-400 px-1.5 py-0.5">
+                                    +{metal.shellAnalysis.secondaryShell.residues.length - 8} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Site Characteristics */}
+                        <div className="mb-2">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Activity className="w-3 h-3 text-orange-500" />
+                            <span className="text-[10px] font-semibold text-orange-700 dark:text-orange-300">Site Characteristics</span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 text-[10px]">
+                            {/* Net Charge */}
+                            <span className={`px-2 py-0.5 rounded font-medium ${
+                              metal.shellAnalysis.siteCharacteristics.netCharge > 0
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                : metal.shellAnalysis.siteCharacteristics.netCharge < 0
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                : 'bg-slate-100 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400'
+                            }`}>
+                              Charge: {metal.shellAnalysis.siteCharacteristics.netCharge > 0 ? '+' : ''}{metal.shellAnalysis.siteCharacteristics.netCharge}
+                            </span>
+
+                            {/* Burial Depth */}
+                            <span className={`px-2 py-0.5 rounded font-medium ${
+                              metal.shellAnalysis.siteCharacteristics.burialDepth === 'deep'
+                                ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
+                                : metal.shellAnalysis.siteCharacteristics.burialDepth === 'buried'
+                                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                                : metal.shellAnalysis.siteCharacteristics.burialDepth === 'shallow'
+                                ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                                : 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300'
+                            }`}>
+                              {metal.shellAnalysis.siteCharacteristics.burialDepth.charAt(0).toUpperCase() + metal.shellAnalysis.siteCharacteristics.burialDepth.slice(1)}
+                            </span>
+
+                            {/* Shell Completeness */}
+                            <span className={`px-2 py-0.5 rounded font-medium ${
+                              metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 80
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                : metal.shellAnalysis.siteCharacteristics.shellCompleteness >= 50
+                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            }`}>
+                              {metal.shellAnalysis.siteCharacteristics.shellCompleteness}% complete
+                            </span>
+
+                            {/* Stability Score */}
+                            <span className={`px-2 py-0.5 rounded font-medium ${
+                              metal.shellAnalysis.siteCharacteristics.stabilityScore === 'very_strong'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'strong'
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                : metal.shellAnalysis.siteCharacteristics.stabilityScore === 'moderate'
+                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            }`}>
+                              {metal.shellAnalysis.siteCharacteristics.stabilityScore.replace('_', ' ')} stability
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Engineering Notes */}
+                        {metal.shellAnalysis.engineeringNotes.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-purple-100 dark:border-purple-800/50">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Lightbulb className="w-3 h-3 text-yellow-500" />
+                              <span className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-300">Engineering Insights</span>
+                            </div>
+                            <ul className="space-y-0.5">
+                              {metal.shellAnalysis.engineeringNotes.map((note, noteIdx) => (
+                                <li key={noteIdx} className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
+                                  {note}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
