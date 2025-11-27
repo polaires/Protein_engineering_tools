@@ -4612,153 +4612,198 @@ export default function ProteinViewer() {
                           </>
                         )}
 
-                        {/* 2D Interaction Map View (LigPlot style) */}
+                        {/* 2D Interaction Map View (Authentic LigPlot style) */}
                         {metalLigandViewMode[metalIdx] === '2dmap' && metal.coordinating.length > 0 && (
                           <div className="flex-1 flex flex-col">
-                            {/* 2D LigPlot-style SVG */}
-                            <div className="flex justify-center">
+                            {/* LigPlot-style SVG */}
+                            <div className="flex justify-center bg-white dark:bg-slate-900 rounded-lg p-2">
                               {(() => {
                                 const coords = metal.coordinating;
-                                const size = 220;
+                                const size = 240;
                                 const centerX = size / 2;
                                 const centerY = size / 2;
-                                const metalRadius = 22;
-                                const ligandRadius = 55; // Distance from center to ligand positions
-                                const residueBoxWidth = 48;
-                                const residueBoxHeight = 28;
+                                const metalRadius = 18;
+                                const bondLength = 50;
+                                const residueDistance = 85;
 
-                                // Distance color coding: green (ideal) -> yellow (normal) -> red (strained)
-                                const getDistanceColor = (dist: number) => {
-                                  if (dist <= 2.2) return '#22c55e'; // green - ideal
-                                  if (dist <= 2.5) return '#84cc16'; // lime - good
-                                  if (dist <= 2.8) return '#eab308'; // yellow - normal
-                                  if (dist <= 3.2) return '#f97316'; // orange - stretched
-                                  return '#ef4444'; // red - strained
+                                // Extract residue number from info string (e.g., "HOH 301" -> "301")
+                                const getResNum = (residue: string, chain: string) => {
+                                  const match = residue.match(/\d+/);
+                                  return match ? match[0] : '';
                                 };
 
                                 return (
-                                  <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                                    {/* Background circle for context */}
-                                    <circle cx={centerX} cy={centerY} r={ligandRadius + 35} fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4,4" className="dark:stroke-slate-600" />
+                                  <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ fontFamily: 'Arial, sans-serif' }}>
+                                    {/* White background */}
+                                    <rect x="0" y="0" width={size} height={size} fill="white" className="dark:fill-slate-900" />
 
-                                    {/* Draw bonds first */}
+                                    {/* Draw coordination bonds - LigPlot style green dashed lines */}
                                     {coords.map((coord, idx) => {
                                       const angle = (2 * Math.PI * idx) / coords.length - Math.PI / 2;
-                                      const endX = centerX + ligandRadius * Math.cos(angle);
-                                      const endY = centerY + ligandRadius * Math.sin(angle);
-                                      const color = getDistanceColor(coord.distance);
+                                      const startX = centerX + metalRadius * Math.cos(angle);
+                                      const startY = centerY + metalRadius * Math.sin(angle);
+                                      const endX = centerX + bondLength * Math.cos(angle);
+                                      const endY = centerY + bondLength * Math.sin(angle);
 
-                                      // Calculate midpoint for distance label
-                                      const midX = centerX + (ligandRadius * 0.5) * Math.cos(angle);
-                                      const midY = centerY + (ligandRadius * 0.5) * Math.sin(angle);
+                                      // Distance label position
+                                      const labelX = centerX + (bondLength * 0.6) * Math.cos(angle);
+                                      const labelY = centerY + (bondLength * 0.6) * Math.sin(angle);
 
                                       return (
                                         <g key={`bond-${idx}`}>
-                                          {/* Bond line */}
+                                          {/* Green dashed coordination bond (LigPlot H-bond style) */}
                                           <line
-                                            x1={centerX}
-                                            y1={centerY}
+                                            x1={startX}
+                                            y1={startY}
                                             x2={endX}
                                             y2={endY}
-                                            stroke={color}
-                                            strokeWidth="3"
-                                            strokeLinecap="round"
+                                            stroke="#22c55e"
+                                            strokeWidth="1.5"
+                                            strokeDasharray="6,3"
                                           />
-                                          {/* Distance label on bond */}
-                                          <g transform={`translate(${midX}, ${midY})`}>
-                                            <rect
-                                              x="-14"
-                                              y="-8"
-                                              width="28"
-                                              height="16"
-                                              rx="3"
-                                              fill="white"
-                                              className="dark:fill-slate-800"
-                                              stroke={color}
-                                              strokeWidth="1"
-                                            />
-                                            <text
-                                              x="0"
-                                              y="4"
-                                              textAnchor="middle"
-                                              className="text-[9px] font-mono font-bold"
-                                              fill={color}
-                                            >
-                                              {coord.distance.toFixed(2)}
-                                            </text>
-                                          </g>
+                                          {/* Distance label */}
+                                          <text
+                                            x={labelX}
+                                            y={labelY}
+                                            textAnchor="middle"
+                                            dominantBaseline="middle"
+                                            fontSize="9"
+                                            fill="#166534"
+                                            fontWeight="bold"
+                                          >
+                                            {coord.distance.toFixed(2)}
+                                          </text>
                                         </g>
                                       );
                                     })}
 
-                                    {/* Metal center */}
-                                    <circle cx={centerX} cy={centerY} r={metalRadius} fill="#6366f1" />
-                                    <circle cx={centerX} cy={centerY} r={metalRadius - 3} fill="none" stroke="white" strokeWidth="2" opacity="0.3" />
-                                    <text x={centerX} y={centerY + 6} textAnchor="middle" className="text-base font-bold fill-white">
+                                    {/* Metal center - Purple/violet circle */}
+                                    <circle cx={centerX} cy={centerY} r={metalRadius} fill="#7c3aed" stroke="#5b21b6" strokeWidth="2" />
+                                    <text x={centerX} y={centerY + 5} textAnchor="middle" fontSize="14" fontWeight="bold" fill="white">
                                       {metal.element}
                                     </text>
 
-                                    {/* Residue boxes around the circle */}
+                                    {/* Residue representations */}
                                     {coords.map((coord, idx) => {
                                       const angle = (2 * Math.PI * idx) / coords.length - Math.PI / 2;
-                                      const boxX = centerX + (ligandRadius + 30) * Math.cos(angle);
-                                      const boxY = centerY + (ligandRadius + 30) * Math.sin(angle);
-                                      const distColor = getDistanceColor(coord.distance);
+                                      const resX = centerX + residueDistance * Math.cos(angle);
+                                      const resY = centerY + residueDistance * Math.sin(angle);
+                                      const resNum = getResNum(coord.residue, coord.chain);
 
-                                      return (
-                                        <g key={`residue-${idx}`} transform={`translate(${boxX}, ${boxY})`}>
-                                          {/* Residue box - border color indicates distance quality */}
-                                          <rect
-                                            x={-residueBoxWidth / 2}
-                                            y={-residueBoxHeight / 2}
-                                            width={residueBoxWidth}
-                                            height={residueBoxHeight}
-                                            rx="4"
-                                            fill={coord.isWater ? '#ecfeff' : '#faf5ff'}
-                                            className={coord.isWater ? 'dark:fill-cyan-900/40' : 'dark:fill-purple-900/40'}
-                                            stroke={distColor}
-                                            strokeWidth="2"
-                                          />
-                                          {/* Residue name */}
-                                          <text
-                                            x="0"
-                                            y="1"
-                                            textAnchor="middle"
-                                            className="text-[10px] font-semibold"
-                                            fill={coord.isWater ? '#0891b2' : '#7c3aed'}
-                                          >
-                                            {coord.residue}
-                                          </text>
-                                          {/* Atom name */}
-                                          <text
-                                            x="0"
-                                            y="10"
-                                            textAnchor="middle"
-                                            className="text-[8px] font-mono"
-                                            fill="#64748b"
-                                          >
-                                            {coord.atom}
-                                          </text>
-                                        </g>
-                                      );
+                                      if (coord.isWater) {
+                                        // Water molecule - LigPlot style: cyan circle
+                                        return (
+                                          <g key={`residue-${idx}`}>
+                                            {/* Spoked arc (eyelash) pointing outward - for water */}
+                                            {[...Array(5)].map((_, i) => {
+                                              const spokeAngle = angle + (i - 2) * 0.15;
+                                              const spokeStartX = resX + 12 * Math.cos(spokeAngle);
+                                              const spokeStartY = resY + 12 * Math.sin(spokeAngle);
+                                              const spokeEndX = resX + 20 * Math.cos(spokeAngle);
+                                              const spokeEndY = resY + 20 * Math.sin(spokeAngle);
+                                              return (
+                                                <line
+                                                  key={`spoke-${idx}-${i}`}
+                                                  x1={spokeStartX}
+                                                  y1={spokeStartY}
+                                                  x2={spokeEndX}
+                                                  y2={spokeEndY}
+                                                  stroke="#0891b2"
+                                                  strokeWidth="1.5"
+                                                />
+                                              );
+                                            })}
+                                            {/* Water circle */}
+                                            <circle cx={resX} cy={resY} r="11" fill="#ecfeff" stroke="#0891b2" strokeWidth="1.5" />
+                                            <text x={resX} y={resY - 2} textAnchor="middle" fontSize="7" fontWeight="bold" fill="#0891b2">
+                                              HOH
+                                            </text>
+                                            <text x={resX} y={resY + 6} textAnchor="middle" fontSize="6" fill="#0891b2">
+                                              {resNum}
+                                            </text>
+                                          </g>
+                                        );
+                                      } else {
+                                        // Protein residue - LigPlot style: box with spoked arc
+                                        return (
+                                          <g key={`residue-${idx}`}>
+                                            {/* Brick-red spoked arc (eyelash) for hydrophobic contact */}
+                                            {[...Array(7)].map((_, i) => {
+                                              const spokeAngle = angle + (i - 3) * 0.12;
+                                              const spokeStartX = resX + 18 * Math.cos(spokeAngle);
+                                              const spokeStartY = resY + 18 * Math.sin(spokeAngle);
+                                              const spokeEndX = resX + 26 * Math.cos(spokeAngle);
+                                              const spokeEndY = resY + 26 * Math.sin(spokeAngle);
+                                              return (
+                                                <line
+                                                  key={`spoke-${idx}-${i}`}
+                                                  x1={spokeStartX}
+                                                  y1={spokeStartY}
+                                                  x2={spokeEndX}
+                                                  y2={spokeEndY}
+                                                  stroke="#b91c1c"
+                                                  strokeWidth="1.5"
+                                                />
+                                              );
+                                            })}
+                                            {/* Arc connecting spokes */}
+                                            <path
+                                              d={`M ${resX + 18 * Math.cos(angle - 0.36)} ${resY + 18 * Math.sin(angle - 0.36)} A 18 18 0 0 1 ${resX + 18 * Math.cos(angle + 0.36)} ${resY + 18 * Math.sin(angle + 0.36)}`}
+                                              fill="none"
+                                              stroke="#b91c1c"
+                                              strokeWidth="1.5"
+                                            />
+                                            {/* Residue circle/box */}
+                                            <circle cx={resX} cy={resY} r="15" fill="#fef3c7" stroke="#92400e" strokeWidth="1.5" />
+                                            {/* Residue name (3-letter code) */}
+                                            <text x={resX} y={resY - 2} textAnchor="middle" fontSize="8" fontWeight="bold" fill="#78350f">
+                                              {coord.residue.substring(0, 3)}
+                                            </text>
+                                            {/* Residue number */}
+                                            <text x={resX} y={resY + 7} textAnchor="middle" fontSize="7" fill="#92400e">
+                                              {resNum}
+                                            </text>
+                                            {/* Atom name - small label */}
+                                            <text
+                                              x={resX + 18 * Math.cos(angle + Math.PI)}
+                                              y={resY + 18 * Math.sin(angle + Math.PI)}
+                                              textAnchor="middle"
+                                              fontSize="7"
+                                              fill="#64748b"
+                                              fontFamily="monospace"
+                                            >
+                                              {coord.atom}
+                                            </text>
+                                          </g>
+                                        );
+                                      }
                                     })}
+
+                                    {/* Title */}
+                                    <text x={size / 2} y="14" textAnchor="middle" fontSize="10" fill="#374151" fontWeight="bold" className="dark:fill-slate-300">
+                                      Metal Coordination
+                                    </text>
                                   </svg>
                                 );
                               })()}
                             </div>
-                            {/* Legend */}
-                            <div className="flex justify-center gap-3 mt-2 text-[9px]">
+                            {/* LigPlot-style Legend */}
+                            <div className="flex justify-center gap-4 mt-2 text-[9px] text-slate-600 dark:text-slate-400">
                               <span className="flex items-center gap-1">
-                                <span className="w-3 h-1.5 rounded bg-green-500"></span>
-                                <span className="text-slate-500">&lt;2.2Å</span>
+                                <svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4,2" /></svg>
+                                <span>Coordination bond</span>
                               </span>
                               <span className="flex items-center gap-1">
-                                <span className="w-3 h-1.5 rounded bg-yellow-500"></span>
-                                <span className="text-slate-500">2.5-2.8Å</span>
+                                <svg width="16" height="12">
+                                  <line x1="2" y1="6" x2="8" y2="2" stroke="#b91c1c" strokeWidth="1.5" />
+                                  <line x1="5" y1="6" x2="8" y2="6" stroke="#b91c1c" strokeWidth="1.5" />
+                                  <line x1="2" y1="6" x2="8" y2="10" stroke="#b91c1c" strokeWidth="1.5" />
+                                </svg>
+                                <span>Hydrophobic</span>
                               </span>
                               <span className="flex items-center gap-1">
-                                <span className="w-3 h-1.5 rounded bg-red-500"></span>
-                                <span className="text-slate-500">&gt;3.2Å</span>
+                                <span className="w-3 h-3 rounded-full bg-cyan-100 border border-cyan-500"></span>
+                                <span>Water</span>
                               </span>
                             </div>
                           </div>
