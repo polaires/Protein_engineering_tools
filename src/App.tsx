@@ -40,11 +40,14 @@ function AppContent() {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
-  // Check for email verification token or password reset token in URL
+  // Check for URL parameters (email verification, password reset, or PDB code)
+  const [initialPdbId, setInitialPdbId] = useState<string | null>(null);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const reset = urlParams.get('reset-token');
+    const pdb = urlParams.get('pdb');
 
     if (token) {
       setVerificationToken(token);
@@ -52,6 +55,13 @@ function AppContent() {
 
     if (reset) {
       setResetToken(reset);
+    }
+
+    if (pdb) {
+      setInitialPdbId(pdb.toUpperCase());
+      setActiveTab('protein-viewer');
+      // Clean URL after reading the parameter
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -234,7 +244,7 @@ function AppContent() {
 
         {activeTab === 'protein-viewer' && (
           <div className="animate-in">
-            <ProteinViewer />
+            <ProteinViewer initialPdbId={initialPdbId} />
           </div>
         )}
 
