@@ -4726,7 +4726,7 @@ export default function ProteinViewer() {
                       setShowLigands(!showLigands);
                       setComponentsNeedUpdate(true);
                     }}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showLigands
                         ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
@@ -4734,6 +4734,7 @@ export default function ProteinViewer() {
                     title="Ligands & Small Molecules"
                   >
                     <Hexagon className="w-4 h-4" />
+                    <span className="text-xs">Ligands</span>
                   </button>
 
                   {/* Ions Toggle */}
@@ -4742,7 +4743,7 @@ export default function ProteinViewer() {
                       setShowIons(!showIons);
                       setComponentsNeedUpdate(true);
                     }}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showIons
                         ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
@@ -4750,6 +4751,7 @@ export default function ProteinViewer() {
                     title="Ions & Metal Centers"
                   >
                     <Atom className="w-4 h-4" />
+                    <span className="text-xs">Metals</span>
                   </button>
 
                   {/* Water Toggle */}
@@ -4758,7 +4760,7 @@ export default function ProteinViewer() {
                       setShowWater(!showWater);
                       setComponentsNeedUpdate(true);
                     }}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showWater
                         ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
@@ -4766,6 +4768,7 @@ export default function ProteinViewer() {
                     title="Water Molecules"
                   >
                     <Droplet className="w-4 h-4" />
+                    <span className="text-xs">Water</span>
                   </button>
 
                   {/* Separator */}
@@ -4774,7 +4777,7 @@ export default function ProteinViewer() {
                   {/* Metal Coordination Highlighting Toggle */}
                   <button
                     onClick={toggleCoordinationHighlight}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showCoordinationHighlight
                         ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 ring-2 ring-amber-400'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
@@ -4782,12 +4785,13 @@ export default function ProteinViewer() {
                     title={`Metal Coordination Analysis (within ${coordinationRadius}Å)`}
                   >
                     <Target className="w-4 h-4" />
+                    <span className="text-xs">Coord</span>
                   </button>
 
                   {/* Ligand Analysis Toggle */}
                   <button
                     onClick={toggleLigandAnalysis}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showLigandAnalysis
                         ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 ring-2 ring-purple-400'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
@@ -4795,12 +4799,13 @@ export default function ProteinViewer() {
                     title={`Ligand Binding Analysis (within ${ligandRadius}Å)`}
                   >
                     <Pill className="w-4 h-4" />
+                    <span className="text-xs">Binding</span>
                   </button>
 
                   {/* Custom Residue Highlighting Toggle */}
                   <button
                     onClick={toggleResidueHighlight}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showResidueHighlight
                         ? 'bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300 ring-2 ring-pink-400'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
@@ -4808,6 +4813,7 @@ export default function ProteinViewer() {
                     title="Custom Residue Highlighting"
                   >
                     <Highlighter className="w-4 h-4" />
+                    <span className="text-xs">Highlight</span>
                   </button>
                 </div>
               </div>
@@ -4824,7 +4830,7 @@ export default function ProteinViewer() {
                   {/* Measurement Tool */}
                   <button
                     onClick={toggleMeasurement}
-                    className={`p-2 rounded transition-colors relative ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 relative ${
                       measurementMode
                         ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 ring-2 ring-primary-400'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
@@ -4832,6 +4838,7 @@ export default function ProteinViewer() {
                     title={measurementMode ? `Measurement mode (${selectedLoci.length}/2 atoms)` : 'Distance Measurement'}
                   >
                     <Ruler className="w-4 h-4" />
+                    <span className="text-xs">Measure</span>
                     {measurementMode && selectedLoci.length > 0 && (
                       <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
                         {selectedLoci.length}
@@ -4842,34 +4849,37 @@ export default function ProteinViewer() {
                   {/* Reset Camera */}
                   <button
                     onClick={resetCamera}
-                    className="p-2 rounded transition-colors bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    className="px-2 py-1.5 rounded transition-colors flex items-center gap-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
                     title="Reset Camera"
                   >
                     <RotateCcw className="w-4 h-4" />
+                    <span className="text-xs">Reset</span>
                   </button>
 
                   {/* Focus on Structure */}
                   <button
                     onClick={focusOnStructure}
-                    className="p-2 rounded transition-colors bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    className="px-2 py-1.5 rounded transition-colors flex items-center gap-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
                     title="Focus on Structure"
                   >
                     <Focus className="w-4 h-4" />
+                    <span className="text-xs">Focus</span>
                   </button>
 
                   {/* Take Snapshot */}
                   <button
                     onClick={takeSnapshot}
-                    className="p-2 rounded transition-colors bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    className="px-2 py-1.5 rounded transition-colors flex items-center gap-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
                     title="Take Snapshot"
                   >
                     <Camera className="w-4 h-4" />
+                    <span className="text-xs">Snap</span>
                   </button>
 
                   {/* Structure Info Toggle */}
                   <button
                     onClick={() => setShowInfo(!showInfo)}
-                    className={`p-2 rounded transition-colors ${
+                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
                       showInfo
                         ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
@@ -4877,6 +4887,7 @@ export default function ProteinViewer() {
                     title="Structure Info Panel"
                   >
                     <Info className="w-4 h-4" />
+                    <span className="text-xs">Info</span>
                   </button>
                 </div>
               </div>
@@ -6282,7 +6293,8 @@ export default function ProteinViewer() {
                     {/* METALizer Analysis Panel - PDB-wide statistics, SIENA ensemble, distance histogram */}
                     {(() => {
                       // Format: "ZN (ZN502, Chain A)" - extract resSeq and chainId
-                      const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i);
+                      // Use non-greedy [A-Z0-9]+? to avoid consuming digits that belong to resSeq
+                      const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z]+(\d+),\s*Chain\s+([A-Za-z0-9]+)\)/i);
                       const metalKey = infoMatch ? `${metal.element}_${infoMatch[3]}_${parseInt(infoMatch[2]) || 1}` : null;
                       const result = metalKey ? metalizerResults.get(metalKey) : null;
 
