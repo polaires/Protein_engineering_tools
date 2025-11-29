@@ -2795,133 +2795,104 @@ export default function ProteinViewer() {
   };
 
   // ========================================================================
-  // 2D Interaction Diagram (Local implementation - PoseView API removed)
+  // 2D Interaction Diagram (PoseView API from ProteinsPlus)
   // ========================================================================
   const load2DDiagram = async (ligandName: string, chainId: string, resSeq: number) => {
-    // Show the 2D diagram panel with a message that this feature uses local rendering
+    if (!currentStructure?.pdbId) {
+      showToast('error', '2D diagrams require a PDB code');
+      return;
+    }
+
     setShow2DDiagram(true);
     setIs2DLoading(true);
     setSelected2DLigand(`${ligandName}_${chainId}_${resSeq}`);
 
-    // Get ligand contacts from ligandData if available
-    const ligandInfo = ligandData?.ligands.find(
-      l => l.name === ligandName && l.chainId === chainId && l.resSeq === resSeq
-    );
+    // Format ligand name for ProteinsPlus API: ligandName_chainId_resSeq
+    const ligandId = `${ligandName}_${chainId}_${resSeq}`;
 
-    if (!ligandInfo || ligandInfo.contacts.length === 0) {
-      setIs2DLoading(false);
-      showToast('info', `No interaction data available for ${ligandName}`);
-
-      // Show a simple message in the container
-      const container = document.getElementById('poseview-container');
-      if (container) {
-        container.innerHTML = `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; color: #666;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <p style="margin-top: 12px; text-align: center;">No interaction data available.<br/>Use Focus View to see the 3D binding site.</p>
-          </div>
-        `;
-      }
-      return;
-    }
-
-    // Generate a simple 2D interaction diagram locally
     try {
-      const svgWidth = 300;
-      const svgHeight = 280;
-      const centerX = svgWidth / 2;
-      const centerY = svgHeight / 2;
-      const ligandRadius = 25;
-      const contactRadius = 80;
-
-      // Group contacts by residue
-      const residueContacts = new Map<string, typeof ligandInfo.contacts>();
-      for (const contact of ligandInfo.contacts) {
-        const key = `${contact.residue}_${contact.chain}`;
-        if (!residueContacts.has(key)) {
-          residueContacts.set(key, []);
+      // Use PoseView REST API for interaction diagram (with green hydrophobic contour)
+      const responsePost = await fetch(
+        'https://proteins.plus/api/poseview_rest',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            poseview: {
+              pdbCode: currentStructure.pdbId,
+              ligand: ligandId
+            }
+          }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
         }
-        residueContacts.get(key)!.push(contact);
-      }
+      );
 
-      const uniqueResidues = Array.from(residueContacts.keys());
-      const angleStep = (2 * Math.PI) / Math.max(uniqueResidues.length, 1);
+      const jsonPost = await responsePost.json();
 
-      // Build SVG
-      let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" style="width: 100%; height: auto;">`;
+      if (jsonPost.status_code === 202 || jsonPost.status_code === 200) {
+        // Poll for results
+        let polling = true;
+        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-      // Background
-      svgContent += `<rect width="${svgWidth}" height="${svgHeight}" fill="#fafafa"/>`;
+        while (polling) {
+          const responseGet = await fetch(jsonPost.location, { method: 'GET' });
+          const jsonGetStatus = await responseGet.json();
 
-      // Draw interaction lines and residue circles
-      uniqueResidues.forEach((resKey, idx) => {
-        const contacts = residueContacts.get(resKey)!;
-        const angle = idx * angleStep - Math.PI / 2;
-        const resX = centerX + contactRadius * Math.cos(angle);
-        const resY = centerY + contactRadius * Math.sin(angle);
+          if (jsonGetStatus.status_code === 200) {
+            polling = false;
 
-        // Get interaction type for coloring
-        const interactionType = contacts[0].interactionType;
-        let lineColor = '#888';
-        let fillColor = '#e0e0e0';
+            // Fetch the SVG image
+            if (jsonGetStatus.result_svg_picture) {
+              const svgResponse = await fetch(jsonGetStatus.result_svg_picture);
+              const svgText = await svgResponse.text();
 
-        if (interactionType === 'hydrogen_bond') {
-          lineColor = '#22c55e';
-          fillColor = '#dcfce7';
-        } else if (interactionType === 'hydrophobic') {
-          lineColor = '#eab308';
-          fillColor = '#fef9c3';
-        } else if (interactionType === 'salt_bridge') {
-          lineColor = '#ef4444';
-          fillColor = '#fee2e2';
-        } else if (interactionType === 'pi_stacking') {
-          lineColor = '#a855f7';
-          fillColor = '#f3e8ff';
+              // Display the SVG in the container
+              const container = document.getElementById('poseview-container');
+              if (container) {
+                container.innerHTML = svgText;
+                // Preserve SVG aspect ratio - don't force width/height
+                const svgElement = container.querySelector('svg');
+                if (svgElement) {
+                  // Get original dimensions
+                  const originalWidth = svgElement.getAttribute('width');
+                  const originalHeight = svgElement.getAttribute('height');
+
+                  // Ensure viewBox is set for proper scaling
+                  if (!svgElement.getAttribute('viewBox') && originalWidth && originalHeight) {
+                    svgElement.setAttribute('viewBox', `0 0 ${parseFloat(originalWidth)} ${parseFloat(originalHeight)}`);
+                  }
+
+                  // Remove fixed dimensions and let it scale with aspect ratio preserved
+                  svgElement.removeAttribute('width');
+                  svgElement.removeAttribute('height');
+                  svgElement.style.width = '100%';
+                  svgElement.style.height = 'auto';
+                  svgElement.style.maxWidth = '100%';
+                  svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                }
+              }
+
+              setIs2DLoading(false);
+              showToast('success', `Loaded PoseView diagram for ${ligandName}`);
+            } else {
+              throw new Error('No SVG result available');
+            }
+          } else if (jsonGetStatus.status_code === 202) {
+            // Still processing
+            await delay(2000);
+          } else {
+            throw new Error('Failed to generate diagram');
+          }
         }
-
-        // Draw interaction line (dashed for H-bonds)
-        const dashArray = interactionType === 'hydrogen_bond' ? 'stroke-dasharray="4,2"' : '';
-        svgContent += `<line x1="${centerX}" y1="${centerY}" x2="${resX}" y2="${resY}" stroke="${lineColor}" stroke-width="1.5" ${dashArray}/>`;
-
-        // Draw residue circle
-        svgContent += `<circle cx="${resX}" cy="${resY}" r="18" fill="${fillColor}" stroke="${lineColor}" stroke-width="1.5"/>`;
-
-        // Residue label
-        const [resName] = resKey.split('_');
-        svgContent += `<text x="${resX}" y="${resY}" text-anchor="middle" dominant-baseline="middle" font-size="9" font-family="sans-serif" fill="#333">${resName}</text>`;
-      });
-
-      // Draw central ligand
-      svgContent += `<circle cx="${centerX}" cy="${centerY}" r="${ligandRadius}" fill="#50C878" stroke="#2d7d46" stroke-width="2"/>`;
-      svgContent += `<text x="${centerX}" y="${centerY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="bold" font-family="sans-serif" fill="white">${ligandName}</text>`;
-
-      // Legend
-      const legendY = svgHeight - 35;
-      svgContent += `<text x="10" y="${legendY}" font-size="8" fill="#666">Legend:</text>`;
-      svgContent += `<line x1="45" y1="${legendY - 3}" x2="60" y2="${legendY - 3}" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,2"/>`;
-      svgContent += `<text x="63" y="${legendY}" font-size="7" fill="#666">H-bond</text>`;
-      svgContent += `<line x1="100" y1="${legendY - 3}" x2="115" y2="${legendY - 3}" stroke="#eab308" stroke-width="1.5"/>`;
-      svgContent += `<text x="118" y="${legendY}" font-size="7" fill="#666">Hydrophobic</text>`;
-      svgContent += `<line x1="170" y1="${legendY - 3}" x2="185" y2="${legendY - 3}" stroke="#ef4444" stroke-width="1.5"/>`;
-      svgContent += `<text x="188" y="${legendY}" font-size="7" fill="#666">Salt bridge</text>`;
-
-      svgContent += '</svg>';
-
-      const container = document.getElementById('poseview-container');
-      if (container) {
-        container.innerHTML = svgContent;
+      } else {
+        throw new Error('Failed to submit PoseView job');
       }
-
-      setIs2DLoading(false);
-      showToast('success', `Generated interaction diagram for ${ligandName}`);
     } catch (error) {
-      console.error('Failed to generate 2D diagram:', error);
+      console.error('Failed to load PoseView diagram:', error);
       setIs2DLoading(false);
-      showToast('error', `Failed to generate diagram for ${ligandName}`);
+      showToast('error', `Failed to load PoseView diagram for ${ligandName}`);
     }
   };
 
@@ -6963,7 +6934,7 @@ export default function ProteinViewer() {
               {is2DLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <Loader2 className="w-12 h-12 animate-spin text-teal-500 mb-4" />
-                  <p className="text-slate-600 dark:text-slate-400 font-medium">Generating 2D diagram...</p>
+                  <p className="text-slate-600 dark:text-slate-400 font-medium">Loading PoseView diagram from ProteinsPlus...</p>
                   <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
                     This may take 10-30 seconds
                   </p>
