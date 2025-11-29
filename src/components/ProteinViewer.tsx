@@ -226,6 +226,25 @@ export default function ProteinViewer() {
   const [showResidueHighlight, setShowResidueHighlight] = useState(false);
   const [selectedResidueTypes, setSelectedResidueTypes] = useState<string[]>([]);
 
+  // Panel z-index ordering - tracks order of panel activation for layering
+  // Higher index = panel was clicked more recently = appears on top
+  const [panelOrder, setPanelOrder] = useState<{
+    metals: number;
+    ligands: number;
+    residues: number;
+  }>({ metals: 1, ligands: 2, residues: 3 });
+
+  // Function to bring a panel to the front
+  const bringPanelToFront = (panel: 'metals' | 'ligands' | 'residues') => {
+    setPanelOrder(prev => {
+      const maxOrder = Math.max(prev.metals, prev.ligands, prev.residues);
+      return {
+        ...prev,
+        [panel]: maxOrder + 1
+      };
+    });
+  };
+
   // Track view mode for each metal's ligand details (list vs 2D map)
   const [metalLigandViewMode, setMetalLigandViewMode] = useState<{[key: number]: 'list' | '2dmap'}>({});
   const [highlightColor, setHighlightColor] = useState('#FF6B6B'); // Default highlight color (used when "Use custom color" is enabled)
@@ -2762,6 +2781,10 @@ export default function ProteinViewer() {
     const newState = !showLigandAnalysis;
     setShowLigandAnalysis(newState);
 
+    if (newState) {
+      bringPanelToFront('ligands');
+    }
+
     if (pluginRef.current && structureRef.current && newState) {
       await analyzeLigands(structureRef.current);
     } else if (!newState) {
@@ -3665,6 +3688,10 @@ export default function ProteinViewer() {
     const newState = !showResidueHighlight;
     setShowResidueHighlight(newState);
 
+    if (newState) {
+      bringPanelToFront('residues');
+    }
+
     if (!newState) {
       // Clear highlights when closing panel
       removeCustomHighlights();
@@ -3786,6 +3813,10 @@ export default function ProteinViewer() {
   const toggleCoordinationHighlight = async () => {
     const newState = !showCoordinationHighlight;
     setShowCoordinationHighlight(newState);
+
+    if (newState) {
+      bringPanelToFront('metals');
+    }
 
     if (pluginRef.current && structureRef.current) {
       if (newState) {
@@ -4488,43 +4519,42 @@ export default function ProteinViewer() {
           </button>
         </div>
 
-        {/* Controls */}
+        {/* Compact Controls Bar - Modern PDB Loading UI */}
         {showControls && (
-          <div className="space-y-4 mb-6">
-            {/* PDB Search */}
-            <div>
-              <label className="label">Load from PDB</label>
-              <div className="flex gap-2">
+          <div className="mb-6">
+            {/* Main Control Bar */}
+            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+              {/* PDB Search Input */}
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   value={pdbSearchQuery}
-                  onChange={(e) => setPdbSearchQuery(e.target.value)}
+                  onChange={(e) => setPdbSearchQuery(e.target.value.toUpperCase())}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && pdbSearchQuery.trim()) {
                       loadFromPDB(pdbSearchQuery.trim());
                     }
                   }}
-                  placeholder="Enter PDB ID (e.g., 1CRN, 7BV2)"
-                  className="input flex-1"
+                  placeholder="PDB ID (e.g., 1CRN)"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
                   disabled={isLoading}
                 />
-                <button
-                  onClick={() => pdbSearchQuery.trim() && loadFromPDB(pdbSearchQuery.trim())}
-                  className="btn-primary"
-                  disabled={!pdbSearchQuery.trim() || isLoading}
-                >
-                  <Search className="w-4 h-4 mr-2" />
-                  Load
-                </button>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Examples: 1CRN (crambin), 1UBQ (ubiquitin), 7BV2 (spike protein)
-              </p>
-            </div>
 
-            {/* File Upload */}
-            <div>
-              <label className="label">Or Upload Structure File</label>
+              {/* Load Button */}
+              <button
+                onClick={() => pdbSearchQuery.trim() && loadFromPDB(pdbSearchQuery.trim())}
+                className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                disabled={!pdbSearchQuery.trim() || isLoading}
+              >
+                Load
+              </button>
+
+              {/* Separator */}
+              <div className="h-8 w-px bg-slate-300 dark:bg-slate-600" />
+
+              {/* Upload Button */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -4537,59 +4567,107 @@ export default function ProteinViewer() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="btn-secondary w-full"
+                className="px-4 py-2 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                 disabled={isLoading}
               >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload PDB/CIF File
+                <Upload className="w-4 h-4" />
+                Upload
               </button>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                💡 Tip: You can also drag & drop files directly onto the viewer
-              </p>
-            </div>
 
-            {/* Saved Structures */}
-            {savedStructures.length > 0 && (
-              <div>
+              {/* Saved Structures Dropdown */}
+              <div className="relative">
                 <button
                   onClick={() => setShowStructureList(!showStructureList)}
-                  className="label flex items-center justify-between w-full cursor-pointer hover:text-primary-600 dark:hover:text-primary-400"
+                  className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+                    savedStructures.length > 0
+                      ? 'bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                  }`}
+                  disabled={savedStructures.length === 0}
                 >
-                  <span className="flex items-center gap-2">
-                    <Database className="w-4 h-4" />
-                    Saved Structures ({savedStructures.length})
-                  </span>
-                  {showStructureList ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  <Database className="w-4 h-4" />
+                  Saved ({savedStructures.length})
                 </button>
-                {showStructureList && (
-                  <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                    {savedStructures.map((structure) => (
-                      <div
-                        key={structure.id}
-                        className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg"
-                      >
-                        <button
-                          onClick={() => handleLoadSavedStructure(structure)}
-                          className="flex-1 text-left text-sm hover:text-primary-600 dark:hover:text-primary-400"
+
+                {/* Dropdown */}
+                {showStructureList && savedStructures.length > 0 && (
+                  <div className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xl z-50 max-h-64 overflow-y-auto">
+                    <div className="p-2">
+                      {savedStructures.map((structure) => (
+                        <div
+                          key={structure.id}
+                          className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg group"
                         >
-                          <div className="font-medium">{structure.name}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {structure.source === 'pdb' ? 'PDB' : 'File'} • {new Date(structure.uploadDate).toLocaleString()}
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteStructure(structure.id)}
-                          className="btn-icon text-red-600 hover:text-red-700"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <button
+                            onClick={() => {
+                              handleLoadSavedStructure(structure);
+                              setShowStructureList(false);
+                            }}
+                            className="flex-1 text-left"
+                          >
+                            <div className="text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400">
+                              {structure.name}
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {structure.source === 'pdb' ? 'PDB' : 'File'} • {new Date(structure.uploadDate).toLocaleDateString()}
+                            </div>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteStructure(structure.id);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            )}
+
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Quick Actions */}
+              <div className="flex items-center gap-1">
+                {/* Reset View */}
+                <button
+                  onClick={resetCamera}
+                  className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  title="Reset Camera"
+                  disabled={!currentStructure}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+
+                {/* Snapshot */}
+                <button
+                  onClick={takeSnapshot}
+                  className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  title="Take Snapshot"
+                  disabled={!currentStructure}
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+
+                {/* Settings Toggle */}
+                <button
+                  onClick={() => setShowInfo(!showInfo)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    showInfo
+                      ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                  title="Structure Info"
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -5324,7 +5402,11 @@ export default function ProteinViewer() {
 
       {/* Metal Coordination Analysis Panel - Redesigned with clean card layout */}
       {showCoordinationHighlight && coordinationData && (
-        <div className="mt-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden">
+        <div
+          className="mt-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden relative"
+          style={{ zIndex: panelOrder.metals }}
+          onClick={() => bringPanelToFront('metals')}
+        >
           {/* Clean Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-3">
@@ -5470,14 +5552,15 @@ export default function ProteinViewer() {
                             // Use metal data directly instead of parsing info string
                             focusOnMetal(metal.element, metal.chainId, metal.resSeq, metal.resName, metalIdx);
                           }}
-                          className={`p-1.5 rounded-lg transition-colors ${
+                          className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium ${
                             focusedMetalIdx === metalIdx
                               ? 'bg-amber-500 text-white'
                               : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 hover:text-amber-600 dark:hover:text-amber-400'
                           }`}
                           title={focusedMetalIdx === metalIdx ? 'Currently focused' : 'Focus on this metal coordination site'}
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Focus</span>
                         </button>
                         {/* METALizer Analysis Button */}
                         {currentStructure?.pdbId && (
@@ -5486,24 +5569,26 @@ export default function ProteinViewer() {
                               // Use metal's direct properties for METALizer API
                               loadMetalizerAnalysis(metal.element, metal.chainId, metal.resSeq, metal.resName);
                             }}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium ${
                               metalizerResults.has(`${metal.element}_${metal.chainId}_${metal.resSeq}`)
                                 ? 'bg-violet-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30 hover:text-violet-600 dark:hover:text-violet-400'
                             }`}
                             title="METALizer Analysis (PDB-wide statistics)"
                           >
-                            <Sparkles className="w-4 h-4" />
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Analyze</span>
                           </button>
                         )}
                         {/* Reset View Button (only shown when focused) */}
                         {focusedMetalIdx === metalIdx && (
                           <button
                             onClick={resetFocusView}
-                            className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-500"
+                            className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-500 flex items-center gap-1 text-xs font-medium"
                             title="Reset to full protein view"
                           >
-                            <RotateCcw className="w-4 h-4" />
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Reset</span>
                           </button>
                         )}
                       </div>
@@ -6328,57 +6413,29 @@ export default function ProteinViewer() {
                             </div>
                           ) : (
                             <div className="space-y-4">
-                              {/* METALizer Geometry Predictions vs Our Analysis */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {/* Our CShM-based analysis (Reference) */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                  <div className="flex items-center gap-1.5 mb-2">
-                                    <Hexagon className="w-3.5 h-3.5 text-indigo-500" />
-                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Our Geometry (CShM)</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                      {metal.geometry?.geometryType || 'Unknown'}
-                                    </span>
-                                    <div className="flex items-center gap-2">
-                                      <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded text-[10px] font-medium text-indigo-700 dark:text-indigo-300">
-                                        CN {metal.geometry?.coordinationNumber || '?'}
-                                      </span>
-                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                                        metal.geometry?.distortion === 'ideal' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
-                                        metal.geometry?.distortion === 'low' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
-                                        metal.geometry?.distortion === 'moderate' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
-                                        'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                                      }`}>
-                                        RMSD: {metal.geometry?.rmsd.toFixed(2) || '?'}
-                                      </span>
-                                    </div>
-                                  </div>
+                              {/* Our CShM-based Geometry Analysis */}
+                              <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <Hexagon className="w-3.5 h-3.5 text-indigo-500" />
+                                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Geometry Analysis (CShM)</span>
                                 </div>
-
-                                {/* METALizer Predictions */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                  <div className="flex items-center gap-1.5 mb-2">
-                                    <Sparkles className="w-3.5 h-3.5 text-violet-500" />
-                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">METALizer Prediction</span>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    {metal.geometry?.geometryType || 'Unknown'}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded text-[10px] font-medium text-indigo-700 dark:text-indigo-300">
+                                      CN {metal.geometry?.coordinationNumber || '?'}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                      metal.geometry?.distortion === 'ideal' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
+                                      metal.geometry?.distortion === 'low' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                                      metal.geometry?.distortion === 'moderate' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                                      'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                    }`}>
+                                      RMSD: {metal.geometry?.rmsd.toFixed(2) || '?'}
+                                    </span>
                                   </div>
-                                  {result.predictions.length > 0 ? (
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                        {result.predictions[0].geometry}
-                                      </span>
-                                      <div className="flex items-center gap-2">
-                                        <span className="px-2 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded text-[10px] font-medium text-violet-700 dark:text-violet-300">
-                                          CN {result.predictions[0].coordinationNumber}
-                                        </span>
-                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400">
-                                          Score: {result.predictions[0].score.toFixed(2)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-slate-400 italic">No predictions available</span>
-                                  )}
                                 </div>
                               </div>
 
@@ -6426,17 +6483,15 @@ export default function ProteinViewer() {
                                         SIENA Ensemble ({result.sienaResults.totalCount} similar sites)
                                       </span>
                                     </div>
-                                    <span className="text-[10px] text-slate-400">Sorted by structural similarity</span>
+                                    <span className="text-[10px] text-slate-400">Click to load in 3D viewer</span>
                                   </div>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-24 overflow-y-auto">
                                     {result.sienaResults.sites.slice(0, 8).map((site, idx) => (
-                                      <a
+                                      <button
                                         key={idx}
-                                        href={`https://www.rcsb.org/structure/${site.pdbId}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group"
-                                        title={`${site.pdbId} - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
+                                        onClick={() => loadFromPDB(site.pdbId)}
+                                        className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group text-left"
+                                        title={`Load ${site.pdbId} - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
                                       >
                                         <span className="text-[10px] font-mono font-medium text-emerald-600 dark:text-emerald-400 group-hover:underline">
                                           {site.pdbId}
@@ -6444,8 +6499,8 @@ export default function ProteinViewer() {
                                         <span className="text-[9px] text-slate-400">
                                           {site.rmsd.toFixed(1)}Å
                                         </span>
-                                        <ExternalLink className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-500" />
-                                      </a>
+                                        <Box className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-500" />
+                                      </button>
                                     ))}
                                   </div>
                                 </div>
@@ -6526,7 +6581,11 @@ export default function ProteinViewer() {
 
       {/* Ligand Binding Analysis Panel - Persistent section below viewer */}
       {showLigandAnalysis && ligandData && (
-        <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-300 dark:border-purple-700 shadow-lg overflow-hidden">
+        <div
+          className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-300 dark:border-purple-700 shadow-lg overflow-hidden relative"
+          style={{ zIndex: panelOrder.ligands }}
+          onClick={() => bringPanelToFront('ligands')}
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800">
             <div className="flex items-center gap-3">
@@ -6614,7 +6673,7 @@ export default function ProteinViewer() {
                             // Use ligand data directly instead of parsing info string
                             focusOnLigand(ligand.name, ligand.chainId, ligand.resSeq, idx);
                           }}
-                          className={`p-1.5 rounded-lg transition-colors ${
+                          className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium ${
                             focusedLigandIdx === idx
                               ? 'bg-purple-500 text-white'
                               : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:text-purple-600 dark:hover:text-purple-400'
@@ -6622,6 +6681,7 @@ export default function ProteinViewer() {
                           title={focusedLigandIdx === idx ? 'Currently focused' : 'Focus on this binding site'}
                         >
                           <Eye className="w-3.5 h-3.5" />
+                          <span>Focus</span>
                         </button>
                         {/* 2D Interaction Diagram Button (PoseView) */}
                         {currentStructure?.pdbId && (
@@ -6630,7 +6690,7 @@ export default function ProteinViewer() {
                               // Use ligand data directly instead of parsing info string
                               load2DDiagram(ligand.name, ligand.chainId, ligand.resSeq);
                             }}
-                            className={`p-1.5 rounded-lg transition-colors ${
+                            className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 text-xs font-medium ${
                               selected2DLigand === `${ligand.name}_${ligand.chainId}_${ligand.resSeq}`
                                 ? 'bg-teal-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400'
@@ -6638,16 +6698,18 @@ export default function ProteinViewer() {
                             title="View 2D Interaction Diagram"
                           >
                             <Grid3X3 className="w-3.5 h-3.5" />
+                            <span>2D</span>
                           </button>
                         )}
                         {/* Reset View Button (only shown when focused) */}
                         {focusedLigandIdx === idx && (
                           <button
                             onClick={resetFocusView}
-                            className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-500"
+                            className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-500 flex items-center gap-1 text-xs font-medium"
                             title="Reset to full protein view"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Reset</span>
                           </button>
                         )}
                       </div>
@@ -6782,7 +6844,11 @@ export default function ProteinViewer() {
 
       {/* Custom Residue Highlighting Panel */}
       {showResidueHighlight && (
-        <div className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-pink-300 dark:border-pink-700 shadow-lg overflow-hidden">
+        <div
+          className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-pink-300 dark:border-pink-700 shadow-lg overflow-hidden relative"
+          style={{ zIndex: panelOrder.residues }}
+          onClick={() => bringPanelToFront('residues')}
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-pink-50 dark:bg-pink-900/20 border-b border-pink-200 dark:border-pink-800">
             <div className="flex items-center gap-3">
