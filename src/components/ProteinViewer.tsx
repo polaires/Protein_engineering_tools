@@ -9,7 +9,7 @@ import {
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
   Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle,
   Highlighter, Zap, Layers, Shield, Lightbulb, Eye, Grid3X3, Sparkles, Loader2,
-  BarChart3, Network, ExternalLink
+  BarChart3, Network
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
