@@ -38,7 +38,11 @@ import { analyzeProtein } from '@/utils/proteinAnalysis';
 // Import Mol* CSS
 import 'molstar/lib/mol-plugin-ui/skin/light.scss';
 
-export default function ProteinViewer() {
+interface ProteinViewerProps {
+  initialPdbId?: string | null;
+}
+
+export default function ProteinViewer({ initialPdbId }: ProteinViewerProps) {
   const { showToast } = useApp();
   const viewerRef = useRef<HTMLDivElement>(null);
   const pluginRef = useRef<PluginUIContext | null>(null);
@@ -389,6 +393,15 @@ export default function ProteinViewer() {
       }
     };
   }, []);
+
+  // Auto-load initial PDB if provided via URL parameter
+  const initialPdbLoadedRef = useRef(false);
+  useEffect(() => {
+    if (isViewerReady && initialPdbId && !initialPdbLoadedRef.current) {
+      initialPdbLoadedRef.current = true;
+      loadFromPDB(initialPdbId);
+    }
+  }, [isViewerReady, initialPdbId]);
 
   // Ensure drag overlay clears when loading starts and stays cleared
   useEffect(() => {
@@ -6422,15 +6435,15 @@ export default function ProteinViewer() {
                                         SIENA Ensemble ({result.sienaResults.totalCount} similar sites)
                                       </span>
                                     </div>
-                                    <span className="text-[10px] text-slate-400">Click to open in new tab</span>
+                                    <span className="text-[10px] text-slate-400">Click to open in 3D Viewer</span>
                                   </div>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-24 overflow-y-auto">
                                     {result.sienaResults.sites.slice(0, 8).map((site, idx) => (
                                       <button
                                         key={idx}
-                                        onClick={() => window.open(`https://www.rcsb.org/3d-view/${site.pdbId}`, '_blank', 'noopener,noreferrer')}
+                                        onClick={() => window.open(`${window.location.origin}${window.location.pathname}?pdb=${site.pdbId}`, '_blank', 'noopener,noreferrer')}
                                         className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group text-left"
-                                        title={`Open ${site.pdbId} in RCSB 3D Viewer - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
+                                        title={`Open ${site.pdbId} in 3D Viewer - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
                                       >
                                         <span className="text-[10px] font-mono font-medium text-emerald-600 dark:text-emerald-400 group-hover:underline">
                                           {site.pdbId}
