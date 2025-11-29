@@ -56,7 +56,6 @@ export default function ProteinViewer() {
   const [isLoading, setIsLoading] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showStructureList, setShowStructureList] = useState(false);
-  const [showInfo, setShowInfo] = useState(true);
   const [selectedColorScheme, setSelectedColorScheme] = useState('chain-id');
   const [selectedRepresentation, setSelectedRepresentation] = useState('cartoon');
   const [measurementMode, setMeasurementMode] = useState(false);
@@ -4632,41 +4631,96 @@ export default function ProteinViewer() {
               {/* Spacer */}
               <div className="flex-1" />
 
-              {/* Quick Actions */}
-              <div className="flex items-center gap-1">
-                {/* Reset View */}
-                <button
-                  onClick={resetCamera}
-                  className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                  title="Reset Camera"
-                  disabled={!currentStructure}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
+              {/* Tools */}
+              {currentStructure && (
+                <div className="flex items-center gap-1">
+                  {/* Measurement Tool */}
+                  <button
+                    onClick={toggleMeasurement}
+                    className={`p-2 rounded-lg transition-colors relative ${
+                      measurementMode
+                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 ring-2 ring-primary-400'
+                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                    title={measurementMode ? `Measurement mode (${selectedLoci.length}/2 atoms)` : 'Distance Measurement'}
+                  >
+                    <Ruler className="w-4 h-4" />
+                    {measurementMode && selectedLoci.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                        {selectedLoci.length}
+                      </span>
+                    )}
+                  </button>
 
-                {/* Snapshot */}
-                <button
-                  onClick={takeSnapshot}
-                  className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                  title="Take Snapshot"
-                  disabled={!currentStructure}
-                >
-                  <Camera className="w-4 h-4" />
-                </button>
+                  {/* Reset Camera */}
+                  <button
+                    onClick={resetCamera}
+                    className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    title="Reset Camera"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
 
-                {/* Settings Toggle */}
-                <button
-                  onClick={() => setShowInfo(!showInfo)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    showInfo
-                      ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400'
-                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-                  }`}
-                  title="Structure Info"
-                >
-                  <Info className="w-4 h-4" />
-                </button>
+                  {/* Focus on Structure */}
+                  <button
+                    onClick={focusOnStructure}
+                    className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    title="Focus on Structure"
+                  >
+                    <Focus className="w-4 h-4" />
+                  </button>
+
+                  {/* Take Snapshot */}
+                  <button
+                    onClick={takeSnapshot}
+                    className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    title="Take Snapshot"
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* PDB Header Info - Shows when structure is loaded */}
+        {currentStructure && (
+          <div className="mb-4 p-3 bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/30 dark:to-blue-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 text-xs font-bold bg-primary-500 text-white rounded">
+                    {currentStructure.name}
+                  </span>
+                  {proteinInfo?.experimentalMethod && (
+                    <span className="px-2 py-0.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded">
+                      {proteinInfo.experimentalMethod}
+                    </span>
+                  )}
+                  {proteinInfo?.resolution && (
+                    <span className="px-2 py-0.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded">
+                      {proteinInfo.resolution.toFixed(2)} Å
+                    </span>
+                  )}
+                </div>
+                {proteinInfo?.title && (
+                  <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">
+                    {proteinInfo.title}
+                  </p>
+                )}
+                {!proteinInfo?.title && currentStructure.source === 'file' && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400 italic">
+                    Uploaded from file
+                  </p>
+                )}
               </div>
+              {proteinInfo?.organism && (
+                <div className="text-right text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
+                  <span className="text-slate-400">Organism:</span>
+                  <p className="font-medium text-slate-600 dark:text-slate-300">{proteinInfo.organism}</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -4896,79 +4950,6 @@ export default function ProteinViewer() {
                 </div>
               </div>
 
-              {/* Vertical Separator */}
-              <div className="h-8 w-px bg-slate-300 dark:bg-slate-600" />
-
-              {/* Tools Section */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Tools:
-                </span>
-                <div className="flex gap-1">
-                  {/* Measurement Tool */}
-                  <button
-                    onClick={toggleMeasurement}
-                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 relative ${
-                      measurementMode
-                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 ring-2 ring-primary-400'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
-                    }`}
-                    title={measurementMode ? `Measurement mode (${selectedLoci.length}/2 atoms)` : 'Distance Measurement'}
-                  >
-                    <Ruler className="w-4 h-4" />
-                    <span className="text-xs">Measure</span>
-                    {measurementMode && selectedLoci.length > 0 && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-                        {selectedLoci.length}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Reset Camera */}
-                  <button
-                    onClick={resetCamera}
-                    className="px-2 py-1.5 rounded transition-colors flex items-center gap-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
-                    title="Reset Camera"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span className="text-xs">Reset</span>
-                  </button>
-
-                  {/* Focus on Structure */}
-                  <button
-                    onClick={focusOnStructure}
-                    className="px-2 py-1.5 rounded transition-colors flex items-center gap-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
-                    title="Focus on Structure"
-                  >
-                    <Focus className="w-4 h-4" />
-                    <span className="text-xs">Focus</span>
-                  </button>
-
-                  {/* Take Snapshot */}
-                  <button
-                    onClick={takeSnapshot}
-                    className="px-2 py-1.5 rounded transition-colors flex items-center gap-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
-                    title="Take Snapshot"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span className="text-xs">Snap</span>
-                  </button>
-
-                  {/* Structure Info Toggle */}
-                  <button
-                    onClick={() => setShowInfo(!showInfo)}
-                    className={`px-2 py-1.5 rounded transition-colors flex items-center gap-1 ${
-                      showInfo
-                        ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'
-                    }`}
-                    title="Structure Info Panel"
-                  >
-                    <Info className="w-4 h-4" />
-                    <span className="text-xs">Info</span>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -5331,50 +5312,6 @@ export default function ProteinViewer() {
           }
         })()}
 
-        {/* Structure Info Panel */}
-        {showInfo && proteinInfo && currentStructure && (
-          <div className="mt-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-            <h3 className="font-semibold text-primary-700 dark:text-primary-300 mb-3 flex items-center gap-2">
-              <Info className="w-5 h-5" />
-              Structure Information
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              {proteinInfo.title && (
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Title:</span>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">{proteinInfo.title}</p>
-                </div>
-              )}
-              {proteinInfo.experimentalMethod && (
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Method:</span>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">{proteinInfo.experimentalMethod}</p>
-                </div>
-              )}
-              {proteinInfo.resolution && (
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Resolution:</span>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">{proteinInfo.resolution.toFixed(2)} Å</p>
-                </div>
-              )}
-              {proteinInfo.organism && (
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Organism:</span>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">{proteinInfo.organism}</p>
-                </div>
-              )}
-              {proteinInfo.depositionDate && (
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">Deposition:</span>
-                  <p className="text-slate-600 dark:text-slate-400 mt-1">
-                    {new Date(proteinInfo.depositionDate).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Export Options */}
         {currentStructure && (
           <div className="mt-6">
@@ -5400,12 +5337,14 @@ export default function ProteinViewer() {
         )}
       </div>
 
-      {/* Metal Coordination Analysis Panel - Redesigned with clean card layout */}
-      {showCoordinationHighlight && coordinationData && (
-        <div
-          className="mt-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden relative"
-          style={{ zIndex: panelOrder.metals }}
-          onClick={() => bringPanelToFront('metals')}
+      {/* Analysis Panels Container - Flex container for dynamic ordering */}
+      <div className="flex flex-col">
+        {/* Metal Coordination Analysis Panel - Redesigned with clean card layout */}
+        {showCoordinationHighlight && coordinationData && (
+          <div
+            className="mt-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden relative"
+            style={{ order: -panelOrder.metals }}
+            onClick={() => bringPanelToFront('metals')}
         >
           {/* Clean Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
@@ -6576,15 +6515,15 @@ export default function ProteinViewer() {
               Click the <Target className="w-3 h-3 inline text-slate-500" /> button to hide this panel • Typical metal-ligand bonds: 1.8-2.8Å
             </span>
           </div>
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Ligand Binding Analysis Panel - Persistent section below viewer */}
-      {showLigandAnalysis && ligandData && (
-        <div
-          className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-300 dark:border-purple-700 shadow-lg overflow-hidden relative"
-          style={{ zIndex: panelOrder.ligands }}
-          onClick={() => bringPanelToFront('ligands')}
+        {/* Ligand Binding Analysis Panel - Persistent section below viewer */}
+        {showLigandAnalysis && ligandData && (
+          <div
+            className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-300 dark:border-purple-700 shadow-lg overflow-hidden relative"
+            style={{ order: -panelOrder.ligands }}
+            onClick={() => bringPanelToFront('ligands')}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800">
@@ -6839,15 +6778,15 @@ export default function ProteinViewer() {
               <span className="text-red-600 dark:text-red-400"> ⚠ Crystal Artifact</span> = likely crystallization additive
             </span>
           </div>
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Custom Residue Highlighting Panel */}
-      {showResidueHighlight && (
-        <div
-          className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-pink-300 dark:border-pink-700 shadow-lg overflow-hidden relative"
-          style={{ zIndex: panelOrder.residues }}
-          onClick={() => bringPanelToFront('residues')}
+        {/* Custom Residue Highlighting Panel */}
+        {showResidueHighlight && (
+          <div
+            className="mt-4 bg-white dark:bg-slate-800 rounded-lg border border-pink-300 dark:border-pink-700 shadow-lg overflow-hidden relative"
+            style={{ order: -panelOrder.residues }}
+            onClick={() => bringPanelToFront('residues')}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-pink-50 dark:bg-pink-900/20 border-b border-pink-200 dark:border-pink-800">
@@ -6987,8 +6926,9 @@ export default function ProteinViewer() {
               )}
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* 2D Interaction Diagram Modal (PoseView) */}
       {show2DDiagram && (
