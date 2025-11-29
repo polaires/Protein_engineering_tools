@@ -8,7 +8,8 @@ import {
   Box, Upload, Search, Download, Trash2, RotateCcw, Camera, Info, Database,
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
   Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle,
-  Highlighter, Zap, Layers, Shield, Lightbulb
+  Highlighter, Zap, Layers, Shield, Lightbulb, Eye, Grid3X3, Sparkles, Loader2,
+  BarChart3, Network, ExternalLink
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -25,6 +26,8 @@ import { Vec3 } from 'molstar/lib/mol-math/linear-algebra';
 import { getPalette } from 'molstar/lib/mol-util/color/palette';
 import { Color } from 'molstar/lib/mol-util/color';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
+import { Script } from 'molstar/lib/mol-script/script';
+import { StructureSelection } from 'molstar/lib/mol-model/structure';
 import {
   saveStructure, getAllStructures, deleteStructure, generateStructureId,
 } from '@/services/proteinViewer';
@@ -170,6 +173,48 @@ export default function ProteinViewer() {
 
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // 2D Interaction Diagram states (PoseView from ProteinsPlus)
+  const [show2DDiagram, setShow2DDiagram] = useState(false);
+  const [is2DLoading, setIs2DLoading] = useState(false);
+  const [selected2DLigand, setSelected2DLigand] = useState<string | null>(null);
+
+  // Focus view states
+  const [focusedLigandIdx, setFocusedLigandIdx] = useState<number | null>(null);
+  const [focusedMetalIdx, setFocusedMetalIdx] = useState<number | null>(null);
+
+  // METALizer Analysis states (ProteinsPlus metal analysis)
+  interface MetalizerPrediction {
+    geometry: string;
+    coordinationNumber: number;
+    rmsd: number;
+    freeSites: number;
+    overlapPenalty: number;
+    score: number;
+  }
+  interface SienaSite {
+    pdbId: string;
+    metalId: string;
+    element: string;
+    rmsd: number;
+    geometry?: string;
+  }
+  interface DistanceHistogramBin {
+    distance: number;
+    count: number;
+  }
+  interface MetalizerResult {
+    metalAtom: string;
+    ligand: string;
+    element: string;
+    predictions: MetalizerPrediction[];
+    pdbStats: { geometry: string; count: number }[] | null;
+    sienaResults: { sites: SienaSite[]; totalCount: number } | null;
+    distanceHistogram: { atomType: string; bins: DistanceHistogramBin[] }[] | null;
+    loading: boolean;
+    error: string | null;
+  }
+  const [metalizerResults, setMetalizerResults] = useState<Map<string, MetalizerResult>>(new Map());
 
   // Custom residue highlighting
   const [showResidueHighlight, setShowResidueHighlight] = useState(false);
@@ -2735,6 +2780,649 @@ export default function ProteinViewer() {
     }
   };
 
+  // ========================================================================
+  // 2D Interaction Diagram (PoseView from ProteinsPlus)
+  // ========================================================================
+  const load2DDiagram = async (ligandName: string, chainId: string, resSeq: number) => {
+    if (!currentStructure?.pdbId) {
+      showToast('error', '2D diagrams require a PDB code');
+      return;
+    }
+
+    setShow2DDiagram(true);
+    setIs2DLoading(true);
+    setSelected2DLigand(`${ligandName}_${chainId}_${resSeq}`);
+
+    // Format ligand ID for ProteinsPlus API
+    const ligandId = `${ligandName}_${chainId}_${resSeq}`;
+
+    try {
+      // Use PoseView API from ProteinsPlus
+      const responsePost = await fetch('https://proteins.plus/api/poseview_rest', {
+        method: 'POST',
+        body: JSON.stringify({
+          poseview: {
+            pdbCode: currentStructure.pdbId,
+            ligand: ligandId
+          }
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      const jsonPost = await responsePost.json();
+
+      if (jsonPost.status_code === 202 || jsonPost.status_code === 200) {
+        let polling = true;
+        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+        while (polling) {
+          const responseGet = await fetch(jsonPost.location, { method: 'GET' });
+          const jsonGetStatus = await responseGet.json();
+
+          if (jsonGetStatus.status_code === 200) {
+            polling = false;
+
+            if (jsonGetStatus.result_svg_picture) {
+              const svgResponse = await fetch(jsonGetStatus.result_svg_picture);
+              const svgText = await svgResponse.text();
+
+              const container = document.getElementById('poseview-container');
+              if (container) {
+                container.innerHTML = svgText;
+                const svgElement = container.querySelector('svg');
+                if (svgElement) {
+                  const originalWidth = svgElement.getAttribute('width');
+                  const originalHeight = svgElement.getAttribute('height');
+                  if (!svgElement.getAttribute('viewBox') && originalWidth && originalHeight) {
+                    svgElement.setAttribute('viewBox', `0 0 ${parseFloat(originalWidth)} ${parseFloat(originalHeight)}`);
+                  }
+                  svgElement.removeAttribute('width');
+                  svgElement.removeAttribute('height');
+                  svgElement.style.width = '100%';
+                  svgElement.style.height = 'auto';
+                  svgElement.style.maxWidth = '100%';
+                  svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                }
+              }
+              setIs2DLoading(false);
+              showToast('success', `Loaded PoseView diagram for ${ligandName}`);
+            } else {
+              throw new Error('No SVG result available');
+            }
+          } else if (jsonGetStatus.status_code === 202) {
+            await delay(2000);
+          } else {
+            throw new Error('Failed to generate diagram');
+          }
+        }
+      } else {
+        throw new Error('Failed to submit PoseView job');
+      }
+    } catch (error) {
+      console.error('Failed to load PoseView diagram:', error);
+      setIs2DLoading(false);
+      showToast('error', `Failed to load PoseView diagram for ${ligandName}`);
+    }
+  };
+
+  // ========================================================================
+  // Focus View for Ligand (3D binding site focus with pocket visualization)
+  // ========================================================================
+  const focusOnLigand = async (ligandName: string, chainId: string, resSeq: number, ligandIdx: number) => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    const plugin = pluginRef.current;
+
+    try {
+      setIsUpdatingVisualization(true);
+
+      // Get the structure
+      const state = plugin.state.data;
+      const cell = state.cells.get(structureRef.current as any);
+      if (!cell || !cell.obj?.data) {
+        showToast('error', 'Could not access structure data');
+        return;
+      }
+
+      // Clear current representations
+      await plugin.clear();
+
+      // Reload the structure
+      let data, trajectory, model, structure;
+      if (currentStructure?.source === 'pdb' && currentStructure?.pdbId) {
+        data = await plugin.builders.data.download(
+          { url: `https://files.rcsb.org/download/${currentStructure.pdbId}.cif`, isBinary: false },
+          { state: { isGhost: true } }
+        );
+        trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
+      } else if (currentStructure?.data) {
+        const format = currentStructure.name.toLowerCase().endsWith('.cif') ? 'mmcif' : 'pdb';
+        data = await plugin.builders.data.rawData({ data: currentStructure.data }, { state: { isGhost: true } });
+        trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+      } else {
+        showToast('error', 'No structure data available');
+        return;
+      }
+
+      model = await plugin.builders.structure.createModel(trajectory);
+      structure = await plugin.builders.structure.createStructure(model);
+      structureRef.current = structure.ref;
+
+      // Build ligand query
+      const ligandExpression = MS.struct.generator.atomGroups({
+        'residue-test': MS.core.logic.and([
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), ligandName]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), resSeq]),
+        ])
+      });
+
+      // Pocket expression (ligand + surrounding residues)
+      const pocketExpression = MS.struct.modifier.includeSurroundings({
+        0: ligandExpression,
+        radius: ligandRadius,
+        'as-whole-residues': true
+      });
+
+      // Pocket without ligand
+      const pocketWithoutLigandExpression = MS.struct.modifier.exceptBy({
+        0: pocketExpression,
+        by: ligandExpression
+      });
+
+      // Rest of protein (polymer except pocket)
+      const proteinExpression = MS.struct.modifier.exceptBy({
+        0: MS.struct.generator.atomGroups({
+          'entity-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.entityType(), 'polymer'])
+        }),
+        by: pocketExpression
+      });
+
+      // 1. Create ligand component with green carbons
+      const ligandComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        ligandExpression,
+        `ligand-${ligandName}`
+      );
+      if (ligandComp) {
+        await plugin.builders.structure.representation.addRepresentation(ligandComp, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: { sizeFactor: 0.4 },
+          colorParams: { carbonColor: { name: 'element-symbol', params: { carbonColor: Color(0x50C878) } } },
+        });
+      }
+
+      // 2. Create binding pocket component (protein residues) with labels
+      const pocketProteinExpression = MS.struct.modifier.exceptBy({
+        0: pocketWithoutLigandExpression,
+        by: MS.struct.generator.atomGroups({
+          'residue-test': MS.core.logic.or([
+            MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'HOH']),
+            MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'WAT'])
+          ])
+        })
+      });
+
+      const pocketComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        pocketProteinExpression,
+        'binding-pocket'
+      );
+      if (pocketComp) {
+        await plugin.builders.structure.representation.addRepresentation(pocketComp, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: { sizeFactor: 0.2 },
+        });
+        await plugin.builders.structure.representation.addRepresentation(pocketComp, {
+          type: 'label',
+          typeParams: { level: 'residue' },
+          color: 'uniform' as any,
+          colorParams: { value: Color(0x333333) },
+        });
+      }
+
+      // 3. Pocket water molecules (optional)
+      if (showWater) {
+        const pocketWaterExpression = MS.struct.modifier.intersectBy({
+          0: pocketWithoutLigandExpression,
+          by: MS.struct.generator.atomGroups({
+            'residue-test': MS.core.logic.or([
+              MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'HOH']),
+              MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'WAT'])
+            ])
+          })
+        });
+        const pocketWaterComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+          structure.ref,
+          pocketWaterExpression,
+          'pocket-water'
+        );
+        if (pocketWaterComp) {
+          await plugin.builders.structure.representation.addRepresentation(pocketWaterComp, {
+            type: 'ball-and-stick',
+            color: 'element-symbol' as any,
+            typeParams: { sizeFactor: 0.15, alpha: 0.6 },
+          });
+        }
+      }
+
+      // 4. Rest of protein - transparent cartoon
+      const proteinComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        proteinExpression,
+        'protein-background'
+      );
+      if (proteinComp) {
+        await plugin.builders.structure.representation.addRepresentation(proteinComp, {
+          type: 'cartoon',
+          color: 'chain-id' as any,
+          typeParams: { alpha: 0.25 },
+        });
+      }
+
+      // 5. Focus camera on the pocket
+      const newState = plugin.state.data;
+      const newCell = newState.cells.get(structure.ref as any);
+      if (newCell?.obj?.data) {
+        const focusStructure: Structure = newCell.obj.data;
+        const focusSelection = Script.getStructureSelection(pocketExpression, focusStructure);
+        if (!StructureSelection.isEmpty(focusSelection)) {
+          const loci = StructureSelection.toLociWithSourceUnits(focusSelection);
+          plugin.managers.camera.focusLoci(loci, { durationMs: 500 });
+        }
+      }
+
+      setFocusedLigandIdx(ligandIdx);
+      showToast('success', `Focused on ${ligandName} binding site`);
+
+    } catch (error) {
+      console.error('Failed to focus on ligand:', error);
+      showToast('error', 'Failed to focus on ligand');
+    } finally {
+      setIsUpdatingVisualization(false);
+    }
+  };
+
+  // ========================================================================
+  // Focus View for Metal (3D coordination sphere focus)
+  // ========================================================================
+  const focusOnMetal = async (metalElement: string, chainId: string, resSeq: number, resName: string, metalIdx: number) => {
+    if (!pluginRef.current || !structureRef.current) return;
+
+    const plugin = pluginRef.current;
+
+    try {
+      setIsUpdatingVisualization(true);
+
+      // Clear current representations
+      await plugin.clear();
+
+      // Reload the structure
+      let data, trajectory, model, structure;
+      if (currentStructure?.source === 'pdb' && currentStructure?.pdbId) {
+        data = await plugin.builders.data.download(
+          { url: `https://files.rcsb.org/download/${currentStructure.pdbId}.cif`, isBinary: false },
+          { state: { isGhost: true } }
+        );
+        trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
+      } else if (currentStructure?.data) {
+        const format = currentStructure.name.toLowerCase().endsWith('.cif') ? 'mmcif' : 'pdb';
+        data = await plugin.builders.data.rawData({ data: currentStructure.data }, { state: { isGhost: true } });
+        trajectory = await plugin.builders.structure.parseTrajectory(data, format);
+      } else {
+        showToast('error', 'No structure data available');
+        return;
+      }
+
+      model = await plugin.builders.structure.createModel(trajectory);
+      structure = await plugin.builders.structure.createStructure(model);
+      structureRef.current = structure.ref;
+
+      // Build metal query
+      const metalExpression = MS.struct.generator.atomGroups({
+        'residue-test': MS.core.logic.and([
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), resName]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), resSeq]),
+        ])
+      });
+
+      // Coordination sphere expression
+      const coordSphereExpression = MS.struct.modifier.includeSurroundings({
+        0: metalExpression,
+        radius: coordinationRadius + 2, // Extra margin for context
+        'as-whole-residues': true
+      });
+
+      // Rest of protein
+      const proteinExpression = MS.struct.modifier.exceptBy({
+        0: MS.struct.generator.atomGroups({
+          'entity-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.entityType(), 'polymer'])
+        }),
+        by: coordSphereExpression
+      });
+
+      // 1. Create metal component (large spacefill)
+      const metalComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        metalExpression,
+        `metal-${metalElement}`
+      );
+      if (metalComp) {
+        await plugin.builders.structure.representation.addRepresentation(metalComp, {
+          type: 'spacefill',
+          color: 'uniform' as any,
+          colorParams: { value: Color(0x7C3AED) }, // Purple for metal
+          typeParams: { sizeFactor: 1.2 },
+        });
+      }
+
+      // 2. Coordination sphere residues
+      const coordSphereWithoutMetal = MS.struct.modifier.exceptBy({
+        0: coordSphereExpression,
+        by: metalExpression
+      });
+
+      // Filter out waters for labeling
+      const coordProteinExpression = MS.struct.modifier.exceptBy({
+        0: coordSphereWithoutMetal,
+        by: MS.struct.generator.atomGroups({
+          'residue-test': MS.core.logic.or([
+            MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'HOH']),
+            MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'WAT'])
+          ])
+        })
+      });
+
+      const coordComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        coordProteinExpression,
+        'coordination-sphere'
+      );
+      if (coordComp) {
+        await plugin.builders.structure.representation.addRepresentation(coordComp, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: { sizeFactor: 0.25 },
+        });
+        await plugin.builders.structure.representation.addRepresentation(coordComp, {
+          type: 'label',
+          typeParams: { level: 'residue' },
+          color: 'uniform' as any,
+          colorParams: { value: Color(0x333333) },
+        });
+      }
+
+      // 3. Coordinating waters
+      const waterExpression = MS.struct.modifier.intersectBy({
+        0: coordSphereWithoutMetal,
+        by: MS.struct.generator.atomGroups({
+          'residue-test': MS.core.logic.or([
+            MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'HOH']),
+            MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), 'WAT'])
+          ])
+        })
+      });
+      const waterComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        waterExpression,
+        'coord-water'
+      );
+      if (waterComp) {
+        await plugin.builders.structure.representation.addRepresentation(waterComp, {
+          type: 'ball-and-stick',
+          color: 'element-symbol' as any,
+          typeParams: { sizeFactor: 0.2 },
+        });
+      }
+
+      // 4. Rest of protein - transparent cartoon
+      const proteinComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structure.ref,
+        proteinExpression,
+        'protein-background'
+      );
+      if (proteinComp) {
+        await plugin.builders.structure.representation.addRepresentation(proteinComp, {
+          type: 'cartoon',
+          color: 'chain-id' as any,
+          typeParams: { alpha: 0.2 },
+        });
+      }
+
+      // 5. Focus camera on coordination sphere
+      const newState = plugin.state.data;
+      const newCell = newState.cells.get(structure.ref as any);
+      if (newCell?.obj?.data) {
+        const focusStructure: Structure = newCell.obj.data;
+        const focusSelection = Script.getStructureSelection(coordSphereExpression, focusStructure);
+        if (!StructureSelection.isEmpty(focusSelection)) {
+          const loci = StructureSelection.toLociWithSourceUnits(focusSelection);
+          plugin.managers.camera.focusLoci(loci, { durationMs: 500 });
+        }
+      }
+
+      setFocusedMetalIdx(metalIdx);
+      showToast('success', `Focused on ${metalElement} coordination sphere`);
+
+    } catch (error) {
+      console.error('Failed to focus on metal:', error);
+      showToast('error', 'Failed to focus on metal');
+    } finally {
+      setIsUpdatingVisualization(false);
+    }
+  };
+
+  // ========================================================================
+  // METALizer Analysis (ProteinsPlus) with PDB-wide stats, SIENA, histograms
+  // ========================================================================
+  const loadMetalizerAnalysis = async (metalElement: string, chainId: string, resSeq: number, resName: string) => {
+    if (!currentStructure?.pdbId) {
+      showToast('error', 'METALizer requires a PDB code');
+      return;
+    }
+
+    const metalKey = `${metalElement}_${chainId}_${resSeq}`;
+
+    // Set loading state
+    setMetalizerResults(prev => {
+      const newMap = new Map(prev);
+      newMap.set(metalKey, {
+        metalAtom: `[${resName}]${resSeq}:${chainId}.${metalElement}`,
+        ligand: `${resName}_${chainId}_${resSeq}`,
+        element: metalElement,
+        predictions: [],
+        pdbStats: null,
+        sienaResults: null,
+        distanceHistogram: null,
+        loading: true,
+        error: null
+      });
+      return newMap;
+    });
+
+    try {
+      // Format metal atom for METALizer API
+      const metalAtomId = `[${resName}]${resSeq}:${chainId}.${metalElement}`;
+      const metalLigandId = `${resName}_${chainId}_${resSeq}`;
+
+      const responsePost = await fetch('https://proteins.plus/api/metalizer_rest', {
+        method: 'POST',
+        body: JSON.stringify({
+          metalizer: {
+            pdbCode: currentStructure.pdbId.toLowerCase(),
+            metalatom: metalAtomId,
+            cutoff: '2.8',
+            metalligand: metalLigandId,
+            execute_siena: 'true',
+            execute_edia: 'false',
+            siena_automatic_cutoff: 'true',
+            crystallographic_symmetry: 'false'
+          }
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      const jsonPost = await responsePost.json();
+
+      if (jsonPost.status_code === 202 || jsonPost.status_code === 200) {
+        let polling = true;
+        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+        let attempts = 0;
+        const maxAttempts = 30;
+
+        while (polling && attempts < maxAttempts) {
+          attempts++;
+          const responseGet = await fetch(jsonPost.location, { method: 'GET' });
+          const jsonGetStatus = await responseGet.json();
+
+          if (jsonGetStatus.status_code === 200) {
+            polling = false;
+
+            // Parse predictions
+            const predictions: MetalizerPrediction[] = [];
+            const results = jsonGetStatus.metalizer_results;
+            const elementName = results?.element || metalElement;
+
+            if (results?.predictions && Array.isArray(results.predictions)) {
+              for (const pred of results.predictions) {
+                predictions.push({
+                  geometry: pred.geometry || 'Unknown',
+                  coordinationNumber: pred.coordination_number || 0,
+                  rmsd: pred.geometry_rmsd || pred.rmsd || 0,
+                  freeSites: pred.free_sites || 0,
+                  overlapPenalty: pred.overlap_penalty || 0,
+                  score: pred.score || 0
+                });
+              }
+            }
+
+            // Parse PDB-wide statistics
+            let pdbStats: { geometry: string; count: number }[] | null = null;
+            const geoStatsData = jsonGetStatus.metalizer_geometry_stats;
+            if (geoStatsData && typeof geoStatsData === 'object') {
+              pdbStats = Object.entries(geoStatsData)
+                .filter(([key]) => key !== 'CUTOFF')
+                .map(([geometry, count]) => ({ geometry, count: count as number }))
+                .sort((a, b) => b.count - a.count);
+            }
+
+            // Parse SIENA ensemble results
+            let sienaResults: { sites: SienaSite[]; totalCount: number } | null = null;
+            const sienaData = jsonGetStatus.metalizer_siena_results;
+            if (Array.isArray(sienaData) && sienaData.length > 0) {
+              const sites: SienaSite[] = sienaData.map((entry: unknown[]) => {
+                const pdbPath = String(entry[0] || '');
+                const pdbIdMatch = pdbPath.match(/([a-z0-9]{4})(?:_|\.)/i);
+                const pdbId = pdbIdMatch ? pdbIdMatch[1].toUpperCase() : pdbPath.split('/').pop()?.split('.')[0] || 'Unknown';
+                const geoInfo = entry[5];
+                const geometry = typeof geoInfo === 'object' && geoInfo !== null
+                  ? ((geoInfo as Record<string, unknown>).geometry as string) || undefined
+                  : undefined;
+                return {
+                  pdbId,
+                  metalId: String(entry[1] || ''),
+                  element: String(entry[2] || ''),
+                  rmsd: parseFloat(String(entry[3])) || 0,
+                  geometry
+                };
+              }).sort((a: SienaSite, b: SienaSite) => a.rmsd - b.rmsd);
+              sienaResults = { sites, totalCount: sites.length };
+            }
+
+            // Parse distance histogram
+            let distanceHistogram: { atomType: string; bins: DistanceHistogramBin[] }[] | null = null;
+            const distData = jsonGetStatus.metalizer_distance_stats;
+            if (distData && typeof distData === 'object') {
+              const histograms: { atomType: string; bins: DistanceHistogramBin[] }[] = [];
+              for (const [atomType, bins] of Object.entries(distData)) {
+                if (Array.isArray(bins) && bins.length > 0) {
+                  const histogramBins: DistanceHistogramBin[] = bins
+                    .filter((bin): bin is [number, number] => Array.isArray(bin) && bin.length >= 2)
+                    .map(bin => ({ distance: bin[0], count: bin[1] }))
+                    .filter(b => b.count > 0);
+                  if (histogramBins.length > 0) {
+                    histograms.push({ atomType, bins: histogramBins });
+                  }
+                }
+              }
+              if (histograms.length > 0) {
+                distanceHistogram = histograms;
+              }
+            }
+
+            setMetalizerResults(prev => {
+              const newMap = new Map(prev);
+              newMap.set(metalKey, {
+                metalAtom: metalAtomId,
+                ligand: metalLigandId,
+                element: elementName,
+                predictions,
+                pdbStats,
+                sienaResults,
+                distanceHistogram,
+                loading: false,
+                error: null
+              });
+              return newMap;
+            });
+
+            showToast('success', `METALizer analysis complete for ${metalElement}`);
+          } else if (jsonGetStatus.status_code === 202) {
+            await delay(2000);
+          } else {
+            throw new Error(jsonGetStatus.message || 'Failed to get METALizer results');
+          }
+        }
+
+        if (attempts >= maxAttempts) {
+          throw new Error('METALizer analysis timed out');
+        }
+      } else {
+        throw new Error(jsonPost.message || 'Failed to submit METALizer job');
+      }
+    } catch (error) {
+      console.error('Failed to load METALizer analysis:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+
+      setMetalizerResults(prev => {
+        const newMap = new Map(prev);
+        newMap.set(metalKey, {
+          metalAtom: `[${resName}]${resSeq}:${chainId}.${metalElement}`,
+          ligand: `${resName}_${chainId}_${resSeq}`,
+          element: metalElement,
+          predictions: [],
+          pdbStats: null,
+          sienaResults: null,
+          distanceHistogram: null,
+          loading: false,
+          error: errorMsg
+        });
+        return newMap;
+      });
+
+      showToast('error', `METALizer analysis failed: ${errorMsg}`);
+    }
+  };
+
+  // Reset focus view to full structure
+  const resetFocusView = async () => {
+    if (!pluginRef.current || !currentStructure) return;
+
+    setFocusedLigandIdx(null);
+    setFocusedMetalIdx(null);
+    await updateVisualization(selectedRepresentation, selectedColorScheme);
+    showToast('success', 'Reset to full protein view');
+  };
+
   // Apply electrostatic coloring (charge-based: Blue +, Red -, White neutral)
   const applyElectrostaticColoring = async (structureRefToUse: StateObjectRef<any>) => {
     if (!pluginRef.current) return;
@@ -4715,6 +5403,60 @@ export default function ProteinViewer() {
                           </div>
                         </div>
                       </div>
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1">
+                        {/* Focus View Button */}
+                        <button
+                          onClick={() => {
+                            const infoMatch = metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i);
+                            if (infoMatch) {
+                              const resName = metal.element;
+                              const resSeq = parseInt(infoMatch[2]) || 1;
+                              const chainId = infoMatch[3];
+                              focusOnMetal(metal.element, chainId, resSeq, resName, metalIdx);
+                            }
+                          }}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            focusedMetalIdx === metalIdx
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 hover:text-amber-600 dark:hover:text-amber-400'
+                          }`}
+                          title={focusedMetalIdx === metalIdx ? 'Currently focused' : 'Focus on this metal coordination site'}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {/* METALizer Analysis Button */}
+                        {currentStructure?.pdbId && (
+                          <button
+                            onClick={() => {
+                              const infoMatch = metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i);
+                              if (infoMatch) {
+                                const resSeq = parseInt(infoMatch[2]) || 1;
+                                const chainId = infoMatch[3];
+                                loadMetalizerAnalysis(metal.element, chainId, resSeq, metal.element);
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              metalizerResults.has(`${metal.element}_${metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i)?.[3]}_${parseInt(metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i)?.[2] || '1')}`)
+                                ? 'bg-violet-500 text-white'
+                                : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30 hover:text-violet-600 dark:hover:text-violet-400'
+                            }`}
+                            title="METALizer Analysis (PDB-wide statistics)"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                          </button>
+                        )}
+                        {/* Reset View Button (only shown when focused) */}
+                        {focusedMetalIdx === metalIdx && (
+                          <button
+                            onClick={resetFocusView}
+                            className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-500"
+                            title="Reset to full protein view"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -5497,6 +6239,225 @@ export default function ProteinViewer() {
                         </ul>
                       </div>
                     )}
+
+                    {/* METALizer Analysis Panel - PDB-wide statistics, SIENA ensemble, distance histogram */}
+                    {(() => {
+                      const infoMatch = metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i);
+                      const metalKey = infoMatch ? `${metal.element}_${infoMatch[3]}_${parseInt(infoMatch[2]) || 1}` : null;
+                      const result = metalKey ? metalizerResults.get(metalKey) : null;
+
+                      if (!result) return null;
+
+                      return (
+                        <div className="mt-4 p-4 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-violet-500" />
+                              <h4 className="text-sm font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">METALizer Analysis</h4>
+                            </div>
+                            {result.loading && (
+                              <div className="flex items-center gap-1 text-violet-500">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span className="text-xs">Analyzing...</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {result.loading ? (
+                            <div className="text-center py-6">
+                              <Loader2 className="w-8 h-8 animate-spin mx-auto text-violet-400 mb-2" />
+                              <p className="text-xs text-violet-500">Querying ProteinsPlus METALizer...</p>
+                              <p className="text-[10px] text-violet-400 mt-1">This may take 10-30 seconds</p>
+                            </div>
+                          ) : result.error ? (
+                            <div className="text-center py-4 text-red-500">
+                              <AlertTriangle className="w-6 h-6 mx-auto mb-1" />
+                              <p className="text-xs">{result.error}</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {/* METALizer Geometry Predictions vs Our Analysis */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Our CShM-based analysis (Reference) */}
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <Hexagon className="w-3.5 h-3.5 text-indigo-500" />
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Our Geometry (CShM)</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                      {metal.geometry?.geometryType || 'Unknown'}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 rounded text-[10px] font-medium text-indigo-700 dark:text-indigo-300">
+                                        CN {metal.geometry?.coordinationNumber || '?'}
+                                      </span>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                        metal.geometry?.distortion === 'ideal' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
+                                        metal.geometry?.distortion === 'low' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                                        metal.geometry?.distortion === 'moderate' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                                        'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                      }`}>
+                                        RMSD: {metal.geometry?.rmsd.toFixed(2) || '?'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* METALizer Predictions */}
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">METALizer Prediction</span>
+                                  </div>
+                                  {result.predictions.length > 0 ? (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        {result.predictions[0].geometry}
+                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="px-2 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                                          CN {result.predictions[0].coordinationNumber}
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                                          Score: {result.predictions[0].score.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-slate-400 italic">No predictions available</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* PDB-wide Statistics */}
+                              {result.pdbStats && result.pdbStats.length > 0 && (
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                      PDB-wide {result.element} Geometry Statistics
+                                    </span>
+                                  </div>
+                                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                    {result.pdbStats.slice(0, 6).map((stat, idx) => {
+                                      const maxCount = result.pdbStats![0].count;
+                                      const widthPercent = (stat.count / maxCount) * 100;
+                                      return (
+                                        <div key={idx} className="flex items-center gap-2">
+                                          <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 w-28 truncate" title={stat.geometry}>
+                                            {stat.geometry}
+                                          </span>
+                                          <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                            <div
+                                              className="h-full bg-blue-400 dark:bg-blue-500 rounded-full transition-all"
+                                              style={{ width: `${widthPercent}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 w-10 text-right">
+                                            {stat.count}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* SIENA Ensemble Results */}
+                              {result.sienaResults && result.sienaResults.totalCount > 0 && (
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <Network className="w-3.5 h-3.5 text-emerald-500" />
+                                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                        SIENA Ensemble ({result.sienaResults.totalCount} similar sites)
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400">Sorted by structural similarity</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-24 overflow-y-auto">
+                                    {result.sienaResults.sites.slice(0, 8).map((site, idx) => (
+                                      <a
+                                        key={idx}
+                                        href={`https://www.rcsb.org/structure/${site.pdbId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group"
+                                        title={`${site.pdbId} - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
+                                      >
+                                        <span className="text-[10px] font-mono font-medium text-emerald-600 dark:text-emerald-400 group-hover:underline">
+                                          {site.pdbId}
+                                        </span>
+                                        <span className="text-[9px] text-slate-400">
+                                          {site.rmsd.toFixed(1)}Å
+                                        </span>
+                                        <ExternalLink className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-500" />
+                                      </a>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Distance Distribution Histogram */}
+                              {result.distanceHistogram && result.distanceHistogram.length > 0 && (
+                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <BarChart3 className="w-3.5 h-3.5 text-teal-500" />
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                      Distance Distribution by Atom Type
+                                    </span>
+                                  </div>
+                                  <div className="space-y-3">
+                                    {result.distanceHistogram.slice(0, 3).map((histogram, hIdx) => {
+                                      const maxCount = Math.max(...histogram.bins.map(b => b.count));
+                                      const filteredBins = histogram.bins.filter(b => b.count > 0);
+                                      return (
+                                        <div key={hIdx}>
+                                          <div className="flex items-center gap-1 mb-1">
+                                            <span className={`w-2 h-2 rounded-full ${
+                                              histogram.atomType.includes('O') ? 'bg-red-400' :
+                                              histogram.atomType.includes('N') ? 'bg-blue-400' :
+                                              histogram.atomType.includes('S') ? 'bg-yellow-400' :
+                                              'bg-slate-400'
+                                            }`} />
+                                            <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                                              {histogram.atomType}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-end gap-0.5 h-8">
+                                            {filteredBins.slice(0, 15).map((bin, binIdx) => {
+                                              const height = (bin.count / maxCount) * 100;
+                                              return (
+                                                <div
+                                                  key={binIdx}
+                                                  className={`flex-1 rounded-t transition-all ${
+                                                    histogram.atomType.includes('O') ? 'bg-red-300 dark:bg-red-500' :
+                                                    histogram.atomType.includes('N') ? 'bg-blue-300 dark:bg-blue-500' :
+                                                    histogram.atomType.includes('S') ? 'bg-yellow-300 dark:bg-yellow-500' :
+                                                    'bg-slate-300 dark:bg-slate-500'
+                                                  }`}
+                                                  style={{ height: `${height}%`, minHeight: bin.count > 0 ? '2px' : '0' }}
+                                                  title={`${bin.distance.toFixed(2)}Å: ${bin.count} observations`}
+                                                />
+                                              );
+                                            })}
+                                          </div>
+                                          <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
+                                            <span>{filteredBins[0]?.distance.toFixed(1)}Å</span>
+                                            <span>{filteredBins[filteredBins.length - 1]?.distance.toFixed(1)}Å</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}
@@ -5592,21 +6553,72 @@ export default function ProteinViewer() {
                         {ligand.atoms} atoms
                       </span>
                     </div>
-                    {/* Binding Site Classification Badge */}
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      ligand.bindingSiteType === 'functional'
-                        ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
-                        : ligand.bindingSiteType === 'crystal_artifact'
-                        ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
-                        : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
-                    }`} title={ligand.bindingSiteReason}>
-                      {ligand.bindingSiteType === 'functional' ? '✓ Functional' :
-                       ligand.bindingSiteType === 'crystal_artifact' ? (
-                         <><AlertTriangle className="w-3 h-3" /> Crystal Artifact</>
-                       ) : (
-                         <><AlertTriangle className="w-3 h-3" /> Uncertain</>
-                       )}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-1">
+                        {/* Focus View Button */}
+                        <button
+                          onClick={() => {
+                            const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i);
+                            if (infoMatch) {
+                              focusOnLigand(infoMatch[1], infoMatch[2], parseInt(infoMatch[3]), idx);
+                            }
+                          }}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            focusedLigandIdx === idx
+                              ? 'bg-purple-500 text-white'
+                              : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:text-purple-600 dark:hover:text-purple-400'
+                          }`}
+                          title={focusedLigandIdx === idx ? 'Currently focused' : 'Focus on this binding site'}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        {/* 2D Interaction Diagram Button (PoseView) */}
+                        {currentStructure?.pdbId && (
+                          <button
+                            onClick={() => {
+                              const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i);
+                              if (infoMatch) {
+                                load2DDiagram(infoMatch[1], infoMatch[2], parseInt(infoMatch[3]));
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              selected2DLigand === `${ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i)?.[1]}_${ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i)?.[2]}_${ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i)?.[3]}`
+                                ? 'bg-teal-500 text-white'
+                                : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400'
+                            }`}
+                            title="View 2D Interaction Diagram (PoseView)"
+                          >
+                            <Grid3X3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {/* Reset View Button (only shown when focused) */}
+                        {focusedLigandIdx === idx && (
+                          <button
+                            onClick={resetFocusView}
+                            className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-500"
+                            title="Reset to full protein view"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {/* Binding Site Classification Badge */}
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        ligand.bindingSiteType === 'functional'
+                          ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+                          : ligand.bindingSiteType === 'crystal_artifact'
+                          ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                          : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300'
+                      }`} title={ligand.bindingSiteReason}>
+                        {ligand.bindingSiteType === 'functional' ? '✓ Functional' :
+                         ligand.bindingSiteType === 'crystal_artifact' ? (
+                           <><AlertTriangle className="w-3 h-3" /> Crystal Artifact</>
+                         ) : (
+                           <><AlertTriangle className="w-3 h-3" /> Uncertain</>
+                         )}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Contact Summary */}
@@ -5864,6 +6876,92 @@ export default function ProteinViewer() {
         </div>
       )}
 
+      {/* 2D Interaction Diagram Modal (PoseView) */}
+      {show2DDiagram && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setShow2DDiagram(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full m-4 max-h-[85vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 bg-teal-50 dark:bg-teal-900/20">
+              <div className="flex items-center gap-3">
+                <Grid3X3 className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+                <div>
+                  <h3 className="font-semibold text-teal-800 dark:text-teal-200">
+                    2D Interaction Diagram
+                  </h3>
+                  <p className="text-xs text-teal-600 dark:text-teal-400">
+                    PoseView from ProteinsPlus • {selected2DLigand?.replace(/_/g, ' ')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShow2DDiagram(false)}
+                className="p-1 rounded text-teal-600 hover:bg-teal-100 dark:text-teal-400 dark:hover:bg-teal-900/30"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-4">
+              {is2DLoading ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <Loader2 className="w-12 h-12 animate-spin text-teal-500 mb-4" />
+                  <p className="text-slate-600 dark:text-slate-400 font-medium">Generating 2D diagram...</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                    This may take 10-30 seconds
+                  </p>
+                </div>
+              ) : (
+                <div
+                  id="poseview-container"
+                  className="w-full min-h-[400px] bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center"
+                >
+                  <p className="text-slate-400">Diagram will appear here</p>
+                </div>
+              )}
+            </div>
+
+            {/* Legend */}
+            <div className="p-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50">
+              <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-green-500"></div>
+                  <span>Hydrogen Bond</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-slate-400 border-dashed border-t"></div>
+                  <span>Hydrophobic</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-orange-500"></div>
+                  <span>Salt Bridge</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-purple-500"></div>
+                  <span>π-Stacking</span>
+                </div>
+                <a
+                  href="https://proteins.plus"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto flex items-center gap-1 text-teal-600 dark:text-teal-400 hover:underline"
+                >
+                  <span>ProteinsPlus</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Help Modal */}
       {showHelpModal && (
         <div
@@ -5940,8 +7038,9 @@ export default function ProteinViewer() {
                   <ul className="space-y-1 text-sm text-amber-600 dark:text-amber-400">
                     <li>• Uses CShM (Continuous Shape Measures) for geometry classification</li>
                     <li>• Supports CN 2-12 including lanthanide geometries</li>
-                    <li>• Distinguishes functional sites vs crystal artifacts</li>
-                    <li>• Adjustable radius (2-5Å)</li>
+                    <li>• <Eye className="w-3 h-3 inline" /> Focus View - 3D binding site focus</li>
+                    <li>• <Sparkles className="w-3 h-3 inline" /> METALizer - PDB-wide statistics, SIENA ensemble</li>
+                    <li>• Distance histograms by coordinating atom type</li>
                   </ul>
                 </div>
                 <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
@@ -5950,10 +7049,10 @@ export default function ProteinViewer() {
                     Ligand Binding Analysis
                   </h4>
                   <ul className="space-y-1 text-sm text-purple-600 dark:text-purple-400">
-                    <li>• Detects H-bonds, salt bridges, hydrophobic contacts, π-stacking</li>
+                    <li>• Detects H-bonds, salt bridges, hydrophobic, π-stacking</li>
                     <li>• Classifies binding sites: functional vs crystal artifact</li>
-                    <li>• Identifies common crystallization additives (SO4, PEG, GOL...)</li>
-                    <li>• Adjustable contact radius (2.5-6Å)</li>
+                    <li>• <Eye className="w-3 h-3 inline" /> Focus View - 3D binding pocket visualization</li>
+                    <li>• <Grid3X3 className="w-3 h-3 inline" /> 2D Diagram - PoseView interaction map</li>
                   </ul>
                 </div>
               </div>
