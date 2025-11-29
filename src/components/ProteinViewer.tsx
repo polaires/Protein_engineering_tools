@@ -84,8 +84,8 @@ export default function ProteinViewer() {
   const [showIons, setShowIons] = useState(true);
   const [showWater, setShowWater] = useState(false);
 
-  // Metal coordination highlighting mode (on by default)
-  const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(true);
+  // Metal coordination highlighting mode (off by default to avoid conflict with focus view)
+  const [showCoordinationHighlight, setShowCoordinationHighlight] = useState(false);
   const [coordinationRadius, setCoordinationRadius] = useState(3.0); // Å - typical metal coordination distance
 
   // Coordination data for persistent panel (shows when showCoordinationHighlight is true)
@@ -93,6 +93,9 @@ export default function ProteinViewer() {
     metals: {
       element: string;
       info: string;
+      chainId: string; // Chain ID for focus view
+      resSeq: number; // Residue sequence number for focus view
+      resName: string; // Residue name for focus view
       pos: Vec3; // Metal position for 2D projection
       coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean; position: Vec3 }[];
       geometry: {
@@ -155,6 +158,8 @@ export default function ProteinViewer() {
     ligands: {
       name: string;
       info: string; // e.g., "ATP A 501"
+      chainId: string; // Chain ID for focus view
+      resSeq: number; // Residue sequence number for focus view
       atoms: number;
       contacts: {
         residue: string;
@@ -925,6 +930,9 @@ export default function ProteinViewer() {
         metals: metalCoordination.metalDetails.map(m => ({
           element: m.element,
           info: m.info,
+          chainId: m.chainId, // Include chainId for focus view
+          resSeq: m.resSeq, // Include resSeq for focus view
+          resName: m.resName, // Include resName for focus view
           pos: m.pos, // Include metal position for 2D projection
           coordinating: m.coordinating,
           geometry: m.geometry,
@@ -2078,6 +2086,9 @@ export default function ProteinViewer() {
     const metalDetails: {
       element: string;
       info: string;
+      chainId: string;
+      resSeq: number;
+      resName: string;
       pos: Vec3;
       coordinating: { atom: string; residue: string; chain: string; distance: number; isWater: boolean; position: Vec3 }[];
     }[] = [];
@@ -2104,6 +2115,9 @@ export default function ProteinViewer() {
             pos: Vec3.clone(pos),
             element,
             info: `${element} (${resName}${resSeq}, Chain ${chainId})`,
+            chainId,
+            resSeq,
+            resName,
             coordinating: []
           });
           metalCount++;
@@ -2781,90 +2795,133 @@ export default function ProteinViewer() {
   };
 
   // ========================================================================
-  // 2D Interaction Diagram (PoseView from ProteinsPlus)
+  // 2D Interaction Diagram (Local implementation - PoseView API removed)
   // ========================================================================
   const load2DDiagram = async (ligandName: string, chainId: string, resSeq: number) => {
-    if (!currentStructure?.pdbId) {
-      showToast('error', '2D diagrams require a PDB code');
-      return;
-    }
-
+    // Show the 2D diagram panel with a message that this feature uses local rendering
     setShow2DDiagram(true);
     setIs2DLoading(true);
     setSelected2DLigand(`${ligandName}_${chainId}_${resSeq}`);
 
-    // Format ligand ID for ProteinsPlus API
-    const ligandId = `${ligandName}_${chainId}_${resSeq}`;
+    // Get ligand contacts from ligandData if available
+    const ligandInfo = ligandData?.ligands.find(
+      l => l.name === ligandName && l.chainId === chainId && l.resSeq === resSeq
+    );
 
+    if (!ligandInfo || ligandInfo.contacts.length === 0) {
+      setIs2DLoading(false);
+      showToast('info', `No interaction data available for ${ligandName}`);
+
+      // Show a simple message in the container
+      const container = document.getElementById('poseview-container');
+      if (container) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; color: #666;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p style="margin-top: 12px; text-align: center;">No interaction data available.<br/>Use Focus View to see the 3D binding site.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+
+    // Generate a simple 2D interaction diagram locally
     try {
-      // Use PoseView API from ProteinsPlus
-      const responsePost = await fetch('https://proteins.plus/api/poseview_rest', {
-        method: 'POST',
-        body: JSON.stringify({
-          poseview: {
-            pdbCode: currentStructure.pdbId,
-            ligand: ligandId
-          }
-        }),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+      const svgWidth = 300;
+      const svgHeight = 280;
+      const centerX = svgWidth / 2;
+      const centerY = svgHeight / 2;
+      const ligandRadius = 25;
+      const contactRadius = 80;
+
+      // Group contacts by residue
+      const residueContacts = new Map<string, typeof ligandInfo.contacts>();
+      for (const contact of ligandInfo.contacts) {
+        const key = `${contact.residue}_${contact.chain}`;
+        if (!residueContacts.has(key)) {
+          residueContacts.set(key, []);
         }
+        residueContacts.get(key)!.push(contact);
+      }
+
+      const uniqueResidues = Array.from(residueContacts.keys());
+      const angleStep = (2 * Math.PI) / Math.max(uniqueResidues.length, 1);
+
+      // Build SVG
+      let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" style="width: 100%; height: auto;">`;
+
+      // Background
+      svgContent += `<rect width="${svgWidth}" height="${svgHeight}" fill="#fafafa"/>`;
+
+      // Draw interaction lines and residue circles
+      uniqueResidues.forEach((resKey, idx) => {
+        const contacts = residueContacts.get(resKey)!;
+        const angle = idx * angleStep - Math.PI / 2;
+        const resX = centerX + contactRadius * Math.cos(angle);
+        const resY = centerY + contactRadius * Math.sin(angle);
+
+        // Get interaction type for coloring
+        const interactionType = contacts[0].interactionType;
+        let lineColor = '#888';
+        let fillColor = '#e0e0e0';
+
+        if (interactionType === 'hydrogen_bond') {
+          lineColor = '#22c55e';
+          fillColor = '#dcfce7';
+        } else if (interactionType === 'hydrophobic') {
+          lineColor = '#eab308';
+          fillColor = '#fef9c3';
+        } else if (interactionType === 'salt_bridge') {
+          lineColor = '#ef4444';
+          fillColor = '#fee2e2';
+        } else if (interactionType === 'pi_stacking') {
+          lineColor = '#a855f7';
+          fillColor = '#f3e8ff';
+        }
+
+        // Draw interaction line (dashed for H-bonds)
+        const dashArray = interactionType === 'hydrogen_bond' ? 'stroke-dasharray="4,2"' : '';
+        svgContent += `<line x1="${centerX}" y1="${centerY}" x2="${resX}" y2="${resY}" stroke="${lineColor}" stroke-width="1.5" ${dashArray}/>`;
+
+        // Draw residue circle
+        svgContent += `<circle cx="${resX}" cy="${resY}" r="18" fill="${fillColor}" stroke="${lineColor}" stroke-width="1.5"/>`;
+
+        // Residue label
+        const [resName] = resKey.split('_');
+        svgContent += `<text x="${resX}" y="${resY}" text-anchor="middle" dominant-baseline="middle" font-size="9" font-family="sans-serif" fill="#333">${resName}</text>`;
       });
 
-      const jsonPost = await responsePost.json();
+      // Draw central ligand
+      svgContent += `<circle cx="${centerX}" cy="${centerY}" r="${ligandRadius}" fill="#50C878" stroke="#2d7d46" stroke-width="2"/>`;
+      svgContent += `<text x="${centerX}" y="${centerY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="bold" font-family="sans-serif" fill="white">${ligandName}</text>`;
 
-      if (jsonPost.status_code === 202 || jsonPost.status_code === 200) {
-        let polling = true;
-        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+      // Legend
+      const legendY = svgHeight - 35;
+      svgContent += `<text x="10" y="${legendY}" font-size="8" fill="#666">Legend:</text>`;
+      svgContent += `<line x1="45" y1="${legendY - 3}" x2="60" y2="${legendY - 3}" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,2"/>`;
+      svgContent += `<text x="63" y="${legendY}" font-size="7" fill="#666">H-bond</text>`;
+      svgContent += `<line x1="100" y1="${legendY - 3}" x2="115" y2="${legendY - 3}" stroke="#eab308" stroke-width="1.5"/>`;
+      svgContent += `<text x="118" y="${legendY}" font-size="7" fill="#666">Hydrophobic</text>`;
+      svgContent += `<line x1="170" y1="${legendY - 3}" x2="185" y2="${legendY - 3}" stroke="#ef4444" stroke-width="1.5"/>`;
+      svgContent += `<text x="188" y="${legendY}" font-size="7" fill="#666">Salt bridge</text>`;
 
-        while (polling) {
-          const responseGet = await fetch(jsonPost.location, { method: 'GET' });
-          const jsonGetStatus = await responseGet.json();
+      svgContent += '</svg>';
 
-          if (jsonGetStatus.status_code === 200) {
-            polling = false;
-
-            if (jsonGetStatus.result_svg_picture) {
-              const svgResponse = await fetch(jsonGetStatus.result_svg_picture);
-              const svgText = await svgResponse.text();
-
-              const container = document.getElementById('poseview-container');
-              if (container) {
-                container.innerHTML = svgText;
-                const svgElement = container.querySelector('svg');
-                if (svgElement) {
-                  const originalWidth = svgElement.getAttribute('width');
-                  const originalHeight = svgElement.getAttribute('height');
-                  if (!svgElement.getAttribute('viewBox') && originalWidth && originalHeight) {
-                    svgElement.setAttribute('viewBox', `0 0 ${parseFloat(originalWidth)} ${parseFloat(originalHeight)}`);
-                  }
-                  svgElement.removeAttribute('width');
-                  svgElement.removeAttribute('height');
-                  svgElement.style.width = '100%';
-                  svgElement.style.height = 'auto';
-                  svgElement.style.maxWidth = '100%';
-                  svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-                }
-              }
-              setIs2DLoading(false);
-              showToast('success', `Loaded PoseView diagram for ${ligandName}`);
-            } else {
-              throw new Error('No SVG result available');
-            }
-          } else if (jsonGetStatus.status_code === 202) {
-            await delay(2000);
-          } else {
-            throw new Error('Failed to generate diagram');
-          }
-        }
-      } else {
-        throw new Error('Failed to submit PoseView job');
+      const container = document.getElementById('poseview-container');
+      if (container) {
+        container.innerHTML = svgContent;
       }
-    } catch (error) {
-      console.error('Failed to load PoseView diagram:', error);
+
       setIs2DLoading(false);
-      showToast('error', `Failed to load PoseView diagram for ${ligandName}`);
+      showToast('success', `Generated interaction diagram for ${ligandName}`);
+    } catch (error) {
+      console.error('Failed to generate 2D diagram:', error);
+      setIs2DLoading(false);
+      showToast('error', `Failed to generate diagram for ${ligandName}`);
     }
   };
 
@@ -2911,12 +2968,12 @@ export default function ProteinViewer() {
       structure = await plugin.builders.structure.createStructure(model);
       structureRef.current = structure.ref;
 
-      // Build ligand query
+      // Build ligand query - use label_asym_id and label_seq_id to match ligand detection
       const ligandExpression = MS.struct.generator.atomGroups({
         'residue-test': MS.core.logic.and([
           MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), ligandName]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), resSeq]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_asym_id(), chainId]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_seq_id(), resSeq]),
         ])
       });
 
@@ -3083,12 +3140,12 @@ export default function ProteinViewer() {
       structure = await plugin.builders.structure.createStructure(model);
       structureRef.current = structure.ref;
 
-      // Build metal query
+      // Build metal query - use label_asym_id and label_seq_id to match metal detection
       const metalExpression = MS.struct.generator.atomGroups({
         'residue-test': MS.core.logic.and([
           MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), resName]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), resSeq]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_asym_id(), chainId]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_seq_id(), resSeq]),
         ])
       });
 
@@ -5408,14 +5465,8 @@ export default function ProteinViewer() {
                         {/* Focus View Button */}
                         <button
                           onClick={() => {
-                            // Format: "ZN (ZN502, Chain A)" - extract resSeq and chainId
-                            const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i);
-                            if (infoMatch) {
-                              const resName = metal.element;
-                              const resSeq = parseInt(infoMatch[2]) || 1;
-                              const chainId = infoMatch[3];
-                              focusOnMetal(metal.element, chainId, resSeq, resName, metalIdx);
-                            }
+                            // Use metal data directly instead of parsing info string
+                            focusOnMetal(metal.element, metal.chainId, metal.resSeq, metal.resName, metalIdx);
                           }}
                           className={`p-1.5 rounded-lg transition-colors ${
                             focusedMetalIdx === metalIdx
@@ -6562,11 +6613,8 @@ export default function ProteinViewer() {
                         {/* Focus View Button */}
                         <button
                           onClick={() => {
-                            // Format: "ATP (Chain A, 301)" - extract ligand name, chainId, and resSeq
-                            const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i);
-                            if (infoMatch) {
-                              focusOnLigand(infoMatch[1], infoMatch[2], parseInt(infoMatch[3]), idx);
-                            }
+                            // Use ligand data directly instead of parsing info string
+                            focusOnLigand(ligand.name, ligand.chainId, ligand.resSeq, idx);
                           }}
                           className={`p-1.5 rounded-lg transition-colors ${
                             focusedLigandIdx === idx
@@ -6581,14 +6629,11 @@ export default function ProteinViewer() {
                         {currentStructure?.pdbId && (
                           <button
                             onClick={() => {
-                              // Format: "ATP (Chain A, 301)" - extract ligand name, chainId, and resSeq
-                              const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i);
-                              if (infoMatch) {
-                                load2DDiagram(infoMatch[1], infoMatch[2], parseInt(infoMatch[3]));
-                              }
+                              // Use ligand data directly instead of parsing info string
+                              load2DDiagram(ligand.name, ligand.chainId, ligand.resSeq);
                             }}
                             className={`p-1.5 rounded-lg transition-colors ${
-                              selected2DLigand === `${ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i)?.[1]}_${ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i)?.[2]}_${ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i)?.[3]}`
+                              selected2DLigand === `${ligand.name}_${ligand.chainId}_${ligand.resSeq}`
                                 ? 'bg-teal-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400'
                             }`}
