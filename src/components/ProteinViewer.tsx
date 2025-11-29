@@ -9,7 +9,7 @@ import {
   Microscope, ChevronDown, ChevronUp, Ruler, Focus, FileDown, Palette,
   Droplet, Atom, Hexagon, HelpCircle, X, Target, Pill, AlertTriangle,
   Highlighter, Zap, Layers, Shield, Lightbulb, Eye, Grid3X3, Sparkles, Loader2,
-  BarChart3, Network
+  BarChart3, Network, ExternalLink
 } from 'lucide-react';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
@@ -6422,15 +6422,15 @@ export default function ProteinViewer() {
                                         SIENA Ensemble ({result.sienaResults.totalCount} similar sites)
                                       </span>
                                     </div>
-                                    <span className="text-[10px] text-slate-400">Click to load in 3D viewer</span>
+                                    <span className="text-[10px] text-slate-400">Click to open in new tab</span>
                                   </div>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-24 overflow-y-auto">
                                     {result.sienaResults.sites.slice(0, 8).map((site, idx) => (
                                       <button
                                         key={idx}
-                                        onClick={() => loadFromPDB(site.pdbId)}
+                                        onClick={() => window.open(`https://www.rcsb.org/3d-view/${site.pdbId}`, '_blank', 'noopener,noreferrer')}
                                         className="flex items-center gap-1 px-2 py-1 bg-slate-50 dark:bg-slate-700 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors group text-left"
-                                        title={`Load ${site.pdbId} - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
+                                        title={`Open ${site.pdbId} in RCSB 3D Viewer - RMSD: ${site.rmsd.toFixed(2)}Å${site.geometry ? ` - ${site.geometry}` : ''}`}
                                       >
                                         <span className="text-[10px] font-mono font-medium text-emerald-600 dark:text-emerald-400 group-hover:underline">
                                           {site.pdbId}
@@ -6438,7 +6438,7 @@ export default function ProteinViewer() {
                                         <span className="text-[9px] text-slate-400">
                                           {site.rmsd.toFixed(1)}Å
                                         </span>
-                                        <Box className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-500" />
+                                        <ExternalLink className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-500" />
                                       </button>
                                     ))}
                                   </div>
