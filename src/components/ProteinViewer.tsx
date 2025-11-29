@@ -2888,7 +2888,7 @@ export default function ProteinViewer() {
               // Store SVG in state for React to render
               setPoseViewSvg(svgText);
               setIs2DLoading(false);
-              showToast('success', `Loaded PoseView diagram for ${ligandName}`);
+              showToast('success', `Loaded 2D diagram for ${ligandName}`);
             } else {
               throw new Error('No SVG result available');
             }
@@ -2905,7 +2905,7 @@ export default function ProteinViewer() {
     } catch (error) {
       console.error('Failed to load PoseView diagram:', error);
       setIs2DLoading(false);
-      showToast('error', `Failed to load PoseView diagram for ${ligandName}`);
+      showToast('error', `Failed to load 2D diagram for ${ligandName}`);
     }
   };
 
@@ -3289,7 +3289,8 @@ export default function ProteinViewer() {
 
     try {
       // Format metal atom for METALizer API
-      const metalAtomId = `[${resName}]${resSeq}:${chainId}.${metalElement}`;
+      // Format: [RESNAME]RESSEQ:CHAIN.ELEMENT (element must be uppercase)
+      const metalAtomId = `[${resName}]${resSeq}:${chainId}.${metalElement.toUpperCase()}`;
       const metalLigandId = `${resName}_${chainId}_${resSeq}`;
 
       const responsePost = await fetch('https://proteins.plus/api/metalizer_rest', {
@@ -6305,7 +6306,7 @@ export default function ProteinViewer() {
                           {result.loading ? (
                             <div className="text-center py-6">
                               <Loader2 className="w-8 h-8 animate-spin mx-auto text-violet-400 mb-2" />
-                              <p className="text-xs text-violet-500">Querying ProteinsPlus METALizer...</p>
+                              <p className="text-xs text-violet-500">Analyzing metal coordination...</p>
                               <p className="text-[10px] text-violet-400 mt-1">This may take 10-30 seconds</p>
                             </div>
                           ) : result.error ? (
@@ -6622,7 +6623,7 @@ export default function ProteinViewer() {
                                 ? 'bg-teal-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400'
                             }`}
-                            title="View 2D Interaction Diagram (PoseView)"
+                            title="View 2D Interaction Diagram"
                           >
                             <Grid3X3 className="w-3.5 h-3.5" />
                           </button>
@@ -6930,7 +6931,7 @@ export default function ProteinViewer() {
                     2D Interaction Diagram
                   </h3>
                   <p className="text-xs text-teal-600 dark:text-teal-400">
-                    PoseView from ProteinsPlus • {selected2DLigand?.replace(/_/g, ' ')}
+                    {selected2DLigand?.replace(/_/g, ' ')}
                   </p>
                 </div>
               </div>
@@ -6948,7 +6949,7 @@ export default function ProteinViewer() {
               {is2DLoading ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <Loader2 className="w-12 h-12 animate-spin text-teal-500 mb-4" />
-                  <p className="text-slate-600 dark:text-slate-400 font-medium">Loading PoseView diagram from ProteinsPlus...</p>
+                  <p className="text-slate-600 dark:text-slate-400 font-medium">Generating interaction diagram...</p>
                   <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
                     This may take 10-30 seconds
                   </p>
@@ -6988,15 +6989,6 @@ export default function ProteinViewer() {
                   <div className="w-3 h-0.5 bg-purple-500"></div>
                   <span>π-Stacking</span>
                 </div>
-                <a
-                  href="https://proteins.plus"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto flex items-center gap-1 text-teal-600 dark:text-teal-400 hover:underline"
-                >
-                  <span>ProteinsPlus</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
               </div>
             </div>
           </div>
@@ -7093,7 +7085,7 @@ export default function ProteinViewer() {
                     <li>• Detects H-bonds, salt bridges, hydrophobic, π-stacking</li>
                     <li>• Classifies binding sites: functional vs crystal artifact</li>
                     <li>• <Eye className="w-3 h-3 inline" /> Focus View - 3D binding pocket visualization</li>
-                    <li>• <Grid3X3 className="w-3 h-3 inline" /> 2D Diagram - PoseView interaction map</li>
+                    <li>• <Grid3X3 className="w-3 h-3 inline" /> 2D Diagram - interaction map</li>
                   </ul>
                 </div>
               </div>
