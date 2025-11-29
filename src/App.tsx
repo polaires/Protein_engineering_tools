@@ -349,26 +349,16 @@ function AppContent() {
                   <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
                     <p>
                       2D interaction diagrams and metal coordination analysis are powered by{' '}
-                      <a
-                        href="https://proteins.plus"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 dark:text-primary-400 hover:underline"
-                      >
+                      <span className="font-medium text-primary-600 dark:text-primary-400">
                         ProteinsPlus
-                      </a>
+                      </span>
                       {' '}(Zentrum für Bioinformatik, Universität Hamburg).
                     </p>
                     <p>
                       3D molecular visualization is powered by{' '}
-                      <a
-                        href="https://molstar.org"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 dark:text-primary-400 hover:underline"
-                      >
+                      <span className="font-medium text-primary-600 dark:text-primary-400">
                         Mol*
-                      </a>
+                      </span>
                       .
                     </p>
                   </div>
