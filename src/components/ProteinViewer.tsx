@@ -2107,8 +2107,9 @@ export default function ProteinViewer() {
         if (metalElements.has(element)) {
           const pos = Vec3();
           unit.conformation.position(elementIdx, pos);
-          const chainId = SP.chain.label_asym_id(l);
-          const resSeq = SP.residue.label_seq_id(l);
+          // Use auth (author-assigned) IDs for ProteinsPlus API compatibility
+          const chainId = SP.chain.auth_asym_id(l);
+          const resSeq = SP.residue.auth_seq_id(l);
           const resName = SP.atom.label_comp_id(l);
 
           metalDetails.push({
@@ -2146,8 +2147,9 @@ export default function ProteinViewer() {
 
           if (dist > 0.1 && dist <= radius) { // Exclude self (dist > 0.1)
             const entityType = SP.entity.type(l);
-            const chainId = SP.chain.label_asym_id(l);
-            const resSeq = SP.residue.label_seq_id(l);
+            // Use auth IDs to match metal detection
+            const chainId = SP.chain.auth_asym_id(l);
+            const resSeq = SP.residue.auth_seq_id(l);
             const resName = SP.atom.label_comp_id(l);
             const atomName = SP.atom.label_atom_id(l);
             const resKey = `${chainId}:${resSeq}:${resName}`;
@@ -2602,8 +2604,9 @@ export default function ProteinViewer() {
         // Metal ions are handled by metal coordination analysis
         const isMetal = metalElements.has(resName) || metalElements.has(resName.toUpperCase());
         if (entityType === 'non-polymer' && resName !== 'HOH' && resName !== 'WAT' && !isMetal) {
-          const chainId = SP.chain.label_asym_id(l);
-          const resSeq = SP.residue.label_seq_id(l);
+          // Use auth (author-assigned) IDs for ProteinsPlus API compatibility
+          const chainId = SP.chain.auth_asym_id(l);
+          const resSeq = SP.residue.auth_seq_id(l);
           const key = `${chainId}:${resSeq}:${resName}`;
 
           if (!ligandResidues.has(key)) {
@@ -2650,8 +2653,9 @@ export default function ProteinViewer() {
           StructureElement.Location.set(l, structure, unit, elementIdx);
 
           const entityType = SP.entity.type(l);
-          const chainId = SP.chain.label_asym_id(l);
-          const resSeq = SP.residue.label_seq_id(l);
+          // Use auth IDs to match ligand detection
+          const chainId = SP.chain.auth_asym_id(l);
+          const resSeq = SP.residue.auth_seq_id(l);
           const resName = SP.atom.label_comp_id(l);
           const atomName = SP.atom.label_atom_id(l);
           const resKey = `${chainId}:${resSeq}:${resName}`;
@@ -2812,13 +2816,14 @@ export default function ProteinViewer() {
 
     try {
       // Use PoseView REST API for interaction diagram (with green hydrophobic contour)
+      // Note: ProteinsPlus API requires lowercase pdbCode
       const responsePost = await fetch(
         'https://proteins.plus/api/poseview_rest',
         {
           method: 'POST',
           body: JSON.stringify({
             poseview: {
-              pdbCode: currentStructure.pdbId,
+              pdbCode: currentStructure.pdbId.toLowerCase(),
               ligand: ligandId
             }
           }),
@@ -2828,6 +2833,12 @@ export default function ProteinViewer() {
           }
         }
       );
+
+      if (!responsePost.ok) {
+        const errorText = await responsePost.text();
+        console.error('PoseView API error:', responsePost.status, errorText);
+        throw new Error(`PoseView API returned ${responsePost.status}: ${errorText}`);
+      }
 
       const jsonPost = await responsePost.json();
 
@@ -2939,12 +2950,12 @@ export default function ProteinViewer() {
       structure = await plugin.builders.structure.createStructure(model);
       structureRef.current = structure.ref;
 
-      // Build ligand query - use label_asym_id and label_seq_id to match ligand detection
+      // Build ligand query - use auth IDs for ProteinsPlus API compatibility
       const ligandExpression = MS.struct.generator.atomGroups({
         'residue-test': MS.core.logic.and([
           MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), ligandName]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_asym_id(), chainId]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_seq_id(), resSeq]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), resSeq]),
         ])
       });
 
@@ -3111,12 +3122,12 @@ export default function ProteinViewer() {
       structure = await plugin.builders.structure.createStructure(model);
       structureRef.current = structure.ref;
 
-      // Build metal query - use label_asym_id and label_seq_id to match metal detection
+      // Build metal query - use auth IDs for ProteinsPlus API compatibility
       const metalExpression = MS.struct.generator.atomGroups({
         'residue-test': MS.core.logic.and([
           MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), resName]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_asym_id(), chainId]),
-          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_seq_id(), resSeq]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+          MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), resSeq]),
         ])
       });
 
@@ -3298,6 +3309,12 @@ export default function ProteinViewer() {
           'Accept': 'application/json'
         }
       });
+
+      if (!responsePost.ok) {
+        const errorText = await responsePost.text();
+        console.error('METALizer API error:', responsePost.status, errorText);
+        throw new Error(`METALizer API returned ${responsePost.status}: ${errorText}`);
+      }
 
       const jsonPost = await responsePost.json();
 
