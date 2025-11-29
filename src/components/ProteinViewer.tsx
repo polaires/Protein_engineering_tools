@@ -183,6 +183,7 @@ export default function ProteinViewer() {
   const [show2DDiagram, setShow2DDiagram] = useState(false);
   const [is2DLoading, setIs2DLoading] = useState(false);
   const [selected2DLigand, setSelected2DLigand] = useState<string | null>(null);
+  const [poseViewSvg, setPoseViewSvg] = useState<string | null>(null);
 
   // Focus view states
   const [focusedLigandIdx, setFocusedLigandIdx] = useState<number | null>(null);
@@ -2810,6 +2811,7 @@ export default function ProteinViewer() {
     setShow2DDiagram(true);
     setIs2DLoading(true);
     setSelected2DLigand(`${ligandName}_${chainId}_${resSeq}`);
+    setPoseViewSvg(null); // Reset SVG when loading new diagram
 
     // Format ligand name for ProteinsPlus API: ligandName_chainId_resSeq
     const ligandId = `${ligandName}_${chainId}_${resSeq}`;
@@ -2857,34 +2859,34 @@ export default function ProteinViewer() {
             // Fetch the SVG image
             if (jsonGetStatus.result_svg_picture) {
               const svgResponse = await fetch(jsonGetStatus.result_svg_picture);
-              const svgText = await svgResponse.text();
+              let svgText = await svgResponse.text();
 
-              // Display the SVG in the container
-              const container = document.getElementById('poseview-container');
-              if (container) {
-                container.innerHTML = svgText;
-                // Preserve SVG aspect ratio - don't force width/height
-                const svgElement = container.querySelector('svg');
-                if (svgElement) {
-                  // Get original dimensions
-                  const originalWidth = svgElement.getAttribute('width');
-                  const originalHeight = svgElement.getAttribute('height');
+              // Process SVG to ensure proper scaling
+              // Parse the SVG to extract dimensions and add viewBox if needed
+              const widthMatch = svgText.match(/width="([^"]+)"/);
+              const heightMatch = svgText.match(/height="([^"]+)"/);
+              const hasViewBox = svgText.includes('viewBox');
 
-                  // Ensure viewBox is set for proper scaling
-                  if (!svgElement.getAttribute('viewBox') && originalWidth && originalHeight) {
-                    svgElement.setAttribute('viewBox', `0 0 ${parseFloat(originalWidth)} ${parseFloat(originalHeight)}`);
-                  }
-
-                  // Remove fixed dimensions and let it scale with aspect ratio preserved
-                  svgElement.removeAttribute('width');
-                  svgElement.removeAttribute('height');
-                  svgElement.style.width = '100%';
-                  svgElement.style.height = 'auto';
-                  svgElement.style.maxWidth = '100%';
-                  svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-                }
+              if (!hasViewBox && widthMatch && heightMatch) {
+                const width = parseFloat(widthMatch[1]);
+                const height = parseFloat(heightMatch[1]);
+                // Add viewBox attribute to the SVG tag
+                svgText = svgText.replace(/<svg/, `<svg viewBox="0 0 ${width} ${height}"`);
               }
 
+              // Remove fixed width/height and add responsive styling
+              svgText = svgText
+                .replace(/width="[^"]*"/, '')
+                .replace(/height="[^"]*"/, '');
+
+              // Add preserveAspectRatio and style attributes
+              svgText = svgText.replace(
+                /<svg/,
+                '<svg preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-width:100%"'
+              );
+
+              // Store SVG in state for React to render
+              setPoseViewSvg(svgText);
               setIs2DLoading(false);
               showToast('success', `Loaded PoseView diagram for ${ligandName}`);
             } else {
@@ -5469,16 +5471,11 @@ export default function ProteinViewer() {
                         {currentStructure?.pdbId && (
                           <button
                             onClick={() => {
-                              // Format: "ZN (ZN502, Chain A)" - extract resSeq and chainId
-                              const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i);
-                              if (infoMatch) {
-                                const resSeq = parseInt(infoMatch[2]) || 1;
-                                const chainId = infoMatch[3];
-                                loadMetalizerAnalysis(metal.element, chainId, resSeq, metal.element);
-                              }
+                              // Use metal's direct properties for METALizer API
+                              loadMetalizerAnalysis(metal.element, metal.chainId, metal.resSeq, metal.resName);
                             }}
                             className={`p-1.5 rounded-lg transition-colors ${
-                              metalizerResults.has(`${metal.element}_${metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i)?.[3]}_${parseInt(metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i)?.[2] || '1')}`)
+                              metalizerResults.has(`${metal.element}_${metal.chainId}_${metal.resSeq}`)
                                 ? 'bg-violet-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30 hover:text-violet-600 dark:hover:text-violet-400'
                             }`}
@@ -6956,6 +6953,12 @@ export default function ProteinViewer() {
                     This may take 10-30 seconds
                   </p>
                 </div>
+              ) : poseViewSvg ? (
+                <div
+                  id="poseview-container"
+                  className="w-full min-h-[400px] bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center p-4"
+                  dangerouslySetInnerHTML={{ __html: poseViewSvg }}
+                />
               ) : (
                 <div
                   id="poseview-container"
