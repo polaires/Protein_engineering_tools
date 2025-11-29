@@ -5408,7 +5408,8 @@ export default function ProteinViewer() {
                         {/* Focus View Button */}
                         <button
                           onClick={() => {
-                            const infoMatch = metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i);
+                            // Format: "ZN (ZN502, Chain A)" - extract resSeq and chainId
+                            const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i);
                             if (infoMatch) {
                               const resName = metal.element;
                               const resSeq = parseInt(infoMatch[2]) || 1;
@@ -5429,7 +5430,8 @@ export default function ProteinViewer() {
                         {currentStructure?.pdbId && (
                           <button
                             onClick={() => {
-                              const infoMatch = metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i);
+                              // Format: "ZN (ZN502, Chain A)" - extract resSeq and chainId
+                              const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i);
                               if (infoMatch) {
                                 const resSeq = parseInt(infoMatch[2]) || 1;
                                 const chainId = infoMatch[3];
@@ -5437,7 +5439,7 @@ export default function ProteinViewer() {
                               }
                             }}
                             className={`p-1.5 rounded-lg transition-colors ${
-                              metalizerResults.has(`${metal.element}_${metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i)?.[3]}_${parseInt(metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i)?.[2] || '1')}`)
+                              metalizerResults.has(`${metal.element}_${metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i)?.[3]}_${parseInt(metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i)?.[2] || '1')}`)
                                 ? 'bg-violet-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-violet-100 dark:hover:bg-violet-900/30 hover:text-violet-600 dark:hover:text-violet-400'
                             }`}
@@ -6242,7 +6244,8 @@ export default function ProteinViewer() {
 
                     {/* METALizer Analysis Panel - PDB-wide statistics, SIENA ensemble, distance histogram */}
                     {(() => {
-                      const infoMatch = metal.info.match(/([A-Z]{1,2})(\d*)\s*:\s*([A-Z])/i);
+                      // Format: "ZN (ZN502, Chain A)" - extract resSeq and chainId
+                      const infoMatch = metal.info.match(/([A-Z]{1,2})\s*\([A-Z0-9]+(\d+),\s*Chain\s+([A-Z])\)/i);
                       const metalKey = infoMatch ? `${metal.element}_${infoMatch[3]}_${parseInt(infoMatch[2]) || 1}` : null;
                       const result = metalKey ? metalizerResults.get(metalKey) : null;
 
@@ -6559,7 +6562,8 @@ export default function ProteinViewer() {
                         {/* Focus View Button */}
                         <button
                           onClick={() => {
-                            const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i);
+                            // Format: "ATP (Chain A, 301)" - extract ligand name, chainId, and resSeq
+                            const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i);
                             if (infoMatch) {
                               focusOnLigand(infoMatch[1], infoMatch[2], parseInt(infoMatch[3]), idx);
                             }
@@ -6577,13 +6581,14 @@ export default function ProteinViewer() {
                         {currentStructure?.pdbId && (
                           <button
                             onClick={() => {
-                              const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i);
+                              // Format: "ATP (Chain A, 301)" - extract ligand name, chainId, and resSeq
+                              const infoMatch = ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i);
                               if (infoMatch) {
                                 load2DDiagram(infoMatch[1], infoMatch[2], parseInt(infoMatch[3]));
                               }
                             }}
                             className={`p-1.5 rounded-lg transition-colors ${
-                              selected2DLigand === `${ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i)?.[1]}_${ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i)?.[2]}_${ligand.info.match(/^([A-Z0-9]+)\s+([A-Z])\s+(\d+)/i)?.[3]}`
+                              selected2DLigand === `${ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i)?.[1]}_${ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i)?.[2]}_${ligand.info.match(/^([A-Z0-9]+)\s*\(Chain\s+([A-Z]),\s*(\d+)\)/i)?.[3]}`
                                 ? 'bg-teal-500 text-white'
                                 : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 hover:bg-teal-100 dark:hover:bg-teal-900/30 hover:text-teal-600 dark:hover:text-teal-400'
                             }`}
