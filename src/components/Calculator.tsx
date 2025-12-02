@@ -143,16 +143,39 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     setResult(calcResult);
 
     // Check solubility if calculation was successful and we have the necessary data
-    if (calcResult.success && selectedChemical && calcResult.value && convertedCalculation.volume) {
-      // Calculate concentration in mg/mL
-      // Note: calcResult.value can be in grams OR milligrams depending on the magnitude
-      // The unit is indicated by calcResult.unit ('g' or 'mg')
-      const massInGrams = calcResult.unit === 'mg'
-        ? calcResult.value / 1000  // convert mg to g
-        : calcResult.value;        // already in grams
-      const volumeML = convertedCalculation.volume; // in mL
-      const concentrationMgML = (massInGrams / volumeML) * 1000; // convert g/mL to mg/mL
+    let concentrationMgML: number | null = null;
 
+    if (calcResult.success && selectedChemical) {
+      if (selectedMode === CalculationMode.DILUTION) {
+        // For dilution mode, check the final concentration (C2)
+        // C2 might be the calculated result or an input value
+        let finalMolarityM: number | undefined;
+
+        if (calcResult.unit === 'M' && convertedCalculation.finalMolarity === undefined) {
+          // C2 was calculated (it was the missing value)
+          finalMolarityM = calcResult.value;
+        } else {
+          // C2 was provided as input
+          finalMolarityM = convertedCalculation.finalMolarity;
+        }
+
+        if (finalMolarityM && calculation.molecularWeight) {
+          // Convert molarity to mg/mL: mg/mL = M × MW
+          concentrationMgML = finalMolarityM * calculation.molecularWeight;
+        }
+      } else if (calcResult.value && convertedCalculation.volume) {
+        // For mass-based calculations (MASS_FROM_MOLARITY, etc.)
+        // Note: calcResult.value can be in grams OR milligrams depending on the magnitude
+        // The unit is indicated by calcResult.unit ('g' or 'mg')
+        const massInGrams = calcResult.unit === 'mg'
+          ? calcResult.value / 1000  // convert mg to g
+          : calcResult.value;        // already in grams
+        const volumeML = convertedCalculation.volume; // in mL
+        concentrationMgML = (massInGrams / volumeML) * 1000; // convert g/mL to mg/mL
+      }
+    }
+
+    if (concentrationMgML !== null && selectedChemical) {
       // Extract PubChem CID if available
       let cidForCheck: string | undefined;
       if (selectedChemical.id.startsWith('pubchem-')) {
@@ -602,6 +625,23 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                   </select>
                 </div>
               </div>
+            </div>
+
+            {/* Optional: Chemical selection for solubility check */}
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <label className="input-label">
+                Chemical (optional - for solubility check)
+              </label>
+              <ChemicalSearch
+                onSelect={handleChemicalSelect}
+                placeholder="Search chemical for solubility check"
+                allowCustom={true}
+              />
+              {calculation.molecularWeight && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  MW: {calculation.molecularWeight} g/mol
+                </p>
+              )}
             </div>
           </div>
         );
