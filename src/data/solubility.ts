@@ -775,7 +775,13 @@ async function fetchSmilesFromPubChem(cid: string, compoundName?: string): Promi
 }
 
 /**
- * Generate solubility warning based on ML prediction
+ * Generate solubility warning based on ML prediction with smart recommendations
+ *
+ * Recommendations are based on molecular properties:
+ * - LogP > 2: Compound is hydrophobic, organic solvents may help
+ * - LogP < 0: Compound is hydrophilic, good water solubility expected
+ * - High aromatic content: May benefit from co-solvents
+ * - MW > 500: Larger molecules may have solubility challenges
  */
 function getPredictionBasedWarning(
   concentrationMgML: number,
@@ -800,6 +806,16 @@ function getPredictionBasedWarning(
   let warning: string | null = null;
   const suggestions: string[] = [];
 
+  // Extract molecular properties for smart recommendations
+  const logP = prediction.molLogP ?? 0;
+  const mw = prediction.molecularWeight ?? 0;
+
+  // Determine compound characteristics based on molecular properties
+  const isHydrophobic = logP > 2;
+  const isVeryHydrophobic = logP > 4;
+  const isHydrophilic = logP < 0;
+  const isLargeMolecule = mw > 500;
+
   // Add confidence note
   const confidenceNote =
     prediction.confidence === 'high'
@@ -810,45 +826,91 @@ function getPredictionBasedWarning(
 
   if (isExceeded) {
     warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds predicted water solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%${confidenceNote}.`;
+
+    // Add solubility class info
     suggestions.push(
       `Predicted solubility class: ${prediction.solubilityClass || 'unknown'}`
     );
-    suggestions.push(
-      'Consider preparing a stock solution in an appropriate organic solvent (DMSO, ethanol) and diluting to working concentration.'
-    );
-    suggestions.push(
-      'Alternatively, try heating the solution while stirring, or adjust pH if applicable.'
-    );
+
+    // Smart recommended concentration
+    const safeConcentration = predictedSolubilityMgML * 0.8; // 80% of max
+    if (safeConcentration > 0.001) {
+      suggestions.push(
+        `Recommended max concentration: ~${safeConcentration >= 1 ? safeConcentration.toFixed(1) : safeConcentration.toFixed(3)} mg/mL for reliable dissolution`
+      );
+    }
+
+    // Smart solvent recommendations based on LogP
+    if (isHydrophobic) {
+      if (isVeryHydrophobic) {
+        suggestions.push(
+          `High LogP (${logP.toFixed(1)}) indicates hydrophobicity. Consider DMSO or DMF for stock solution, then dilute into aqueous buffer.`
+        );
+      } else {
+        suggestions.push(
+          `LogP (${logP.toFixed(1)}) suggests using ethanol or DMSO as co-solvent (typically 1-10% final concentration).`
+        );
+      }
+    } else if (isHydrophilic) {
+      // Hydrophilic compounds - different approach
+      suggestions.push(
+        'Try gentle heating (37-50°C) with stirring. Sonication may also help.'
+      );
+    } else {
+      // Moderate LogP - general advice
+      suggestions.push(
+        'Try extended stirring or gentle heating. If needed, use minimal co-solvent (ethanol, DMSO).'
+      );
+    }
+
+    // Large molecule advice
+    if (isLargeMolecule) {
+      suggestions.push(
+        `Higher MW (${mw.toFixed(0)} g/mol) may slow dissolution. Allow extra time with stirring.`
+      );
+    }
+
   } else if (isNearLimit) {
-    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of predicted water solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL)${confidenceNote}. May require extended mixing or gentle heating.`;
+    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of predicted solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL)${confidenceNote}. Dissolution may require extra time.`;
+
     suggestions.push(
       `Predicted solubility class: ${prediction.solubilityClass || 'unknown'}`
     );
+
+    // Near-limit advice
+    if (isHydrophobic) {
+      suggestions.push(
+        'Extended stirring recommended. Warming to 30-40°C may help.'
+      );
+    } else {
+      suggestions.push(
+        'Allow extra time for complete dissolution. Gentle stirring should suffice.'
+      );
+    }
+
   } else if (prediction.solubilityClass) {
-    // Provide informative message even when concentration is OK
+    // Safe concentration but still provide useful info for poorly soluble compounds
     if (
       prediction.solubilityClass === 'poorly soluble' ||
       prediction.solubilityClass === 'very poorly soluble' ||
       prediction.solubilityClass === 'practically insoluble'
     ) {
-      warning = `This compound is predicted to be ${prediction.solubilityClass} (~${predictedSolubilityMgML.toFixed(4)} mg/mL)${confidenceNote}. Current concentration (${concentrationMgML.toFixed(1)} mg/mL) is within predicted limits.`;
+      warning = `Compound is ${prediction.solubilityClass} (~${predictedSolubilityMgML.toFixed(4)} mg/mL)${confidenceNote}, but your concentration (${concentrationMgML.toFixed(3)} mg/mL) is within safe limits.`;
       suggestions.push(
-        'Monitor for precipitation. Consider using co-solvents if dissolution issues occur.'
+        'Monitor solution clarity. Precipitation may occur over time or with temperature changes.'
       );
     }
   }
 
-  // Add molecular properties for context
-  if (prediction.molLogP !== undefined) {
-    const logPNote =
-      prediction.molLogP > 3
-        ? 'High lipophilicity may limit aqueous solubility.'
-        : prediction.molLogP < -1
-          ? 'Low lipophilicity suggests good water solubility.'
-          : '';
-    if (logPNote) {
-      suggestions.push(`LogP: ${prediction.molLogP.toFixed(2)} - ${logPNote}`);
-    }
+  // Add LogP context for all cases (only if significant)
+  if (isVeryHydrophobic) {
+    suggestions.push(
+      `Note: LogP ${logP.toFixed(1)} indicates high lipophilicity - this compound strongly prefers organic phase.`
+    );
+  } else if (isHydrophilic && !isExceeded) {
+    suggestions.push(
+      `Note: LogP ${logP.toFixed(1)} indicates good water affinity - dissolution should be straightforward.`
+    );
   }
 
   return {
