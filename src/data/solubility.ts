@@ -859,15 +859,20 @@ export async function checkSolubilityAsync(
 
   // Try ML-based prediction if SMILES is available or can be fetched
   let smilesForPrediction: string | undefined = smiles;
+  console.log(`[Solubility] chemicalId: ${chemicalId}, pubchemCid: ${pubchemCid || 'none'}, chemicalName: ${chemicalName || 'none'}`);
+  console.log(`[Solubility] Input SMILES for ${chemicalName || chemicalId}: ${smiles || 'not provided'}`);
 
   // Try to get SMILES from PubChem if not provided
   if (!smilesForPrediction && pubchemCid) {
+    console.log(`[Solubility] Fetching SMILES from PubChem for CID ${pubchemCid}...`);
     const fetchedSmiles = await fetchSmilesFromPubChem(pubchemCid);
     smilesForPrediction = fetchedSmiles ?? undefined;
+    console.log(`[Solubility] Fetched SMILES: ${smilesForPrediction || 'failed'}`);
   }
 
   // Attempt ML prediction if we have SMILES (browser-based, no server needed)
   if (smilesForPrediction) {
+    console.log(`[Solubility] Attempting ML prediction for ${chemicalName || smilesForPrediction}...`);
     try {
       const prediction = await solubilityPredictor.predict(
         smilesForPrediction,
@@ -885,6 +890,8 @@ export async function checkSolubilityAsync(
     } catch (error) {
       console.warn('[Solubility] ML prediction error:', error);
     }
+  } else {
+    console.log(`[Solubility] No SMILES available for ML prediction, falling back to general warnings`);
   }
 
   // Fallback to general warnings (no specific data or prediction available)
