@@ -669,25 +669,109 @@ function parseSolubilityString(text: string): { value: number; unit: string } | 
 
 /**
  * Fetch SMILES notation from PubChem for a compound
+ * Tries multiple methods: by CID, by name, and NIH Chemical Identifier Resolver as backup
  * @param cid PubChem Compound ID
+ * @param compoundName Optional compound name for backup lookup
  * @returns SMILES string or null
  */
-async function fetchSmilesFromPubChem(cid: string): Promise<string | null> {
+async function fetchSmilesFromPubChem(cid: string, compoundName?: string): Promise<string | null> {
+  // Method 1: Try PubChem REST API by CID
   try {
+    console.log(`[Solubility] Trying PubChem REST API by CID ${cid}...`);
     const response = await fetch(
       `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/CanonicalSMILES/JSON`
     );
 
-    if (!response.ok) {
-      return null;
+    if (response.ok) {
+      const data = await response.json();
+      const smiles = data?.PropertyTable?.Properties?.[0]?.CanonicalSMILES;
+      if (smiles) {
+        console.log(`[Solubility] Got SMILES from PubChem CID: ${smiles}`);
+        return smiles;
+      }
     }
-
-    const data = await response.json();
-    return data?.PropertyTable?.Properties?.[0]?.CanonicalSMILES || null;
+    console.log(`[Solubility] PubChem CID lookup failed (status: ${response.status})`);
   } catch (error) {
-    console.error('[Solubility] Error fetching SMILES from PubChem:', error);
-    return null;
+    console.warn('[Solubility] PubChem CID lookup error:', error);
   }
+
+  // Method 2: Try PubChem REST API by compound name
+  if (compoundName) {
+    try {
+      console.log(`[Solubility] Trying PubChem REST API by name "${compoundName}"...`);
+      const response = await fetch(
+        `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(compoundName)}/property/CanonicalSMILES/JSON`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const smiles = data?.PropertyTable?.Properties?.[0]?.CanonicalSMILES;
+        if (smiles) {
+          console.log(`[Solubility] Got SMILES from PubChem name lookup: ${smiles}`);
+          return smiles;
+        }
+      }
+      console.log(`[Solubility] PubChem name lookup failed (status: ${response.status})`);
+    } catch (error) {
+      console.warn('[Solubility] PubChem name lookup error:', error);
+    }
+  }
+
+  // Method 3: Try NIH Chemical Identifier Resolver (CACTUS) as backup
+  if (compoundName) {
+    try {
+      console.log(`[Solubility] Trying NIH CACTUS resolver for "${compoundName}"...`);
+      const response = await fetch(
+        `https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(compoundName)}/smiles`
+      );
+
+      if (response.ok) {
+        const smiles = (await response.text()).trim();
+        if (smiles && !smiles.includes('Page not found') && !smiles.includes('<html')) {
+          console.log(`[Solubility] Got SMILES from NIH CACTUS: ${smiles}`);
+          return smiles;
+        }
+      }
+      console.log(`[Solubility] NIH CACTUS lookup failed (status: ${response.status})`);
+    } catch (error) {
+      console.warn('[Solubility] NIH CACTUS lookup error:', error);
+    }
+  }
+
+  // Method 4: Try with IUPAC name variant (e.g., "ethylene glycol-bis" for EGTA)
+  if (compoundName) {
+    // Try common chemical name variations
+    const nameVariants = [
+      compoundName.toUpperCase(),
+      compoundName.toLowerCase(),
+      compoundName.replace(/-/g, ' '),
+    ];
+
+    for (const variant of nameVariants) {
+      if (variant === compoundName) continue; // Skip if same as original
+
+      try {
+        console.log(`[Solubility] Trying PubChem with name variant "${variant}"...`);
+        const response = await fetch(
+          `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(variant)}/property/CanonicalSMILES/JSON`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const smiles = data?.PropertyTable?.Properties?.[0]?.CanonicalSMILES;
+          if (smiles) {
+            console.log(`[Solubility] Got SMILES from PubChem variant "${variant}": ${smiles}`);
+            return smiles;
+          }
+        }
+      } catch {
+        // Continue to next variant
+      }
+    }
+  }
+
+  console.log('[Solubility] All SMILES lookup methods failed');
+  return null;
 }
 
 /**
@@ -862,12 +946,12 @@ export async function checkSolubilityAsync(
   console.log(`[Solubility] chemicalId: ${chemicalId}, pubchemCid: ${pubchemCid || 'none'}, chemicalName: ${chemicalName || 'none'}`);
   console.log(`[Solubility] Input SMILES for ${chemicalName || chemicalId}: ${smiles || 'not provided'}`);
 
-  // Try to get SMILES from PubChem if not provided
-  if (!smilesForPrediction && pubchemCid) {
-    console.log(`[Solubility] Fetching SMILES from PubChem for CID ${pubchemCid}...`);
-    const fetchedSmiles = await fetchSmilesFromPubChem(pubchemCid);
+  // Try to get SMILES from PubChem or backup APIs if not provided
+  if (!smilesForPrediction && (pubchemCid || chemicalName)) {
+    console.log(`[Solubility] Fetching SMILES (CID: ${pubchemCid || 'none'}, name: ${chemicalName || 'none'})...`);
+    const fetchedSmiles = await fetchSmilesFromPubChem(pubchemCid || '', chemicalName);
     smilesForPrediction = fetchedSmiles ?? undefined;
-    console.log(`[Solubility] Fetched SMILES: ${smilesForPrediction || 'failed'}`);
+    console.log(`[Solubility] Final SMILES result: ${smilesForPrediction || 'all methods failed'}`);
   }
 
   // Attempt ML prediction if we have SMILES (browser-based, no server needed)
