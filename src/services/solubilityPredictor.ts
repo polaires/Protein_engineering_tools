@@ -76,7 +76,18 @@ class SolubilityPredictorService {
       // Load RDKit.js (WASM)
       console.log('[SolubilityPredictor] Loading RDKit.js...');
       const initRDKitModule = await import('@rdkit/rdkit');
-      this.rdkit = await (initRDKitModule as any).default();
+
+      // Configure RDKit to find the WASM file in the public folder
+      this.rdkit = await (initRDKitModule as any).default({
+        locateFile: (file: string) => {
+          // The WASM file should be served from the root/public folder
+          if (file.endsWith('.wasm')) {
+            console.log(`[SolubilityPredictor] Locating WASM file: /${file}`);
+            return `/${file}`;
+          }
+          return file;
+        }
+      });
       console.log(`[SolubilityPredictor] RDKit.js loaded (version ${this.rdkit!.version()})`);
 
       // Load ONNX model
