@@ -145,9 +145,13 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     // Check solubility if calculation was successful and we have the necessary data
     if (calcResult.success && selectedChemical && calcResult.value && convertedCalculation.volume) {
       // Calculate concentration in mg/mL
-      const mass = calcResult.value; // in grams
+      // Note: calcResult.value can be in grams OR milligrams depending on the magnitude
+      // The unit is indicated by calcResult.unit ('g' or 'mg')
+      const massInGrams = calcResult.unit === 'mg'
+        ? calcResult.value / 1000  // convert mg to g
+        : calcResult.value;        // already in grams
       const volumeML = convertedCalculation.volume; // in mL
-      const concentrationMgML = (mass / volumeML) * 1000; // convert g/mL to mg/mL
+      const concentrationMgML = (massInGrams / volumeML) * 1000; // convert g/mL to mg/mL
 
       // Extract PubChem CID if available
       let cidForCheck: string | undefined;
