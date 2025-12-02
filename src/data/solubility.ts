@@ -4,12 +4,15 @@
  *
  * Enhanced with ML-based solubility prediction using CatBoost model
  * trained on the Delaney ESOL dataset (93.35% accuracy)
+ *
+ * Uses browser-based prediction with RDKit.js (WASM) and ONNX Runtime Web
+ * No server required!
  */
 
 import {
-  SolubilityPredictionAPI,
-  SolubilityPredictionResult,
-} from '@/services/solubilityApi';
+  solubilityPredictor,
+  SolubilityPrediction,
+} from '@/services/solubilityPredictor';
 
 export interface SolubilityData {
   chemicalId: string;
@@ -692,7 +695,7 @@ async function fetchSmilesFromPubChem(cid: string): Promise<string | null> {
  */
 function getPredictionBasedWarning(
   concentrationMgML: number,
-  prediction: SolubilityPredictionResult
+  prediction: SolubilityPrediction
 ): {
   isExceeded: boolean;
   percentOfLimit: number;
@@ -700,9 +703,9 @@ function getPredictionBasedWarning(
   suggestions: string[];
   solubilityData: SolubilityData | null;
   source: 'database' | 'pubchem' | 'prediction' | 'general';
-  prediction: SolubilityPredictionResult;
+  prediction: SolubilityPrediction;
 } {
-  const predictedSolubilityMgML = prediction.solubility_g_l || 0; // g/L = mg/mL
+  const predictedSolubilityMgML = prediction.solubilityGL || 0; // g/L = mg/mL
   const percentOfLimit =
     predictedSolubilityMgML > 0
       ? (concentrationMgML / predictedSolubilityMgML) * 100
@@ -724,7 +727,7 @@ function getPredictionBasedWarning(
   if (isExceeded) {
     warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds predicted water solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%${confidenceNote}.`;
     suggestions.push(
-      `Predicted solubility class: ${prediction.solubility_class || 'unknown'}`
+      `Predicted solubility class: ${prediction.solubilityClass || 'unknown'}`
     );
     suggestions.push(
       'Consider preparing a stock solution in an appropriate organic solvent (DMSO, ethanol) and diluting to working concentration.'
@@ -735,16 +738,16 @@ function getPredictionBasedWarning(
   } else if (isNearLimit) {
     warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of predicted water solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL)${confidenceNote}. May require extended mixing or gentle heating.`;
     suggestions.push(
-      `Predicted solubility class: ${prediction.solubility_class || 'unknown'}`
+      `Predicted solubility class: ${prediction.solubilityClass || 'unknown'}`
     );
-  } else if (prediction.solubility_class) {
+  } else if (prediction.solubilityClass) {
     // Provide informative message even when concentration is OK
     if (
-      prediction.solubility_class === 'poorly soluble' ||
-      prediction.solubility_class === 'very poorly soluble' ||
-      prediction.solubility_class === 'practically insoluble'
+      prediction.solubilityClass === 'poorly soluble' ||
+      prediction.solubilityClass === 'very poorly soluble' ||
+      prediction.solubilityClass === 'practically insoluble'
     ) {
-      warning = `This compound is predicted to be ${prediction.solubility_class} (~${predictedSolubilityMgML.toFixed(4)} mg/mL)${confidenceNote}. Current concentration (${concentrationMgML.toFixed(1)} mg/mL) is within predicted limits.`;
+      warning = `This compound is predicted to be ${prediction.solubilityClass} (~${predictedSolubilityMgML.toFixed(4)} mg/mL)${confidenceNote}. Current concentration (${concentrationMgML.toFixed(1)} mg/mL) is within predicted limits.`;
       suggestions.push(
         'Monitor for precipitation. Consider using co-solvents if dissolution issues occur.'
       );
@@ -752,15 +755,15 @@ function getPredictionBasedWarning(
   }
 
   // Add molecular properties for context
-  if (prediction.mol_log_p !== undefined) {
+  if (prediction.molLogP !== undefined) {
     const logPNote =
-      prediction.mol_log_p > 3
+      prediction.molLogP > 3
         ? 'High lipophilicity may limit aqueous solubility.'
-        : prediction.mol_log_p < -1
+        : prediction.molLogP < -1
           ? 'Low lipophilicity suggests good water solubility.'
           : '';
     if (logPNote) {
-      suggestions.push(`LogP: ${prediction.mol_log_p.toFixed(2)} - ${logPNote}`);
+      suggestions.push(`LogP: ${prediction.molLogP.toFixed(2)} - ${logPNote}`);
     }
   }
 
@@ -799,7 +802,7 @@ export async function checkSolubilityAsync(
   suggestions: string[];
   solubilityData: SolubilityData | null;
   source: 'database' | 'pubchem' | 'prediction' | 'general';
-  prediction?: SolubilityPredictionResult;
+  prediction?: SolubilityPrediction;
 }> {
   // First, check our database
   const localData = getSolubilityData(chemicalId);
@@ -863,27 +866,24 @@ export async function checkSolubilityAsync(
     smilesForPrediction = fetchedSmiles ?? undefined;
   }
 
-  // Attempt ML prediction if we have SMILES
+  // Attempt ML prediction if we have SMILES (browser-based, no server needed)
   if (smilesForPrediction) {
-    // Check if prediction API is available
-    const apiAvailable = await SolubilityPredictionAPI.isAvailable();
-
-    if (apiAvailable) {
-      const prediction = await SolubilityPredictionAPI.predictSolubility(
+    try {
+      const prediction = await solubilityPredictor.predict(
         smilesForPrediction,
         chemicalName
       );
 
-      if (prediction.success && prediction.solubility_g_l !== undefined) {
+      if (prediction.success && prediction.solubilityGL !== undefined) {
         console.log(
-          `[Solubility] ML prediction for ${chemicalName || smilesForPrediction}: ${prediction.solubility_g_l.toFixed(4)} g/L (LogS: ${prediction.log_s})`
+          `[Solubility] ML prediction for ${chemicalName || smilesForPrediction}: ${prediction.solubilityGL.toFixed(4)} g/L (LogS: ${prediction.logS})`
         );
         return getPredictionBasedWarning(concentrationMgML, prediction);
       } else if (prediction.error) {
-        console.warn(
-          `[Solubility] ML prediction failed: ${prediction.error}`
-        );
+        console.warn(`[Solubility] ML prediction failed: ${prediction.error}`);
       }
+    } catch (error) {
+      console.warn('[Solubility] ML prediction error:', error);
     }
   }
 
@@ -908,9 +908,9 @@ function getGeneralSolubilityWarning(concentrationMgML: number): {
   let isExceeded = false;
 
   // General thresholds (conservative estimates)
-  // Note: This fallback is used when ML prediction service is not available
+  // Note: This fallback is used when ML prediction fails (e.g., invalid SMILES)
   const mlNote =
-    'Start the solubility prediction server (python scripts/solubility_api.py) for ML-based predictions.';
+    'Provide a valid SMILES notation to enable ML-based solubility prediction.';
 
   if (concentrationMgML > 200) {
     // Very high concentration
@@ -1096,41 +1096,47 @@ export function checkSolubility(
 
 /**
  * Predict water solubility directly from SMILES notation
- * Uses ML model (CatBoost trained on Delaney ESOL dataset)
+ * Uses browser-based ML model (CatBoost via ONNX Runtime Web)
+ * No server required!
  *
  * @param smiles SMILES notation of the molecule
  * @param name Optional compound name
- * @returns Prediction result or null if service unavailable
+ * @returns Prediction result or null if prediction fails
  */
 export async function predictSolubilityFromSmiles(
   smiles: string,
   name?: string
-): Promise<SolubilityPredictionResult | null> {
-  const apiAvailable = await SolubilityPredictionAPI.isAvailable();
+): Promise<SolubilityPrediction | null> {
+  try {
+    const result = await solubilityPredictor.predict(smiles, name);
 
-  if (!apiAvailable) {
-    console.warn(
-      '[Solubility] ML prediction service not available. Start with: python scripts/solubility_api.py'
-    );
+    if (!result.success) {
+      console.error('[Solubility] Prediction failed:', result.error);
+      return null;
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[Solubility] Prediction error:', error);
     return null;
   }
-
-  const result = await SolubilityPredictionAPI.predictSolubility(smiles, name);
-
-  if (!result.success) {
-    console.error('[Solubility] Prediction failed:', result.error);
-    return null;
-  }
-
-  return result;
 }
 
 /**
- * Check if the ML solubility prediction service is available
+ * Initialize the solubility prediction engine
+ * Loads RDKit.js (WASM) and ONNX model
+ * Call this early to avoid delays on first prediction
  */
-export async function isSolubilityPredictionAvailable(): Promise<boolean> {
-  return SolubilityPredictionAPI.isAvailable();
+export async function initializeSolubilityPredictor(): Promise<void> {
+  return solubilityPredictor.initialize();
+}
+
+/**
+ * Check if the ML solubility prediction engine is ready
+ */
+export function isSolubilityPredictorReady(): boolean {
+  return solubilityPredictor.isReady();
 }
 
 // Re-export prediction types for convenience
-export type { SolubilityPredictionResult } from '@/services/solubilityApi';
+export type { SolubilityPrediction } from '@/services/solubilityPredictor';

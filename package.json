@@ -18,12 +18,14 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
+    "@rdkit/rdkit": "^2025.3.4-1.0.0",
     "axios": "^1.6.2",
     "clsx": "^2.0.0",
     "fuse.js": "^7.1.0",
     "idb": "^8.0.0",
     "lucide-react": "^0.294.0",
     "molstar": "^5.4.1",
+    "onnxruntime-web": "^1.23.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "recharts": "^3.4.1"
