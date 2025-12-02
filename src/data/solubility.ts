@@ -1,7 +1,15 @@
 /**
  * Solubility database for common laboratory chemicals
  * Contains solubility limits in various solvents
+ *
+ * Enhanced with ML-based solubility prediction using CatBoost model
+ * trained on the Delaney ESOL dataset (93.35% accuracy)
  */
+
+import {
+  SolubilityPredictionAPI,
+  SolubilityPredictionResult,
+} from '@/services/solubilityApi';
 
 export interface SolubilityData {
   chemicalId: string;
@@ -657,25 +665,141 @@ function parseSolubilityString(text: string): { value: number; unit: string } | 
 }
 
 /**
+ * Fetch SMILES notation from PubChem for a compound
+ * @param cid PubChem Compound ID
+ * @returns SMILES string or null
+ */
+async function fetchSmilesFromPubChem(cid: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/CanonicalSMILES/JSON`
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data?.PropertyTable?.Properties?.[0]?.CanonicalSMILES || null;
+  } catch (error) {
+    console.error('[Solubility] Error fetching SMILES from PubChem:', error);
+    return null;
+  }
+}
+
+/**
+ * Generate solubility warning based on ML prediction
+ */
+function getPredictionBasedWarning(
+  concentrationMgML: number,
+  prediction: SolubilityPredictionResult
+): {
+  isExceeded: boolean;
+  percentOfLimit: number;
+  warning: string | null;
+  suggestions: string[];
+  solubilityData: SolubilityData | null;
+  source: 'database' | 'pubchem' | 'prediction' | 'general';
+  prediction: SolubilityPredictionResult;
+} {
+  const predictedSolubilityMgML = prediction.solubility_g_l || 0; // g/L = mg/mL
+  const percentOfLimit =
+    predictedSolubilityMgML > 0
+      ? (concentrationMgML / predictedSolubilityMgML) * 100
+      : 0;
+  const isExceeded = percentOfLimit > 100;
+  const isNearLimit = percentOfLimit > 80 && percentOfLimit <= 100;
+
+  let warning: string | null = null;
+  const suggestions: string[] = [];
+
+  // Add confidence note
+  const confidenceNote =
+    prediction.confidence === 'high'
+      ? ''
+      : prediction.confidence === 'medium'
+        ? ' (moderate confidence)'
+        : ' (low confidence - compound may be outside model training domain)';
+
+  if (isExceeded) {
+    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds predicted water solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%${confidenceNote}.`;
+    suggestions.push(
+      `Predicted solubility class: ${prediction.solubility_class || 'unknown'}`
+    );
+    suggestions.push(
+      'Consider preparing a stock solution in an appropriate organic solvent (DMSO, ethanol) and diluting to working concentration.'
+    );
+    suggestions.push(
+      'Alternatively, try heating the solution while stirring, or adjust pH if applicable.'
+    );
+  } else if (isNearLimit) {
+    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of predicted water solubility (~${predictedSolubilityMgML.toFixed(2)} mg/mL)${confidenceNote}. May require extended mixing or gentle heating.`;
+    suggestions.push(
+      `Predicted solubility class: ${prediction.solubility_class || 'unknown'}`
+    );
+  } else if (prediction.solubility_class) {
+    // Provide informative message even when concentration is OK
+    if (
+      prediction.solubility_class === 'poorly soluble' ||
+      prediction.solubility_class === 'very poorly soluble' ||
+      prediction.solubility_class === 'practically insoluble'
+    ) {
+      warning = `This compound is predicted to be ${prediction.solubility_class} (~${predictedSolubilityMgML.toFixed(4)} mg/mL)${confidenceNote}. Current concentration (${concentrationMgML.toFixed(1)} mg/mL) is within predicted limits.`;
+      suggestions.push(
+        'Monitor for precipitation. Consider using co-solvents if dissolution issues occur.'
+      );
+    }
+  }
+
+  // Add molecular properties for context
+  if (prediction.mol_log_p !== undefined) {
+    const logPNote =
+      prediction.mol_log_p > 3
+        ? 'High lipophilicity may limit aqueous solubility.'
+        : prediction.mol_log_p < -1
+          ? 'Low lipophilicity suggests good water solubility.'
+          : '';
+    if (logPNote) {
+      suggestions.push(`LogP: ${prediction.mol_log_p.toFixed(2)} - ${logPNote}`);
+    }
+  }
+
+  return {
+    isExceeded,
+    percentOfLimit,
+    warning,
+    suggestions,
+    solubilityData: null,
+    source: 'prediction',
+    prediction,
+  };
+}
+
+/**
  * Check if a concentration exceeds solubility limit
+ * Uses database lookup, PubChem data, or ML prediction (in order of preference)
+ *
  * @param chemicalId Chemical ID
  * @param concentrationMgML Concentration in mg/mL
- * @param pubchemCid Optional PubChem CID for fetching data
+ * @param pubchemCid Optional PubChem CID for fetching data and SMILES
  * @param chemicalName Optional chemical name for fallback PubChem lookup
+ * @param smiles Optional SMILES notation for ML prediction
  * @returns Object with warning status and message
  */
 export async function checkSolubilityAsync(
   chemicalId: string,
   concentrationMgML: number,
   pubchemCid?: string,
-  chemicalName?: string
+  chemicalName?: string,
+  smiles?: string
 ): Promise<{
   isExceeded: boolean;
   percentOfLimit: number;
   warning: string | null;
   suggestions: string[];
   solubilityData: SolubilityData | null;
-  source: 'database' | 'pubchem' | 'general';
+  source: 'database' | 'pubchem' | 'prediction' | 'general';
+  prediction?: SolubilityPredictionResult;
 }> {
   // First, check our database
   const localData = getSolubilityData(chemicalId);
@@ -684,7 +808,7 @@ export async function checkSolubilityAsync(
     const result = checkSolubility(chemicalId, concentrationMgML);
     return {
       ...result,
-      source: 'database'
+      source: 'database',
     };
   }
 
@@ -703,8 +827,12 @@ export async function checkSolubilityAsync(
 
       if (isExceeded) {
         warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds reported water solubility (~${solubilityMgML.toFixed(1)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%.`;
-        suggestions.push('Consider preparing a stock solution in an appropriate organic solvent and diluting to working concentration.');
-        suggestions.push('Alternatively, try heating the solution while stirring, or adjust pH if applicable.');
+        suggestions.push(
+          'Consider preparing a stock solution in an appropriate organic solvent and diluting to working concentration.'
+        );
+        suggestions.push(
+          'Alternatively, try heating the solution while stirring, or adjust pH if applicable.'
+        );
         if (pubchemData.notes) {
           suggestions.push(`PubChem note: ${pubchemData.notes}`);
         }
@@ -721,17 +849,51 @@ export async function checkSolubilityAsync(
         warning,
         suggestions,
         solubilityData: null,
-        source: 'pubchem'
+        source: 'pubchem',
       };
     }
   }
 
-  // General warnings based on concentration ranges (no specific data available)
+  // Try ML-based prediction if SMILES is available or can be fetched
+  let smilesForPrediction: string | undefined = smiles;
+
+  // Try to get SMILES from PubChem if not provided
+  if (!smilesForPrediction && pubchemCid) {
+    const fetchedSmiles = await fetchSmilesFromPubChem(pubchemCid);
+    smilesForPrediction = fetchedSmiles ?? undefined;
+  }
+
+  // Attempt ML prediction if we have SMILES
+  if (smilesForPrediction) {
+    // Check if prediction API is available
+    const apiAvailable = await SolubilityPredictionAPI.isAvailable();
+
+    if (apiAvailable) {
+      const prediction = await SolubilityPredictionAPI.predictSolubility(
+        smilesForPrediction,
+        chemicalName
+      );
+
+      if (prediction.success && prediction.solubility_g_l !== undefined) {
+        console.log(
+          `[Solubility] ML prediction for ${chemicalName || smilesForPrediction}: ${prediction.solubility_g_l.toFixed(4)} g/L (LogS: ${prediction.log_s})`
+        );
+        return getPredictionBasedWarning(concentrationMgML, prediction);
+      } else if (prediction.error) {
+        console.warn(
+          `[Solubility] ML prediction failed: ${prediction.error}`
+        );
+      }
+    }
+  }
+
+  // Fallback to general warnings (no specific data or prediction available)
   return getGeneralSolubilityWarning(concentrationMgML);
 }
 
 /**
  * Provide general solubility warnings when no specific data is available
+ * This is a fallback when database, PubChem, and ML prediction are unavailable
  */
 function getGeneralSolubilityWarning(concentrationMgML: number): {
   isExceeded: boolean;
@@ -739,20 +901,27 @@ function getGeneralSolubilityWarning(concentrationMgML: number): {
   warning: string | null;
   suggestions: string[];
   solubilityData: SolubilityData | null;
-  source: 'database' | 'pubchem' | 'general';
+  source: 'database' | 'pubchem' | 'prediction' | 'general';
 } {
   let warning: string | null = null;
   const suggestions: string[] = [];
   let isExceeded = false;
 
   // General thresholds (conservative estimates)
+  // Note: This fallback is used when ML prediction service is not available
+  const mlNote =
+    'Start the solubility prediction server (python scripts/solubility_api.py) for ML-based predictions.';
+
   if (concentrationMgML > 200) {
     // Very high concentration
     isExceeded = true;
     warning = `High concentration (${concentrationMgML.toFixed(1)} mg/mL) may exceed water solubility for many compounds.`;
-    suggestions.push('⚠️ Solubility data not available for this compound.');
+    suggestions.push('⚠️ No solubility data or prediction available.');
+    suggestions.push(mlNote);
     suggestions.push('Consider the following approaches:');
-    suggestions.push('• Prepare a concentrated stock in DMSO, ethanol, or other organic solvent');
+    suggestions.push(
+      '• Prepare a concentrated stock in DMSO, ethanol, or other organic solvent'
+    );
     suggestions.push('• Heat the solution gently while stirring');
     suggestions.push('• Adjust pH if the compound is acidic or basic');
     suggestions.push('• Use sonication to aid dissolution');
@@ -760,7 +929,8 @@ function getGeneralSolubilityWarning(concentrationMgML: number): {
   } else if (concentrationMgML > 100) {
     // High concentration - warning
     warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is relatively high. Solubility may be limited for some compounds.`;
-    suggestions.push('⚠️ Solubility data not available for this compound.');
+    suggestions.push('⚠️ No solubility data or prediction available.');
+    suggestions.push(mlNote);
     suggestions.push('If dissolution is difficult, consider:');
     suggestions.push('• Using warm water (if compound is stable)');
     suggestions.push('• pH adjustment for ionizable compounds');
@@ -768,8 +938,11 @@ function getGeneralSolubilityWarning(concentrationMgML: number): {
   } else if (concentrationMgML > 50) {
     // Moderate concentration - info
     warning = `Moderate concentration (${concentrationMgML.toFixed(1)} mg/mL). Most water-soluble compounds should dissolve, but verify if issues arise.`;
-    suggestions.push('ℹ️ Solubility data not available for this compound.');
-    suggestions.push('If dissolution is slow, try gentle heating or extended mixing.');
+    suggestions.push('ℹ️ No solubility data or prediction available.');
+    suggestions.push(mlNote);
+    suggestions.push(
+      'If dissolution is slow, try gentle heating or extended mixing.'
+    );
   }
 
   return {
@@ -920,3 +1093,44 @@ export function checkSolubility(
     solubilityData: data,
   };
 }
+
+/**
+ * Predict water solubility directly from SMILES notation
+ * Uses ML model (CatBoost trained on Delaney ESOL dataset)
+ *
+ * @param smiles SMILES notation of the molecule
+ * @param name Optional compound name
+ * @returns Prediction result or null if service unavailable
+ */
+export async function predictSolubilityFromSmiles(
+  smiles: string,
+  name?: string
+): Promise<SolubilityPredictionResult | null> {
+  const apiAvailable = await SolubilityPredictionAPI.isAvailable();
+
+  if (!apiAvailable) {
+    console.warn(
+      '[Solubility] ML prediction service not available. Start with: python scripts/solubility_api.py'
+    );
+    return null;
+  }
+
+  const result = await SolubilityPredictionAPI.predictSolubility(smiles, name);
+
+  if (!result.success) {
+    console.error('[Solubility] Prediction failed:', result.error);
+    return null;
+  }
+
+  return result;
+}
+
+/**
+ * Check if the ML solubility prediction service is available
+ */
+export async function isSolubilityPredictionAvailable(): Promise<boolean> {
+  return SolubilityPredictionAPI.isAvailable();
+}
+
+// Re-export prediction types for convenience
+export type { SolubilityPredictionResult } from '@/services/solubilityApi';
