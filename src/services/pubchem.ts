@@ -196,6 +196,7 @@ export function pubChemToChemical(
     molecularWeight: compound.molecularWeight,
     category: ChemicalCategory.OTHER,
     tags: ['pubchem'],
+    smiles: compound.canonicalSmiles, // Include SMILES for ML solubility prediction
   };
 }
 

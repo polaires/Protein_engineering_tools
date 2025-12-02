@@ -163,7 +163,8 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
           selectedChemical.id,
           concentrationMgML,
           cidForCheck,
-          selectedChemical.commonName // Pass the chemical name for fallback lookup
+          selectedChemical.commonName, // Pass the chemical name for fallback lookup
+          selectedChemical.smiles // Pass SMILES for ML-based prediction
         );
         setSolubilityCheck(solubilityResult);
       } catch (error) {

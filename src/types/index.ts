@@ -17,6 +17,7 @@ export interface Chemical {
   tags?: string[];
   description?: string;
   hazards?: string[];
+  smiles?: string; // SMILES notation for ML-based solubility prediction
 }
 
 export enum ChemicalCategory {
