@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle, GitBranch, FolderHeart } from 'lucide-react';
+import { Calculator as CalcIcon, Beaker, FlaskConical, Droplet, BookOpen, Sparkles, AlertTriangle, GitBranch, FolderHeart, Loader2, Brain, Database, Globe } from 'lucide-react';
 import {
   CalculationMode,
   MolarityCalculation,
@@ -87,6 +87,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
   // Solubility checking
   const [selectedChemical, setSelectedChemical] = useState<Chemical | null>(null);
   const [solubilityCheck, setSolubilityCheck] = useState<Awaited<ReturnType<typeof checkSolubilityAsync>> | null>(null);
+  const [solubilityLoading, setSolubilityLoading] = useState(false);
   const [pubchemCid, setPubchemCid] = useState<string | null>(null);
 
   // Update calculation mode when changed
@@ -157,7 +158,9 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         setPubchemCid(null);
       }
 
-      // Use async solubility check
+      // Use async solubility check with loading state
+      setSolubilityLoading(true);
+      setSolubilityCheck(null);
       try {
         const solubilityResult = await checkSolubilityAsync(
           selectedChemical.id,
@@ -171,9 +174,12 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         console.error('Solubility check failed:', error);
         setSolubilityCheck(null);
         setPubchemCid(null);
+      } finally {
+        setSolubilityLoading(false);
       }
     } else {
       setSolubilityCheck(null);
+      setSolubilityLoading(false);
       setPubchemCid(null);
     }
 
@@ -210,6 +216,7 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
     setFinalVolumeUnit(VolumeUnit.MILLILITER);
     setResult(null);
     setSolubilityCheck(null);
+    setSolubilityLoading(false);
     setPubchemCid(null);
   };
 
@@ -752,8 +759,21 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
         </div>
       )}
 
+      {/* Solubility Loading State */}
+      {solubilityLoading && (
+        <div className="p-4 border-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 animate-pulse">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+            <div>
+              <p className="font-semibold text-blue-800 dark:text-blue-200">Analyzing Solubility...</p>
+              <p className="text-sm text-blue-600 dark:text-blue-400">Checking database, PubChem, and running ML prediction</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Solubility Information */}
-      {solubilityCheck && (
+      {solubilityCheck && !solubilityLoading && (
         <div className={`p-4 border-2 rounded-lg animate-in ${
           solubilityCheck.isExceeded
             ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
@@ -827,11 +847,17 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                 </p>
               )}
               {/* Data source indicator */}
-              <p className="text-xs mt-3 text-slate-500 dark:text-slate-400 italic">
-                {solubilityCheck.source === 'database' && '📚 From curated database'}
+              <div className="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-400">
+                {solubilityCheck.source === 'database' && (
+                  <>
+                    <Database className="w-4 h-4" />
+                    <span>From curated laboratory database</span>
+                  </>
+                )}
                 {solubilityCheck.source === 'pubchem' && (
                   <>
-                    🌐 From PubChem API
+                    <Globe className="w-4 h-4" />
+                    <span>From PubChem experimental data</span>
                     {pubchemCid && (
                       <>
                         {' - '}
@@ -841,14 +867,25 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:underline"
                         >
-                          View on PubChem ↗
+                          View source ↗
                         </a>
                       </>
                     )}
                   </>
                 )}
-                {solubilityCheck.source === 'general' && 'ℹ️ General concentration guidelines'}
-              </p>
+                {solubilityCheck.source === 'prediction' && (
+                  <>
+                    <Brain className="w-4 h-4" />
+                    <span>ML prediction (CatBoost model, ~93% accuracy on ESOL dataset)</span>
+                  </>
+                )}
+                {solubilityCheck.source === 'general' && (
+                  <>
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>General guidelines - no specific data available</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
