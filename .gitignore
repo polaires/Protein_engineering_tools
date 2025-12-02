@@ -27,3 +27,6 @@ dist-ssr
 src-tauri/target
 src-tauri/Cargo.lock
 /public/nist_stability_constants.csv
+
+# ML training artifacts
+catboost_info/
