@@ -2,8 +2,11 @@
  * Solubility database for common laboratory chemicals
  * Contains solubility limits in various solvents
  *
- * Enhanced with ML-based solubility prediction using CatBoost model
- * trained on the Delaney ESOL dataset (93.35% accuracy)
+ * Priority chain for solubility lookup:
+ * 1. Curated lab database (buffers, inducers, antibiotics, etc.)
+ * 2. AqSolDB (9,982 experimental compounds from literature)
+ * 3. PubChem API (experimental data from web)
+ * 4. ML prediction (CatBoost model, fallback only)
  *
  * Uses browser-based prediction with RDKit.js (WASM) and ONNX Runtime Web
  * No server required!
@@ -13,6 +16,7 @@ import {
   solubilityPredictor,
   SolubilityPrediction,
 } from '@/services/solubilityPredictor';
+import { aqsoldb, AqSolDBEntry } from '@/services/aqsoldb';
 
 export interface SolubilityData {
   chemicalId: string;
@@ -378,6 +382,38 @@ export const SOLUBILITY_DATABASE: SolubilityData[] = [
       },
     ],
     notes: 'Poorly soluble in water, prepare stock in ethanol',
+  },
+
+  // ============================================================================
+  // Inducers
+  // ============================================================================
+  {
+    chemicalId: 'iptg',
+    waterSolubility: 250, // g/L (can make 1M = 238 g/L stocks easily)
+    waterSolubilityUnit: 'g/L',
+    temperature: '25°C',
+    notes: 'Highly soluble in water. Common stock concentration is 1M (238 mg/mL). Store frozen.',
+  },
+  {
+    chemicalId: 'pubchem-656894', // IPTG PubChem CID
+    waterSolubility: 250,
+    waterSolubilityUnit: 'g/L',
+    temperature: '25°C',
+    notes: 'Highly soluble in water. Common stock concentration is 1M (238 mg/mL). Store frozen.',
+  },
+  {
+    chemicalId: 'arabinose',
+    waterSolubility: 556, // g/L
+    waterSolubilityUnit: 'g/L',
+    temperature: '20°C',
+    notes: 'Very soluble in water. Common inducer for pBAD systems.',
+  },
+  {
+    chemicalId: 'lactose',
+    waterSolubility: 195, // g/L
+    waterSolubilityUnit: 'g/L',
+    temperature: '25°C',
+    notes: 'Soluble in water. Used for auto-induction media.',
   },
 
   // ============================================================================
@@ -925,8 +961,80 @@ function getPredictionBasedWarning(
 }
 
 /**
+ * Generate warning from AqSolDB experimental data
+ */
+function getAqSolDBWarning(
+  concentrationMgML: number,
+  entry: AqSolDBEntry
+): {
+  isExceeded: boolean;
+  percentOfLimit: number;
+  warning: string | null;
+  suggestions: string[];
+  solubilityData: SolubilityData | null;
+  source: 'database' | 'pubchem' | 'prediction' | 'general' | 'aqsoldb';
+} {
+  const solubilityMgML = entry.solubilityGL; // g/L = mg/mL
+  const percentOfLimit = solubilityMgML > 0 ? (concentrationMgML / solubilityMgML) * 100 : 0;
+  const isExceeded = percentOfLimit > 100;
+  const isNearLimit = percentOfLimit > 80 && percentOfLimit <= 100;
+
+  let warning: string | null = null;
+  const suggestions: string[] = [];
+
+  // Use LogP for smart recommendations
+  const logP = entry.molLogP;
+  const isHydrophobic = logP > 2;
+  const isVeryHydrophobic = logP > 4;
+
+  if (isExceeded) {
+    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) exceeds experimental water solubility (~${solubilityMgML.toFixed(2)} mg/mL) by ${(percentOfLimit - 100).toFixed(0)}%.`;
+
+    // Recommend max concentration
+    const safeConcentration = solubilityMgML * 0.8;
+    if (safeConcentration > 0.001) {
+      suggestions.push(
+        `Recommended max concentration: ~${safeConcentration >= 1 ? safeConcentration.toFixed(1) : safeConcentration.toFixed(3)} mg/mL`
+      );
+    }
+
+    // Solvent recommendations based on LogP
+    if (isVeryHydrophobic) {
+      suggestions.push(
+        `High LogP (${logP.toFixed(1)}) - use DMSO or DMF for stock, then dilute into aqueous buffer.`
+      );
+    } else if (isHydrophobic) {
+      suggestions.push(
+        `LogP (${logP.toFixed(1)}) - consider ethanol or DMSO as co-solvent (1-10% final).`
+      );
+    } else {
+      suggestions.push(
+        'Try gentle heating (37-50°C) with stirring or sonication.'
+      );
+    }
+  } else if (isNearLimit) {
+    warning = `Concentration (${concentrationMgML.toFixed(1)} mg/mL) is ${percentOfLimit.toFixed(0)}% of experimental solubility (~${solubilityMgML.toFixed(2)} mg/mL). May require extra time to dissolve.`;
+    suggestions.push('Extended stirring or gentle warming recommended.');
+  }
+
+  return {
+    isExceeded,
+    percentOfLimit,
+    warning,
+    suggestions,
+    solubilityData: null,
+    source: 'aqsoldb',
+  };
+}
+
+/**
  * Check if a concentration exceeds solubility limit
- * Uses database lookup, PubChem data, or ML prediction (in order of preference)
+ *
+ * Priority chain:
+ * 1. Curated lab database (buffers, inducers, antibiotics)
+ * 2. AqSolDB (9,982 experimental compounds)
+ * 3. PubChem API (experimental data from web)
+ * 4. ML prediction (CatBoost model, fallback)
  *
  * @param chemicalId Chemical ID
  * @param concentrationMgML Concentration in mg/mL
@@ -947,13 +1055,16 @@ export async function checkSolubilityAsync(
   warning: string | null;
   suggestions: string[];
   solubilityData: SolubilityData | null;
-  source: 'database' | 'pubchem' | 'prediction' | 'general';
+  source: 'database' | 'pubchem' | 'prediction' | 'general' | 'aqsoldb';
   prediction?: SolubilityPrediction;
 }> {
-  // First, check our database
+  // =========================================================================
+  // Priority 1: Curated lab database (most reliable for common lab chemicals)
+  // =========================================================================
   const localData = getSolubilityData(chemicalId);
 
   if (localData) {
+    console.log(`[Solubility] Found in curated database: ${chemicalId}`);
     const result = checkSolubility(chemicalId, concentrationMgML);
     return {
       ...result,
@@ -961,11 +1072,32 @@ export async function checkSolubilityAsync(
     };
   }
 
-  // If not in database and we have PubChem CID, try fetching from PubChem
+  // =========================================================================
+  // Priority 2: AqSolDB (9,982 experimental compounds from literature)
+  // =========================================================================
+  try {
+    await aqsoldb.load();
+    const aqsolEntry = aqsoldb.lookup({
+      name: chemicalName,
+      smiles: smiles,
+    });
+
+    if (aqsolEntry) {
+      console.log(`[Solubility] Found in AqSolDB: ${aqsolEntry.name} (${aqsolEntry.solubilityGL.toFixed(4)} g/L)`);
+      return getAqSolDBWarning(concentrationMgML, aqsolEntry);
+    }
+  } catch (error) {
+    console.warn('[Solubility] AqSolDB lookup failed:', error);
+  }
+
+  // =========================================================================
+  // Priority 3: PubChem API (experimental data from web)
+  // =========================================================================
   if (pubchemCid) {
     const pubchemData = await fetchPubChemSolubility(pubchemCid, chemicalName);
 
     if (pubchemData && pubchemData.waterSolubility !== null) {
+      console.log(`[Solubility] Found in PubChem: ${pubchemData.waterSolubility} g/L`);
       const solubilityMgML = pubchemData.waterSolubility; // Already in g/L = mg/mL
       const percentOfLimit = (concentrationMgML / solubilityMgML) * 100;
       const isExceeded = percentOfLimit > 100;
@@ -1003,7 +1135,9 @@ export async function checkSolubilityAsync(
     }
   }
 
-  // Try ML-based prediction if SMILES is available or can be fetched
+  // =========================================================================
+  // Priority 4: ML prediction (CatBoost model - fallback)
+  // =========================================================================
   let smilesForPrediction: string | undefined = smiles;
   console.log(`[Solubility] chemicalId: ${chemicalId}, pubchemCid: ${pubchemCid || 'none'}, chemicalName: ${chemicalName || 'none'}`);
   console.log(`[Solubility] Input SMILES for ${chemicalName || chemicalId}: ${smiles || 'not provided'}`);
@@ -1029,6 +1163,17 @@ export async function checkSolubilityAsync(
         console.log(
           `[Solubility] ML prediction for ${chemicalName || smilesForPrediction}: ${prediction.solubilityGL.toFixed(4)} g/L (LogS: ${prediction.logS})`
         );
+
+        // Add warning for hydrophilic compounds (LogP < 0) - model tends to underpredict
+        if (prediction.molLogP !== undefined && prediction.molLogP < 0) {
+          console.warn(
+            `[Solubility] Warning: Hydrophilic compound (LogP=${prediction.molLogP.toFixed(2)}). ` +
+            `Model may underpredict solubility for polar/sugar-like compounds.`
+          );
+          // Reduce confidence for hydrophilic compounds
+          prediction.confidence = 'low';
+        }
+
         return getPredictionBasedWarning(concentrationMgML, prediction);
       } else if (prediction.error) {
         console.warn(`[Solubility] ML prediction failed: ${prediction.error}`);
@@ -1040,7 +1185,9 @@ export async function checkSolubilityAsync(
     console.log(`[Solubility] No SMILES available for ML prediction, falling back to general warnings`);
   }
 
-  // Fallback to general warnings (no specific data or prediction available)
+  // =========================================================================
+  // Fallback: General warnings (no specific data available)
+  // =========================================================================
   return getGeneralSolubilityWarning(concentrationMgML);
 }
 
