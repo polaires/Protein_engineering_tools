@@ -885,6 +885,21 @@ export default function Calculator({ initialMode, onCalculate }: CalculatorProps
                     )}
                   </>
                 )}
+                {solubilityCheck.source === 'aqsoldb' && (
+                  <>
+                    <Database className="w-4 h-4" />
+                    <span>From AqSolDB (9,982 curated experimental values)</span>
+                    {' - '}
+                    <a
+                      href="https://doi.org/10.1038/s41597-019-0151-1"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      View source ↗
+                    </a>
+                  </>
+                )}
                 {solubilityCheck.source === 'prediction' && (
                   <>
                     <Brain className="w-4 h-4" />
