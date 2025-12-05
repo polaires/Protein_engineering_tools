@@ -645,14 +645,24 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     const results: ComparisonItem[] = [];
 
     if (comparisonType === 'elements' && comparisonLigand && selectedElementsForComparison.length > 0) {
+      // When constantType is 'All', prioritize 'K' (equilibrium constant) over 'H' (enthalpy) and 'S' (entropy)
+      // because log K represents equilibrium constants, not thermodynamic values
+      const effectiveConstantType = constantType === 'All' ? 'K' : constantType;
+
       if (showAllConditions) {
         // Show ALL data points for each element, grouped by condition (but still filter by equilibrium type)
         selectedElementsForComparison.forEach(element => {
           const records = dataByElement.get(element) || [];
-          const matching = records.filter(r =>
+          let matching = records.filter(r =>
             r.ligandName === comparisonLigand &&
-            (constantType === 'All' || r.constantType === constantType)
+            r.constantType === effectiveConstantType
           );
+          // Fall back to any type if no K records found
+          if (matching.length === 0 && constantType === 'All') {
+            matching = records.filter(r =>
+              r.ligandName === comparisonLigand
+            );
+          }
           if (matching.length > 0) {
             matching.forEach(record => {
               const condition = `T=${record.temperature}°C, I=${record.ionicStrength}M`;
@@ -687,23 +697,30 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
           // If we have data, try to find best match with filters
           if (matching.length > 0) {
-            // Try with all filters
+            // Try with all filters (prioritizing K type)
             let filtered = matching.filter(r =>
-              (constantType === 'All' || r.constantType === constantType) &&
+              r.constantType === effectiveConstantType &&
               (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
               (temperature === null || Math.abs(r.temperature - temperature) <= 5)
             );
             // If no match, try without temp filter
             if (filtered.length === 0) {
               filtered = matching.filter(r =>
-                (constantType === 'All' || r.constantType === constantType) &&
+                r.constantType === effectiveConstantType &&
                 (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter)
               );
             }
             // If still no match, try without ionic filter
             if (filtered.length === 0) {
               filtered = matching.filter(r =>
-                (constantType === 'All' || r.constantType === constantType)
+                r.constantType === effectiveConstantType
+              );
+            }
+            // If still no match with K type, fall back to any type matching user's filter
+            if (filtered.length === 0 && constantType === 'All') {
+              filtered = matching.filter(r =>
+                (ionicStrengthFilter === null || r.ionicStrength === ionicStrengthFilter) &&
+                (temperature === null || Math.abs(r.temperature - temperature) <= 5)
               );
             }
             // If still no match, use all matching records
