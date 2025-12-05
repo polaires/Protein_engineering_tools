@@ -67,6 +67,45 @@ const CONSTANT_TYPE_INFO: { [key: string]: string } = {
   'S': 'Solubility product'
 };
 
+// Smart sort ligands: prioritize abbreviation matches, then starts-with, then contains
+// Example: searching "NTA" should show "Nitrilotriacetic acid (NTA)" before "Pentane-2,4-dione"
+function sortLigandsByRelevance(ligands: string[], searchTerm: string): string[] {
+  if (!searchTerm || searchTerm.length < 2) {
+    return [...ligands].sort();
+  }
+
+  const searchLower = searchTerm.toLowerCase();
+  const searchUpper = searchTerm.toUpperCase();
+
+  return [...ligands].sort((a, b) => {
+    const aLower = a.toLowerCase();
+    const bLower = b.toLowerCase();
+
+    // Priority 1: Exact abbreviation match in parentheses (e.g., "(NTA)" matches "NTA")
+    const aHasExactAbbrev = a.includes(`(${searchUpper})`) || a.includes(`(${searchTerm})`);
+    const bHasExactAbbrev = b.includes(`(${searchUpper})`) || b.includes(`(${searchTerm})`);
+    if (aHasExactAbbrev && !bHasExactAbbrev) return -1;
+    if (bHasExactAbbrev && !aHasExactAbbrev) return 1;
+
+    // Priority 2: Abbreviation contains search term (e.g., "(EDTA)" matches "EDT")
+    const aAbbrevMatch = /\(([^)]+)\)/.exec(a);
+    const bAbbrevMatch = /\(([^)]+)\)/.exec(b);
+    const aAbbrevContains = aAbbrevMatch && aAbbrevMatch[1].toLowerCase().includes(searchLower);
+    const bAbbrevContains = bAbbrevMatch && bAbbrevMatch[1].toLowerCase().includes(searchLower);
+    if (aAbbrevContains && !bAbbrevContains) return -1;
+    if (bAbbrevContains && !aAbbrevContains) return 1;
+
+    // Priority 3: Name starts with search term
+    const aStartsWith = aLower.startsWith(searchLower);
+    const bStartsWith = bLower.startsWith(searchLower);
+    if (aStartsWith && !bStartsWith) return -1;
+    if (bStartsWith && !aStartsWith) return 1;
+
+    // Priority 4: Alphabetical
+    return a.localeCompare(b);
+  });
+}
+
 interface StabilityConstantProps {
   hideHeader?: boolean;
 }
@@ -291,11 +330,11 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   }, [debouncedSearchText, matchedLigands, selectedSearchLigand]);
 
   // Create sorted array of matched ligand names for inline display (limit to 50 for usability)
+  // Sort by relevance to prioritize abbreviation matches
   const matchedLigandNames = useMemo<string[]>(() => {
-    const sortedLigands = Array.from(matchedLigands).sort();
-    const limited = sortedLigands.slice(0, 50);
-    return limited;
-  }, [matchedLigands]);
+    const sortedLigands = sortLigandsByRelevance(Array.from(matchedLigands), debouncedSearchText);
+    return sortedLigands.slice(0, 50);
+  }, [matchedLigands, debouncedSearchText]);
 
   // Load and parse CSV data
   useEffect(() => {
@@ -571,21 +610,21 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   }, [elementAverageStability]);
 
   // Convert log K to Kd (dissociation constant in M)
+  // Uses appropriate unit to show values between 1-999 of that unit
   const convertToKd = (logK: number): string => {
     // Kd = 1/Ka = 10^(-logK)
     const kd = Math.pow(10, -logK);
-    // Handle very small values (strong binding)
-    if (kd < 1e-15) return kd.toExponential(2);
-    if (kd < 1e-12) return (kd * 1e12).toFixed(2) + ' pM';
-    if (kd < 1e-9) return (kd * 1e9).toFixed(2) + ' nM';
-    if (kd < 1e-6) return (kd * 1e6).toFixed(2) + ' μM';
-    if (kd < 1e-3) return (kd * 1e3).toFixed(2) + ' mM';
-    if (kd < 1) return kd.toFixed(2) + ' M';
-    // Handle large values (weak binding, negative log K)
-    if (kd < 1e3) return kd.toFixed(2) + ' M';
-    if (kd < 1e6) return (kd / 1e3).toFixed(2) + ' kM';
-    // Very large values use exponential notation
-    return kd.toExponential(2) + ' M';
+    // Each threshold checks if value is below 1 of the NEXT larger unit
+    // Strong binding (small Kd)
+    if (kd < 1e-12) return kd.toExponential(2) + ' M';     // < 1 pM: use exponential
+    if (kd < 1e-9) return (kd * 1e12).toFixed(2) + ' pM';  // < 1 nM: show as pM (1-999 pM)
+    if (kd < 1e-6) return (kd * 1e9).toFixed(2) + ' nM';   // < 1 μM: show as nM (1-999 nM)
+    if (kd < 1e-3) return (kd * 1e6).toFixed(2) + ' μM';   // < 1 mM: show as μM (1-999 μM)
+    if (kd < 1) return (kd * 1e3).toFixed(2) + ' mM';      // < 1 M: show as mM (1-999 mM)
+    // Weak binding (large Kd, from negative log K)
+    if (kd < 1e3) return kd.toFixed(2) + ' M';             // < 1 kM: show as M (1-999 M)
+    if (kd < 1e6) return (kd / 1e3).toFixed(2) + ' kM';    // < 1000 kM: show as kM
+    return kd.toExponential(2) + ' M';                      // Very large: exponential
   };
 
   // Get comparison data for chart
@@ -809,16 +848,18 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
         commonLigands = commonLigands.filter(lig => ligandSets[i].has(lig));
       }
 
-      result = commonLigands.sort();
+      result = commonLigands;
     }
 
     // Apply search filter if provided
     if (searchFilter && searchFilter.length >= 2) {
       const searchLower = searchFilter.toLowerCase();
       result = result.filter(lig => lig.toLowerCase().includes(searchLower));
+      // Sort by relevance when searching (prioritize abbreviation matches)
+      return sortLigandsByRelevance(result, searchFilter);
     }
 
-    return result.sort();
+    return sortLigandsByRelevance(result, '');
   }, [dataByElement, uniqueLigands]);
 
   // Get elements that have data for a specific ligand
@@ -860,14 +901,16 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
     if (!element) return [];
 
     const records = dataByElement.get(element) || [];
-    const ligands = [...new Set(records.map(r => r.ligandName))].sort();
+    const ligands = [...new Set(records.map(r => r.ligandName))];
 
     if (searchFilter && searchFilter.length >= 2) {
       const searchLower = searchFilter.toLowerCase();
-      return ligands.filter(lig => lig.toLowerCase().includes(searchLower));
+      const filtered = ligands.filter(lig => lig.toLowerCase().includes(searchLower));
+      // Sort by relevance when searching (prioritize abbreviation matches)
+      return sortLigandsByRelevance(filtered, searchFilter);
     }
 
-    return ligands;
+    return sortLigandsByRelevance(ligands, '');
   }, [dataByElement]);
 
   // Memoized set of elements that have data for the selected comparison ligand
