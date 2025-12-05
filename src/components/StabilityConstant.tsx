@@ -640,6 +640,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       condition?: string; // For grouping in scatter plot
       element?: string; // For grouping
       constantType?: string; // Equilibrium type (K1, β2, etc.)
+      temperature?: number; // For condition mismatch warning
+      ionicStrength?: number; // For condition mismatch warning
     }
 
     const results: ComparisonItem[] = [];
@@ -674,7 +676,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 subLabel: record.metalIon,
                 condition: condition,
                 element: element,
-                constantType: record.constantType
+                constantType: record.constantType,
+                temperature: record.temperature,
+                ionicStrength: record.ionicStrength
               });
             });
           } else {
@@ -738,7 +742,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
               details: `${best.constantType}, T=${best.temperature}°C, I=${best.ionicStrength}M`,
               subLabel: best.metalIon,
               element: element,
-              constantType: best.constantType
+              constantType: best.constantType,
+              temperature: best.temperature,
+              ionicStrength: best.ionicStrength
             });
           } else {
             results.push({
@@ -788,7 +794,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             logK: best.stabilityConstant,
             kd: Math.pow(10, -best.stabilityConstant),
             details: `${best.constantType}, T=${best.temperature}°C, I=${best.ionicStrength}M`,
-            constantType: best.constantType
+            constantType: best.constantType,
+            temperature: best.temperature,
+            ionicStrength: best.ionicStrength
           });
         } else {
           results.push({
@@ -822,7 +830,9 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
             logK: record.stabilityConstant,
             kd: Math.pow(10, -record.stabilityConstant),
             details: record.constantType + (record.betaDefinition ? ` (${record.betaDefinition})` : ''),
-            constantType: record.constantType
+            constantType: record.constantType,
+            temperature: record.temperature,
+            ionicStrength: record.ionicStrength
           });
         } else {
           results.push({
@@ -840,6 +850,31 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   }, [comparisonMode, comparisonType, comparisonLigand, comparisonElement,
       selectedElementsForComparison, selectedLigandsForComparison, selectedConditionsForComparison,
       dataByElement, temperature, constantType, ionicStrengthFilter, showAllConditions]);
+
+  // Check for mismatched conditions in comparison data (for warning)
+  const comparisonConditionWarning = useMemo(() => {
+    const validData = comparisonData.filter(d => d.logK !== null && d.temperature !== undefined);
+    if (validData.length < 2) return null;
+
+    const temperatures = [...new Set(validData.map(d => d.temperature))];
+    const ionicStrengths = [...new Set(validData.map(d => d.ionicStrength))];
+
+    const warnings: string[] = [];
+
+    if (temperatures.length > 1) {
+      const tempRange = `${Math.min(...temperatures as number[])}°C - ${Math.max(...temperatures as number[])}°C`;
+      warnings.push(`different temperatures (${tempRange})`);
+    }
+
+    if (ionicStrengths.length > 1) {
+      const ionicList = (ionicStrengths as number[]).sort((a, b) => a - b).map(i => `${i}M`).join(', ');
+      warnings.push(`different ionic strengths (${ionicList})`);
+    }
+
+    if (warnings.length === 0) return null;
+
+    return `Comparing data from ${warnings.join(' and ')}. Results may not be directly comparable.`;
+  }, [comparisonData]);
 
   // Get available ligands for a set of elements (union - allow partial matches)
   // If no elements selected, return all ligands matching search filter
@@ -1771,6 +1806,15 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
           {/* Comparison Chart */}
           {comparisonData.length > 0 && (
             <div className="mt-4">
+              {/* Warning for mismatched conditions */}
+              {comparisonConditionWarning && (
+                <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-sm text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">⚠</span>
+                    <span>{comparisonConditionWarning}</span>
+                  </p>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">
                   {comparisonData.length} data points
