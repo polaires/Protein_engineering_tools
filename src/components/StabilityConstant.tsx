@@ -574,11 +574,18 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
   const convertToKd = (logK: number): string => {
     // Kd = 1/Ka = 10^(-logK)
     const kd = Math.pow(10, -logK);
+    // Handle very small values (strong binding)
     if (kd < 1e-15) return kd.toExponential(2);
-    if (kd < 1e-6) return (kd * 1e9).toFixed(2) + ' nM';
-    if (kd < 1e-3) return (kd * 1e6).toFixed(2) + ' μM';
-    if (kd < 1) return (kd * 1e3).toFixed(2) + ' mM';
-    return kd.toFixed(2) + ' M';
+    if (kd < 1e-12) return (kd * 1e12).toFixed(2) + ' pM';
+    if (kd < 1e-9) return (kd * 1e9).toFixed(2) + ' nM';
+    if (kd < 1e-6) return (kd * 1e6).toFixed(2) + ' μM';
+    if (kd < 1e-3) return (kd * 1e3).toFixed(2) + ' mM';
+    if (kd < 1) return kd.toFixed(2) + ' M';
+    // Handle large values (weak binding, negative log K)
+    if (kd < 1e3) return kd.toFixed(2) + ' M';
+    if (kd < 1e6) return (kd / 1e3).toFixed(2) + ' kM';
+    // Very large values use exponential notation
+    return kd.toExponential(2) + ' M';
   };
 
   // Get comparison data for chart
@@ -779,22 +786,31 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       dataByElement, temperature, constantType, ionicStrengthFilter, showAllConditions]);
 
   // Get available ligands for a set of elements (union - allow partial matches)
+  // If no elements selected, return all ligands matching search filter
   const getAvailableLigands = useCallback((elementList: string[], searchFilter?: string): string[] => {
-    if (elementList.length === 0) return [];
+    let result: string[];
 
-    // Get INTERSECTION of ligands (ligands common to ALL selected elements)
-    const ligandSets = elementList.map(el => {
-      const records = dataByElement.get(el) || [];
-      return new Set(records.map(r => r.ligandName));
-    });
+    if (elementList.length === 0) {
+      // No elements selected - return all unique ligands (from global list) filtered by search
+      if (!searchFilter || searchFilter.length < 2) {
+        return []; // Require at least 2 chars to search when no elements selected
+      }
+      result = uniqueLigands.map(l => l.name);
+    } else {
+      // Get INTERSECTION of ligands (ligands common to ALL selected elements)
+      const ligandSets = elementList.map(el => {
+        const records = dataByElement.get(el) || [];
+        return new Set(records.map(r => r.ligandName));
+      });
 
-    // Start with first element's ligands, then intersect with others
-    let commonLigands = ligandSets[0] ? Array.from(ligandSets[0]) : [];
-    for (let i = 1; i < ligandSets.length; i++) {
-      commonLigands = commonLigands.filter(lig => ligandSets[i].has(lig));
+      // Start with first element's ligands, then intersect with others
+      let commonLigands = ligandSets[0] ? Array.from(ligandSets[0]) : [];
+      for (let i = 1; i < ligandSets.length; i++) {
+        commonLigands = commonLigands.filter(lig => ligandSets[i].has(lig));
+      }
+
+      result = commonLigands.sort();
     }
-
-    let result = commonLigands.sort();
 
     // Apply search filter if provided
     if (searchFilter && searchFilter.length >= 2) {
@@ -802,7 +818,21 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
       result = result.filter(lig => lig.toLowerCase().includes(searchLower));
     }
 
-    return result;
+    return result.sort();
+  }, [dataByElement, uniqueLigands]);
+
+  // Get elements that have data for a specific ligand
+  const getElementsForLigand = useCallback((ligandName: string): string[] => {
+    if (!ligandName) return [];
+
+    const elementsWithLigand: string[] = [];
+    dataByElement.forEach((records, element) => {
+      if (records.some(r => r.ligandName === ligandName)) {
+        elementsWithLigand.push(element);
+      }
+    });
+
+    return elementsWithLigand.sort();
   }, [dataByElement]);
 
   // Get available conditions for element+ligand pair
@@ -839,6 +869,14 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
 
     return ligands;
   }, [dataByElement]);
+
+  // Memoized set of elements that have data for the selected comparison ligand
+  const elementsWithSelectedLigand = useMemo(() => {
+    if (!comparisonLigand || !comparisonMode || comparisonType !== 'elements') {
+      return new Set<string>();
+    }
+    return new Set(getElementsForLigand(comparisonLigand));
+  }, [comparisonLigand, comparisonMode, comparisonType, getElementsForLigand]);
 
   // Get color intensity based on stability constant value
   const getColorIntensity = (value: number | null): string => {
@@ -1396,7 +1434,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   </label>
                   <div className="flex flex-wrap gap-1 min-h-[2rem] p-2 border border-slate-300 dark:border-slate-600 rounded">
                     {selectedElementsForComparison.length === 0 ? (
-                      <span className="text-sm text-slate-500">Click elements below...</span>
+                      <span className="text-sm text-slate-500">{comparisonLigand ? 'Click elements or use buttons below →' : 'Click elements below...'}</span>
                     ) : (
                       selectedElementsForComparison.map(el => (
                         <span key={el} className="px-2 py-0.5 bg-primary-100 dark:bg-primary-900 rounded text-sm flex items-center gap-1">
@@ -1420,7 +1458,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                       type="text"
                       value={comparisonLigandSearch}
                       onChange={(e) => setComparisonLigandSearch(e.target.value)}
-                      placeholder="Search ligands..."
+                      placeholder={selectedElementsForComparison.length === 0 ? "Type 2+ chars to search..." : "Search ligands..."}
                       className="input-field w-full pl-10 text-sm"
                     />
                   </div>
@@ -1435,10 +1473,35 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                       <option key={lig} value={lig}>{lig.length > 50 ? lig.substring(0, 50) + '...' : lig}</option>
                     ))}
                   </select>
-                  {selectedElementsForComparison.length > 0 && (
-                    <p className="text-xs text-slate-500 mt-1">
-                      {getAvailableLigands(selectedElementsForComparison, comparisonLigandSearch).length} ligand(s) {comparisonLigandSearch ? 'matching' : 'available'}
-                    </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {selectedElementsForComparison.length === 0 ? (
+                      comparisonLigandSearch.length >= 2 ? (
+                        `${getAvailableLigands(selectedElementsForComparison, comparisonLigandSearch).length} ligand(s) matching`
+                      ) : (
+                        'Search for a ligand or select elements first'
+                      )
+                    ) : (
+                      `${getAvailableLigands(selectedElementsForComparison, comparisonLigandSearch).length} ligand(s) ${comparisonLigandSearch ? 'matching' : 'available'}`
+                    )}
+                  </p>
+                  {/* Show available elements when ligand is selected but no elements chosen */}
+                  {comparisonLigand && selectedElementsForComparison.length === 0 && (
+                    <div className="mt-2 p-2 bg-primary-50 dark:bg-primary-900/20 rounded border border-primary-200 dark:border-primary-800">
+                      <p className="text-xs text-primary-700 dark:text-primary-300 mb-1">
+                        Elements with "{comparisonLigand.length > 30 ? comparisonLigand.substring(0, 30) + '...' : comparisonLigand}" data:
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {getElementsForLigand(comparisonLigand).map(el => (
+                          <button
+                            key={el}
+                            onClick={() => setSelectedElementsForComparison(prev => [...prev, el])}
+                            className="px-1.5 py-0.5 text-xs bg-primary-100 dark:bg-primary-800 hover:bg-primary-200 dark:hover:bg-primary-700 rounded"
+                          >
+                            {el}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               </>
@@ -1934,6 +1997,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                   (comparisonType === 'elements' && selectedElementsForComparison.includes(element.symbol)) ||
                   ((comparisonType === 'ligands' || comparisonType === 'conditions') && comparisonElement === element.symbol)
                 );
+                // Highlight elements that have data for the selected ligand (when ligand selected first)
+                const hasSelectedLigand = elementsWithSelectedLigand.has(element.symbol) && !isSelectedForComparison;
 
                 const handleElementClick = () => {
                   if (comparisonMode) {
@@ -1975,7 +2040,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                       onClick={handleElementClick}
                       className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${
                         isGrayedOut ? 'opacity-40 cursor-not-allowed' : ''
-                      } ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : 'border-slate-300'}`}
+                      } ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : hasSelectedLigand ? 'border-amber-500 border-dashed ring-1 ring-amber-300' : 'border-slate-300'}`}
                       style={{ backgroundColor: bgColor }}
                       title={`${element.name}${stability !== null ? ` - log K: ${stability.toFixed(2)}` : ' - No data'}`}
                       disabled={isGrayedOut}
@@ -2009,6 +2074,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 (comparisonType === 'elements' && selectedElementsForComparison.includes(element.symbol)) ||
                 ((comparisonType === 'ligands' || comparisonType === 'conditions') && comparisonElement === element.symbol)
               );
+              // Highlight elements that have data for the selected ligand (when ligand selected first)
+              const hasSelectedLigand = elementsWithSelectedLigand.has(element.symbol) && !isSelectedForComparison;
 
               const handleClick = () => {
                 if (comparisonMode) {
@@ -2033,7 +2100,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 <div key={idx} className="w-14 h-16">
                   <button
                     onClick={handleClick}
-                    className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : 'border-slate-300'}`}
+                    className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : hasSelectedLigand ? 'border-amber-500 border-dashed ring-1 ring-amber-300' : 'border-slate-300'}`}
                     style={{ backgroundColor: bgColor }}
                     title={`${element.name}${stability !== null ? ` - log K: ${stability.toFixed(2)}` : ' - No data'}`}
                   >
@@ -2062,6 +2129,8 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 (comparisonType === 'elements' && selectedElementsForComparison.includes(element.symbol)) ||
                 ((comparisonType === 'ligands' || comparisonType === 'conditions') && comparisonElement === element.symbol)
               );
+              // Highlight elements that have data for the selected ligand (when ligand selected first)
+              const hasSelectedLigand = elementsWithSelectedLigand.has(element.symbol) && !isSelectedForComparison;
 
               const handleClick = () => {
                 if (comparisonMode) {
@@ -2086,7 +2155,7 @@ export default function StabilityConstant({ hideHeader = false }: StabilityConst
                 <div key={idx} className="w-14 h-16">
                   <button
                     onClick={handleClick}
-                    className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : 'border-slate-300'}`}
+                    className={`w-full h-full rounded shadow hover:shadow-lg transition-all duration-200 transform hover:scale-105 flex flex-col items-center justify-center text-xs font-semibold border-2 ${isSelectedForComparison ? 'border-primary-500 ring-2 ring-primary-300' : hasSelectedLigand ? 'border-amber-500 border-dashed ring-1 ring-amber-300' : 'border-slate-300'}`}
                     style={{ backgroundColor: bgColor }}
                     title={`${element.name}${stability !== null ? ` - log K: ${stability.toFixed(2)}` : ' - No data'}`}
                   >
